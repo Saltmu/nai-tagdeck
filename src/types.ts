@@ -47,4 +47,8 @@ export type WeightSyntax = 'numeric' | 'brace';
 
 export interface Settings {
   weightSyntax: WeightSyntax;
+  /** 生成時のネガティブ（Undesired Content）。タグ編集画面には出さない。 */
+  negativePrompt: string;
+  /** キャラクタープロンプトごとのネガティブ。 */
+  characterNegativePrompt: string;
 }

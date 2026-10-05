@@ -1,6 +1,7 @@
 import { useReducer, useState, type Dispatch } from 'react';
 import type { Settings, Workspace } from '../types';
 import { emptyWorkspace, normalizeWorkspace, workspaceReducer, type WorkspaceAction } from '../lib/workspace';
+import { DEFAULT_SETTINGS, normalizeSettings } from '../lib/settings';
 import { usePersistence } from './usePersistence';
 
 export function useWorkspace(): { workspace: Workspace; dispatch: Dispatch<WorkspaceAction>; loaded: boolean } {
@@ -11,17 +12,8 @@ export function useWorkspace(): { workspace: Workspace; dispatch: Dispatch<Works
   return { workspace, dispatch, loaded };
 }
 
-const DEFAULT_SETTINGS: Settings = { weightSyntax: 'numeric' };
-
 export function useSettings(): [Settings, (patch: Partial<Settings>) => void] {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  usePersistence('settings', settings, (raw) => {
-    if (raw && typeof raw === 'object') {
-      const r = raw as Partial<Settings>;
-      setSettings({
-        weightSyntax: r.weightSyntax === 'brace' ? 'brace' : 'numeric',
-      });
-    }
-  });
+  usePersistence('settings', settings, (raw) => setSettings(normalizeSettings(raw)));
   return [settings, (patch) => setSettings((prev) => ({ ...prev, ...patch }))];
 }

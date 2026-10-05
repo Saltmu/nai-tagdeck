@@ -24,26 +24,23 @@
 
 V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在しない。実装は `src/lib/novelai.ts` の `buildGenerateRequest()`。
 
-- プロンプトは `input`・`parameters.prompt`・`parameters.v4_prompt.caption.base_caption` の3か所に入れる。
-- `v4_prompt` と `v4_negative_prompt` は、どちらかを省くと 500 になる。ネガティブを使わない場合も空で送る。
-- キャラクタープロンプトは `v4_prompt.caption.char_captions[]`（`{ char_caption, centers: [{x, y}] }`）。
-  `v4_negative_prompt` 側にも同じ数だけ空の `char_caption` を並べる。座標は使わない（`use_coords: false`）。
-- `params_version` は 4・3・1・0 のどれでも結果が同じだった（検証記事より）。公式クライアントに合わせて 4 を送る。
+### 公式 Web UI が実際に送っている内容（2026-10-05 取得）
 
-```json
-{
-  "input": "<prompt>", "model": "nai-diffusion-5-full", "action": "generate",
-  "parameters": {
-    "params_version": 4, "width": 832, "height": 1216, "scale": 5, "steps": 28,
-    "sampler": "k_euler_ancestral", "noise_schedule": "karras",
-    "seed": 1234567890, "extra_noise_seed": 1234567890, "n_samples": 1,
-    "ucPreset": 3, "qualityToggle": false, "cfg_rescale": 0,
-    "prompt": "<prompt>", "negative_prompt": "",
-    "v4_prompt": { "caption": { "base_caption": "<prompt>", "char_captions": [] }, "use_coords": false, "use_order": true },
-    "v4_negative_prompt": { "caption": { "base_caption": "", "char_captions": [] }, "use_coords": false, "use_order": false }
-  }
-}
-```
+- **送り方**: `multipart/form-data` の `request` パート（`filename="blob"`、`Content-Type: application/json`）に JSON を入れている。
+  OpenAPI 仕様は JSON 本体なので、まず JSON 本体で送り、だめなら同じ形の multipart に切り替える。
+- **品質タグと UC プリセットはクライアント側で展開済み**:
+  - `qualityPresetId: "light"` → `input` の末尾に `very aesthetic, amazing quality, no text` が付いている。
+  - `ucPresetId: "heavy"` → `negative_prompt` の先頭に heavy の文面（`DEFAULT_NEGATIVE`）が入り、その後ろにユーザーが追加した語が続く。
+  - あわせて `tag_hint_qt: 3`、`tag_hint_uc_preset: 2` を送っている（OpenAPI の説明では、モデルにそのまま渡すヒント）。
+  - このツールでは品質タグをタグ編集画面で、ネガティブを設定で持ち、展開済みの文字列を送る。プリセット ID とヒントは送らない。
+- **キャラクター**: `characterPrompts[]`（`{ prompt, uc, center: {x:0, y:0}, enabled }`）と
+  `v4_prompt.caption.char_captions[]` / `v4_negative_prompt.caption.char_captions[]` の両方に入れる。
+  座標を使わないとき（`use_coords: false`）は中心を `{x:0, y:0}` で送る。キャラごとのネガティブの既定値は `lowres, aliasing, `。
+- **その他の値**: `use_order: true`、`legacy_uc: false`、`deliberate_euler_ancestral_bug: false`、`prefer_brownian: true`、
+  `straight_alpha: true`、`add_original_image: true`、`autoSmea: false`、`normalize_reference_strength_multiple: true`。
+  `image_format` は公式UIでは `"webp"` だが、このツールでは生成情報が埋め込まれる `"png"` を使う。
+- **上位の階層**: `use_new_shared_trial: true`（意味は未確認。公式UIに合わせて送る）。
+- `ucPreset` / `qualityToggle`（以前の形式）は送っていない。
 
 ## Anlas を消費しない条件（Opus）
 
@@ -61,9 +58,9 @@ V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在し�
 - キャラクタープロンプトでは人数を付けずに `girl` / `boy` / `other` と書く。
   キャラ同士の動作は `source#hug`（する側）/ `target#hug`（される側）/ `mutual#holding hands`（お互い）。
 
-## まだ確認が必要なこと（公式 Web UI の通信で見る）
+## まだ確認が必要なこと（フェーズ2で実際に生成して確かめる）
 
-- `use_order` の値（記事の例では `false`、V4.5 の公式UIでは `true` だった。今は `true` を送る）
-- `ucPreset: 3` の意味と、ネガティブが空のときに適切な値
-- サンプラー・`noise_schedule` に指定できる値
-- `Accept: application/json` が V5 でも使えるか
+- JSON 本体で受け付けるか（だめなら multipart の `request` パートで送る）
+- `Accept: application/json` で base64 の JSON が返るか（返らなければ ZIP を展開する）
+- `tag_hint_qt` / `tag_hint_uc_preset` を送らないと結果が変わるか（同じシードで公式UIと比べる）
+- `use_new_shared_trial` の意味

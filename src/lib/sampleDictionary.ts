@@ -3,9 +3,10 @@ import { newId } from './id';
 
 // 動作確認用の最小限のサンプル（NovelAI Diffusion V5 向け）。辞書が空のときだけ読み込みを提案する。
 const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
-  ['quality', 'masterpiece', '傑作 けっさく'],
-  ['quality', 'best quality', '最高品質 さいこうひんしつ'],
+  // 公式UIの品質プリセット「light」が付けるタグ
   ['quality', 'very aesthetic', '美的 びてき'],
+  ['quality', 'amazing quality', '高品質 こうひんしつ'],
+  ['quality', 'masterpiece', '傑作 けっさく'],
   // V5 の複雑さタグ（high が既定。low は簡素、ultra は描き込みが多い）
   ['quality', 'high complexity', '描き込み 複雑さ ふくざつさ'],
   ['quality', 'low complexity', '簡素 シンプル かんそ'],

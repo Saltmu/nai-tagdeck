@@ -1,17 +1,19 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
+import { SettingsView } from './components/SettingsView';
 import { useDictionary } from './hooks/useDictionary';
 import { useSettings, useWorkspace } from './hooks/useWorkspace';
 import { useToast } from './hooks/useToast';
 import { buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { copyText } from './lib/browser';
 
-type Tab = 'editor' | 'dictionary';
+type Tab = 'editor' | 'dictionary' | 'settings';
 
 const TABS: Array<{ key: Tab; label: string }> = [
   { key: 'editor', label: '編集' },
   { key: 'dictionary', label: '辞書' },
+  { key: 'settings', label: '設定' },
 ];
 
 export default function App() {
@@ -90,8 +92,10 @@ export default function App() {
             onCopy={copy}
             notify={show}
           />
-        ) : (
+        ) : tab === 'dictionary' ? (
           <DictionaryView dictionary={dictionary} notify={show} />
+        ) : (
+          <SettingsView settings={settings} onChange={updateSettings} />
         )}
       </main>
 
