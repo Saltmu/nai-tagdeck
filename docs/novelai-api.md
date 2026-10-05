@@ -58,6 +58,10 @@ V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在し�
 - キャラクタープロンプトでは人数を付けずに `girl` / `boy` / `other` と書く。
   キャラ同士の動作は `source#hug`（する側）/ `target#hug`（される側）/ `mutual#holding hands`（お互い）。
 
+## 実機で確認済み（2026-10-05）
+
+- このツールの `buildGenerateRequest()` + `requestImages()`（multipart、`nai-diffusion-5-full`、PNG）でブラウザから直接生成できた。CORS も問題なし。
+
 ## まだ確認が必要なこと（フェーズ2で実際に生成して確かめる）
 
 - 応答の形式（ZIP・JSON・画像そのもののどれでも読めるようにしてある。`extractImages()`）
