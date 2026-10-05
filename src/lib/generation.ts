@@ -1,4 +1,9 @@
-import { DEFAULT_PARAMS, FREE_LIMITS, isFreeGeneration, type GenerationParams } from './novelai';
+import { DEFAULT_PARAMS, FREE_LIMITS, isFreeGeneration, type GenerationMode, type GenerationParams } from './novelai';
+
+export const GENERATION_MODES = [
+  { value: 'anime', label: 'アニメ' },
+  { value: 'furry', label: 'ケモノ' },
+] as const;
 
 /** どれも Anlas を消費しない範囲（1024×1024 相当以下）のサイズだけを用意する。 */
 export const SIZE_PRESETS = [
@@ -29,6 +34,7 @@ export const SCALE_MAX = 10;
 export const SEED_MAX = 4_294_967_295;
 
 export interface GenerationSettings {
+  mode: GenerationMode;
   size: SizeKey;
   steps: number;
   scale: number;
@@ -39,6 +45,7 @@ export interface GenerationSettings {
 }
 
 export const DEFAULT_GENERATION: GenerationSettings = {
+  mode: 'anime',
   size: 'portrait',
   steps: DEFAULT_PARAMS.steps,
   scale: DEFAULT_PARAMS.scale,
@@ -69,6 +76,7 @@ export function normalizeGeneration(raw: unknown): GenerationSettings {
   const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
     allowed.includes(v as T) ? (v as T) : fallback;
   return {
+    mode: pick(r.mode, GENERATION_MODES.map((m) => m.value), DEFAULT_GENERATION.mode),
     size: pick(r.size, SIZE_PRESETS.map((s) => s.key), DEFAULT_GENERATION.size),
     steps: normalizeSteps(r.steps),
     scale: normalizeScale(r.scale),

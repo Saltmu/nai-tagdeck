@@ -27,6 +27,12 @@ export async function putEntry(entry: DictEntry): Promise<void> {
   await (await getDB()).put('dictionary', entry);
 }
 
+export async function putEntries(entries: readonly DictEntry[]): Promise<void> {
+  const tx = (await getDB()).transaction('dictionary', 'readwrite');
+  await Promise.all(entries.map((entry) => tx.store.put(entry)));
+  await tx.done;
+}
+
 export async function deleteEntry(id: string): Promise<void> {
   await (await getDB()).delete('dictionary', id);
 }
@@ -44,4 +50,11 @@ export async function getKV<T>(key: string): Promise<T | undefined> {
 
 export async function setKV(key: string, value: unknown): Promise<void> {
   await (await getDB()).put('kv', value, key);
+}
+
+/** 辞書と全保存設定を1つのトランザクションで削除する。 */
+export async function clearAllData(): Promise<void> {
+  const tx = (await getDB()).transaction(['dictionary', 'kv'], 'readwrite');
+  await Promise.all([tx.objectStore('dictionary').clear(), tx.objectStore('kv').clear()]);
+  await tx.done;
 }

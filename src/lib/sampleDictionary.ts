@@ -303,7 +303,7 @@ export function sampleDictionary(): DictEntry[] {
     category,
     alias,
     default_weight: weight ?? 1,
-    sort_order: i,
+    sort_order: 100 + i * 10,
     updated_at: now,
   }));
 }

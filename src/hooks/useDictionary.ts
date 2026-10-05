@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DictEntry } from '../types';
-import { deleteEntry, listEntries, putEntry, replaceAllEntries } from '../lib/db';
+import { deleteEntry, listEntries, putEntry, putEntries, replaceAllEntries } from '../lib/db';
 import { mergeEntries, sortEntries, type ImportMode } from '../lib/io';
 import { restoreInitialDictionary } from '../lib/sampleDictionary';
 
@@ -9,6 +9,7 @@ export interface Dictionary {
   loaded: boolean;
   error: string | null;
   save: (entry: DictEntry) => Promise<void>;
+  saveMany: (entries: DictEntry[]) => Promise<void>;
   remove: (id: string) => Promise<void>;
   importEntries: (incoming: DictEntry[], mode: ImportMode) => Promise<number>;
   restoreInitial: () => Promise<number>;
@@ -39,6 +40,14 @@ export function useDictionary(): Dictionary {
     setEntries((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
+  const saveMany = useCallback(async (incoming: DictEntry[]) => {
+    const updated_at = new Date().toISOString();
+    const next = incoming.map((entry) => ({ ...entry, updated_at }));
+    await putEntries(next);
+    const ids = new Set(next.map((entry) => entry.id));
+    setEntries((prev) => sortEntries([...prev.filter((entry) => !ids.has(entry.id)), ...next]));
+  }, []);
+
   const importEntries = useCallback(async (incoming: DictEntry[], mode: ImportMode) => {
     const merged = mergeEntries(latest.current, incoming, mode);
     await replaceAllEntries(merged);
@@ -54,5 +63,5 @@ export function useDictionary(): Dictionary {
     return merged.length;
   }, []);
 
-  return { entries, loaded, error, save, remove, importEntries, restoreInitial };
+  return { entries, loaded, error, save, saveMany, remove, importEntries, restoreInitial };
 }

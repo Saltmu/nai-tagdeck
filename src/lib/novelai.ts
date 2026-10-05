@@ -55,11 +55,14 @@ export interface CharacterInput {
   negative: string;
 }
 
+export type GenerationMode = 'anime' | 'furry';
+
 export interface GenerateInput {
   prompt: string;
   negative: string;
   characters: readonly CharacterInput[];
   params: GenerationParams;
+  mode?: GenerationMode;
 }
 
 type Point = { x: number; y: number };
@@ -89,14 +92,18 @@ const NO_POSITION: Point = { x: 0, y: 0 };
  * こちらも展開済みの文字列を渡す（品質タグはタグ編集画面で、ネガティブは設定で持つ）。
  * v4_prompt / v4_negative_prompt を省くと 500 になるため、常に両方入れる。
  */
-export function buildGenerateRequest({ prompt, negative, characters, params }: GenerateInput): GenerateRequest {
+export function buildGenerateRequest({ prompt, negative, characters, params, mode = 'anime' }: GenerateInput): GenerateRequest {
+  // V5 のモード切替は専用 API パラメータではなく、ベースプロンプト先頭のタグで指定する。
+  const basePrompt = mode === 'furry' && !/^\s*fur[\s_]+dataset\s*(?:,|$)/i.test(prompt)
+    ? `fur dataset${prompt.trim() ? `, ${prompt.trim()}` : ''}`
+    : prompt;
   const caption = (base: string, chars: readonly string[]): V4Caption => ({
     base_caption: base,
     char_captions: chars.map((c) => ({ char_caption: c, centers: [NO_POSITION] })),
   });
 
   return {
-    input: prompt,
+    input: basePrompt,
     model: NAI_MODEL,
     action: 'generate',
     use_new_shared_trial: true,
@@ -132,7 +139,7 @@ export function buildGenerateRequest({ prompt, negative, characters, params }: G
         enabled: true,
       })),
       v4_prompt: {
-        caption: caption(prompt, characters.map((c) => c.prompt)),
+        caption: caption(basePrompt, characters.map((c) => c.prompt)),
         use_coords: false,
         use_order: true,
       },

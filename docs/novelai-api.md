@@ -22,6 +22,15 @@
 
 ## V5 のリクエスト
 
+### アニメ／ケモノのモード（2026-10-05確認）
+
+- [公式画像APIリファレンス](https://image.novelai.net/docs/doc.json) の `image.ImageGenerationRequest` と `image.RequestParameters` に、`mode` や `furry` の専用パラメータは定義されていない。
+- [公式モデル説明](https://docs.novelai.net/en/image/models/) では、V5のFurryモードはプロンプト先頭に `fur dataset,` を付ける方式と説明されている。
+- アプリ内部の保存値は `mode: "anime" | "furry"`。アニメでは入力プロンプトをそのまま送り、ケモノでは先頭に `fur dataset, ` を付ける。すでに先頭にある場合は重ねない。
+- APIへ送るフィールドは `input` と `parameters.v4_prompt.caption.base_caption`（いずれも文字列）。同じ展開後のベースプロンプトを両方に入れる。モデルは `nai-diffusion-5-full` のまま、専用のモードフィールドは送らない。
+- モードは生成設定とバックアップに保存し、旧データで未指定の場合はアニメにする。編集画面のタグと辞書は変更せず、画像履歴には実際に送ったプロンプトを保持する。
+- リクエスト構築はテストで確認。今回のモード追加について、実際のAPIでの画像生成は未実施。
+
 V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在しない。実装は `src/lib/novelai.ts` の `buildGenerateRequest()`。
 
 ### 公式 Web UI が実際に送っている内容（2026-10-05 取得）

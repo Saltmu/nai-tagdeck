@@ -13,6 +13,28 @@ const build = (prompt: string, negative = '', characters: Array<{ prompt: string
   buildGenerateRequest({ prompt, negative, characters, params });
 
 describe('buildGenerateRequest (V5)', () => {
+  it('ケモノは両方のベースプロンプト先頭にfur datasetを付け、キャラとネガティブは保持する', () => {
+    const characters = [{ prompt: 'wolf, red fur', negative: 'lowres' }];
+    const body = buildGenerateRequest({ prompt: 'solo, forest', negative: 'bad quality', characters, params, mode: 'furry' });
+    expect(body.model).toBe('nai-diffusion-5-full');
+    expect(body.input).toBe('fur dataset, solo, forest');
+    expect(body.parameters.v4_prompt.caption.base_caption).toBe(body.input);
+    expect(body.parameters.v4_prompt.caption.char_captions[0]?.char_caption).toBe(characters[0]?.prompt);
+    expect(body.parameters.negative_prompt).toBe('bad quality');
+    expect(body.parameters.v4_negative_prompt.caption.char_captions[0]?.char_caption).toBe('lowres');
+    expect(body).not.toHaveProperty('mode');
+    expect(body.parameters).not.toHaveProperty('mode');
+    expect(body.parameters).not.toHaveProperty('furry');
+  });
+
+  it('アニメでは入力を変更せず、ケモノでも先頭タグを重複させない', () => {
+    for (const prompt of ['solo', 'fur dataset, solo', 'FUR_DATASET, wolf']) {
+      expect(buildGenerateRequest({ prompt, negative: '', characters: [], params, mode: 'anime' }).input).toBe(prompt);
+    }
+    const prompt = 'fur dataset, wolf';
+    expect(buildGenerateRequest({ prompt, negative: '', characters: [], params, mode: 'furry' }).input).toBe(prompt);
+  });
+
   it('プロンプトを input と v4_prompt に入れる', () => {
     const body = build('1girl, solo');
     expect(body.model).toBe(NAI_MODEL);

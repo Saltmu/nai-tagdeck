@@ -1,3 +1,4 @@
+import { useId, useState } from 'react';
 import type { WorkTag } from '../types';
 import { WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP, clampWeight } from '../lib/prompt';
 import { WeightInput } from './WeightInput';
@@ -6,6 +7,7 @@ interface Props {
   tag: WorkTag;
   onToggle: () => void;
   onWeight: (weight: number) => void;
+  onEdit: (tag: string) => string | null;
   onRemove: () => void;
   /** 辞書にないタグのときだけ渡す。 */
   onRegister?: () => void;
@@ -13,15 +15,49 @@ interface Props {
   sorting?: { onUp: (() => void) | null; onDown: (() => void) | null };
 }
 
-export function TagRow({ tag, onToggle, onWeight, onRemove, onRegister, sorting }: Props) {
+export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, sorting }: Props) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(tag.tag);
+  const [error, setError] = useState<string | null>(null);
+  const errorId = useId();
   const step = (delta: number) => onWeight(clampWeight(tag.weight + delta));
+  const commit = () => {
+    const result = onEdit(draft);
+    setError(result);
+    if (!result) setEditing(false);
+  };
 
   return (
-    <li className={`tag-row${tag.enabled ? '' : ' is-off'}`}>
-      <label className="tag-check">
-        <input type="checkbox" checked={tag.enabled} onChange={onToggle} />
-        <span className="tag-name">{tag.tag}</span>
-      </label>
+    <li className={`tag-row${tag.enabled ? '' : ' is-off'}${editing && !sorting ? ' is-editing' : ''}`}>
+      {editing && !sorting ? (
+        <div className="tag-edit">
+          <input
+            type="text"
+            aria-label={`${tag.tag} のタグを編集`}
+            aria-invalid={!!error}
+            aria-describedby={error ? errorId : undefined}
+            value={draft}
+            autoFocus
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            onChange={(e) => { setDraft(e.target.value); setError(null); }}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (e.key === 'Enter') { e.preventDefault(); commit(); }
+              if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
+            }}
+          />
+          <button type="button" className="btn btn-small" onClick={commit}>保存</button>
+          <button type="button" className="btn btn-small" onClick={() => setEditing(false)}>キャンセル</button>
+          {error && <span id={errorId} className="tag-edit-error" role="alert">{error}</span>}
+        </div>
+      ) : (
+        <label className="tag-check">
+          <input type="checkbox" checked={tag.enabled} onChange={onToggle} />
+          <span className="tag-name">{tag.tag}</span>
+        </label>
+      )}
 
       {sorting ? (
         <div className="sort-control">
@@ -46,7 +82,13 @@ export function TagRow({ tag, onToggle, onWeight, onRemove, onRegister, sorting 
         </div>
       ) : (
         <>
-          {onRegister && (
+          {!editing && (
+            <button type="button" className="btn btn-small" aria-label={`${tag.tag} を編集`}
+              onClick={() => { setDraft(tag.tag); setError(null); setEditing(true); }}>
+              編集
+            </button>
+          )}
+          {onRegister && !editing && (
             <button
               type="button"
               className="btn btn-small btn-ghost"

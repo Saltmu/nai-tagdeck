@@ -4,6 +4,7 @@ import type { CharacterPrompt } from '../lib/prompt';
 import type { Generator } from '../hooks/useGenerator';
 import type { TokenState } from '../hooks/useToken';
 import {
+  GENERATION_MODES,
   NOISE_SCHEDULES,
   SAMPLERS,
   SCALE_MAX,
@@ -16,6 +17,7 @@ import {
 } from '../lib/generation';
 import { FREE_LIMITS } from '../lib/novelai';
 import { NumberField } from './NumberField';
+import { usePanelOpen } from '../hooks/usePanelOpen';
 
 interface Props {
   generation: GenerationSettings;
@@ -44,19 +46,32 @@ export function GeneratePanel({
   onGenerate,
 }: Props) {
   const id = useId();
+  const [open, toggleOpen] = usePanelOpen('generate');
   const { generating, error } = generator;
 
   return (
-    <section className="card generate" aria-labelledby={`${id}-title`}>
+    <section className={`card generate${open ? '' : ' is-collapsed'}`} aria-labelledby={`${id}-title`}>
       <div className="card-head">
         <h2 id={`${id}-title`} className="card-title">
-          生成
+          <span className="generate-title-text">生成</span>
+          <button
+            type="button"
+            className="disclosure generate-disclosure"
+            aria-expanded={open}
+            aria-controls={`${id}-body`}
+            onClick={toggleOpen}
+          >
+            <span className="disclosure-icon" aria-hidden="true" />
+            生成
+            {generating && <span className="spinner spinner-small" aria-label="生成中" />}
+          </button>
         </h2>
         <span className="chip" title={`${FREE_LIMITS.maxSteps} steps 以下・1024×1024 相当以下・1枚`}>
           V5 / Anlas 消費なしの範囲
         </span>
       </div>
 
+      <div id={`${id}-body`} className="generate-body">
       {!token.token && (
         <p className="notice">
           NovelAI のトークンが未設定です。
@@ -67,6 +82,18 @@ export function GeneratePanel({
       )}
 
       <div className="gen-grid">
+        <label className="field field-wide" htmlFor={`${id}-mode`}>
+          <span>モード</span>
+          <select
+            id={`${id}-mode`}
+            value={generation.mode}
+            onChange={(e) => onGenerationChange({ mode: e.target.value === 'furry' ? 'furry' : 'anime' })}
+          >
+            {GENERATION_MODES.map((mode) => (
+              <option key={mode.value} value={mode.value}>{mode.label}</option>
+            ))}
+          </select>
+        </label>
         <label className="field field-wide" htmlFor={`${id}-size`}>
           <span>サイズ</span>
           <select
@@ -187,6 +214,7 @@ export function GeneratePanel({
           </button>
         </div>
       )}
+      </div>
     </section>
   );
 }

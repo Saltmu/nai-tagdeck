@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildGenerateRequest, describeError, randomSeed, requestImages } from '../lib/novelai';
 import { toParams, type GenerationSettings } from '../lib/generation';
 import type { NewImage } from './useImages';
@@ -24,6 +24,7 @@ export function useGenerator(onImages: (images: NewImage[]) => void): Generator 
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
+  useEffect(() => () => controller.current?.abort(), []);
 
   const generate = useCallback(
     async ({ token, prompt, negative, characters, settings }: GenerateArgs) => {
@@ -35,15 +36,16 @@ export function useGenerator(onImages: (images: NewImage[]) => void): Generator 
       try {
         const seed = settings.seed ?? randomSeed();
         const params = toParams(settings, seed);
-        const body = buildGenerateRequest({ prompt, negative, characters, params });
+        const body = buildGenerateRequest({ prompt, negative, characters, params, mode: settings.mode });
         const results = await requestImages(token, body, ctrl.signal);
+        if (ctrl.signal.aborted) return;
         onImages(
           results.map((r) => ({
             blob: r.blob,
             seed: r.seed ?? seed,
             width: params.width,
             height: params.height,
-            prompt,
+            prompt: body.input,
             characterPrompts: characters.map((c) => c.prompt),
             createdAt: Date.now(),
           })),

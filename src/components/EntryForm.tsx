@@ -7,12 +7,13 @@ import { WeightInput } from './WeightInput';
 interface Props {
   initial: DictEntry;
   submitLabel: string;
+  multiple?: boolean;
   /** 保存に失敗したらエラー文を返す。 */
   onSave: (entry: DictEntry) => Promise<string | null>;
   onCancel: () => void;
 }
 
-export function EntryForm({ initial, submitLabel, onSave, onCancel }: Props) {
+export function EntryForm({ initial, submitLabel, multiple = false, onSave, onCancel }: Props) {
   const [tag, setTag] = useState(initial.tag);
   const [category, setCategory] = useState<CategoryKey>(initial.category);
   const [alias, setAlias] = useState(initial.alias);
@@ -44,7 +45,7 @@ export function EntryForm({ initial, submitLabel, onSave, onCancel }: Props) {
   return (
     <form className="entry-form" onSubmit={submit} onKeyDown={(e) => e.key === 'Escape' && onCancel()}>
       <label className="field field-tag" htmlFor={`${id}-tag`}>
-        <span>タグ</span>
+        <span>{multiple ? 'タグ（カンマ区切りで複数登録可）' : 'タグ'}</span>
         <input
           id={`${id}-tag`}
           value={tag}

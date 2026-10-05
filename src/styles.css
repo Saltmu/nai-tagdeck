@@ -153,6 +153,24 @@ input[type='checkbox'] {
   color: var(--danger);
 }
 
+.danger-zone,
+.danger-confirm {
+  border: 1px solid var(--danger);
+}
+
+.danger-zone .card-title {
+  color: var(--danger);
+}
+
+.danger-confirm {
+  padding: 0.75rem;
+  border-radius: 8px;
+}
+
+.danger-confirm p {
+  margin-top: 0;
+}
+
 .btn-small {
   min-height: 34px;
   padding: 0.2rem 0.6rem;
@@ -384,6 +402,34 @@ input[type='checkbox'] {
 
 .tag-name {
   overflow-wrap: anywhere;
+}
+
+.tag-edit {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tag-row.is-editing {
+  flex-wrap: wrap;
+  padding: 0.4rem 0;
+}
+
+.tag-row.is-editing .tag-edit {
+  flex-basis: 100%;
+}
+
+.tag-edit input {
+  flex: 1;
+  min-width: 8rem;
+}
+
+.tag-edit-error {
+  flex-basis: 100%;
+  color: var(--danger);
+  font-size: 0.85rem;
 }
 
 .tag-row.is-off .tag-name {
@@ -867,6 +913,24 @@ textarea {
   margin-top: 0.75rem;
 }
 
+.generate-disclosure {
+  display: none;
+}
+
+@media (min-width: 1100px) {
+  .generate-title-text {
+    display: none;
+  }
+
+  .generate-disclosure {
+    display: inline-flex;
+  }
+
+  .generate.is-collapsed .generate-body {
+    display: none;
+  }
+}
+
 @media (min-width: 1100px) {
   .app-main {
     max-width: 1680px;
@@ -1284,6 +1348,7 @@ textarea {
 .quick-generate {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.4rem;
 }
 

@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS } from '../lib/settings';
 import { TokenSettings } from './TokenSettings';
 import { BackupCard } from './BackupCard';
 import type { Backup } from '../lib/backup';
+import { DangerZone } from './DangerZone';
 
 interface Props {
   settings: Settings;
@@ -13,6 +14,7 @@ interface Props {
   notify: (message: string) => void;
   getBackup: () => Backup;
   onImportBackup: (data: Backup) => Promise<void>;
+  onResetAll: () => void;
 }
 
 type TextKey = 'negativePrompt' | 'characterNegativePrompt';
@@ -30,7 +32,7 @@ const FIELDS: Array<{ key: TextKey; label: string; help: string }> = [
   },
 ];
 
-export function SettingsView({ settings, onChange, token, notify, getBackup, onImportBackup }: Props) {
+export function SettingsView({ settings, onChange, token, notify, getBackup, onImportBackup, onResetAll }: Props) {
   const id = useId();
   return (
     <div className="settings">
@@ -65,6 +67,7 @@ export function SettingsView({ settings, onChange, token, notify, getBackup, onI
         ))}
       </section>
       <BackupCard getData={getBackup} onImport={onImportBackup} notify={notify} />
+      <DangerZone onReset={onResetAll} />
     </div>
   );
 }

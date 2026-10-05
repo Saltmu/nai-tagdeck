@@ -18,6 +18,24 @@ describe('workspaceReducer: ベースのタグ', () => {
   const add = (ws = emptyWorkspace(), tag = 'smile', weight?: number) =>
     workspaceReducer(ws, { type: 'add', target: BASE, category: 'appearance', tag, weight });
 
+  it('タグ名の編集はID・重み・ON/OFF・並び順を保持し、再読み込みでも残る', () => {
+    const original = add(add(undefined, 'long hair', 1.3), 'blue eyes');
+    const first = original.base.appearance[0]!;
+    const before = run(original, { type: 'toggle', target: BASE, category: 'appearance', id: first.id });
+    const after = run(before, { type: 'setTag', target: BASE, category: 'appearance', id: first.id, tag: ' short hair ' });
+    expect(after.base.appearance[0]).toEqual({ ...before.base.appearance[0], tag: 'short hair' });
+    expect(after.base.appearance[1]).toBe(before.base.appearance[1]);
+    expect(before.base.appearance[0]?.tag).toBe('long hair');
+    expect(normalizeWorkspace(JSON.parse(JSON.stringify(after)))).toEqual(after);
+  });
+
+  it('空欄や同じカテゴリ内の重複タグへの変更は拒否する', () => {
+    const before = add(add(undefined, 'long hair'), 'blue eyes');
+    const id = before.base.appearance[0]!.id;
+    expect(run(before, { type: 'setTag', target: BASE, category: 'appearance', id, tag: ' ' })).toBe(before);
+    expect(run(before, { type: 'setTag', target: BASE, category: 'appearance', id, tag: 'BLUE_EYES' })).toBe(before);
+  });
+
   it('追加・ON/OFF・重み・削除', () => {
     let ws = add(undefined, ' smile ', 1.2);
     const id = ws.base.appearance[0]!.id;
@@ -69,6 +87,17 @@ describe('workspaceReducer: ベースのタグ', () => {
 });
 
 describe('workspaceReducer: キャラクター', () => {
+  it('キャラクターのタグ名を編集してもベース・別キャラクターは変えない', () => {
+    let before = run(emptyWorkspace(), { type: 'addCharacter' }, { type: 'addCharacter' });
+    const id = before.characters[1]!.id;
+    before = run(before, { type: 'add', target: id, category: 'appearance', tag: 'long hair', weight: 0.8 });
+    const original = before.characters[1]!.tags.appearance[0]!;
+    const after = run(before, { type: 'setTag', target: id, category: 'appearance', id: original.id, tag: 'wavy hair' });
+    expect(after.characters[1]!.tags.appearance[0]).toEqual({ ...original, tag: 'wavy hair' });
+    expect(after.base).toBe(before.base);
+    expect(after.characters[0]).toBe(before.characters[0]);
+    expect(before.characters[1]!.tags.appearance[0]?.tag).toBe('long hair');
+  });
   it('追加・名前変更・ON/OFF・並べ替え・削除', () => {
     let ws = run(emptyWorkspace(), { type: 'addCharacter' }, { type: 'addCharacter' });
     expect(ws.characters.map((c) => c.name)).toEqual(['キャラ1', 'キャラ2']);

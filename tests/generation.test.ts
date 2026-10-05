@@ -101,6 +101,15 @@ describe('describeError', () => {
 });
 
 describe('generation settings', () => {
+  it('モードを保存値から復元し、旧データ・不正なモードはアニメにする', () => {
+    expect(normalizeGeneration({ mode: 'furry' }).mode).toBe('furry');
+    expect(normalizeGeneration({ mode: 'anime' }).mode).toBe('anime');
+    expect(normalizeGeneration({}).mode).toBe('anime');
+    expect(normalizeGeneration({ mode: 'invalid' }).mode).toBe('anime');
+    const furry = normalizeGeneration({ ...DEFAULT_GENERATION, mode: 'furry' });
+    expect(normalizeGeneration(JSON.parse(JSON.stringify(furry)))).toEqual(furry);
+  });
+
   it('用意したサイズはすべて Anlas を消費しない', () => {
     for (const s of SIZE_PRESETS) {
       expect(isFreeGeneration({ width: s.width, height: s.height, steps: 28 })).toBe(true);

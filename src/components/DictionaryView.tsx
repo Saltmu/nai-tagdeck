@@ -4,7 +4,7 @@ import type { Dictionary } from '../hooks/useDictionary';
 import { CATEGORIES, categoryLabel, isCategoryKey } from '../lib/categories';
 import { findDuplicate, parseImportFile, toCSV, toJSON, type ImportMode, type ImportResult } from '../lib/io';
 import { formatWeight, isNeutralWeight } from '../lib/prompt';
-import { matchesFilter } from '../lib/suggest';
+import { matchesFilter, normalize } from '../lib/suggest';
 import { dateStamp, downloadText } from '../lib/browser';
 import { newId } from '../lib/id';
 import { EntryForm } from './EntryForm';
@@ -23,7 +23,7 @@ function blankEntry(category: CategoryKey): DictEntry {
 }
 
 export function DictionaryView({ dictionary, notify }: Props) {
-  const { entries, loaded, save, remove, importEntries, restoreInitial } = dictionary;
+  const { entries, loaded, save, saveMany, remove, importEntries, restoreInitial } = dictionary;
   const [query, setQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<CategoryKey | 'all'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -56,6 +56,30 @@ export function DictionaryView({ dictionary, notify }: Props) {
     if (!window.confirm(`「${entry.tag}」を辞書から削除しますか？`)) return;
     await remove(entry.id);
     notify(`「${entry.tag}」を削除しました`);
+  };
+
+  const handleCreate = async (entry: DictEntry): Promise<string | null> => {
+    const seen = new Set<string>();
+    const incoming = entry.tag.split(',').flatMap((raw): DictEntry[] => {
+      const tag = raw.trim();
+      const key = normalize(tag);
+      if (!tag || seen.has(key)) return [];
+      seen.add(key);
+      return [{ ...entry, id: newId(), tag }];
+    });
+    if (incoming.length === 0) return 'タグを入力してください';
+    for (const item of incoming) {
+      const dup = findDuplicate(entries, item);
+      if (dup) return `「${dup.tag}」は ${categoryLabel(dup.category)} に登録済みです`;
+    }
+    try {
+      await saveMany(incoming);
+    } catch (e) {
+      return `保存できませんでした: ${String(e)}`;
+    }
+    setEditingId(null);
+    notify(incoming.length === 1 ? `「${incoming[0]!.tag}」を保存しました` : `${incoming.length}件のタグを登録しました`);
+    return null;
   };
 
   const handleFile = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -159,7 +183,8 @@ export function DictionaryView({ dictionary, notify }: Props) {
           <EntryForm
             initial={blankEntry(filterCategory === 'all' ? 'quality' : filterCategory)}
             submitLabel="登録"
-            onSave={handleSave}
+            multiple
+            onSave={handleCreate}
             onCancel={() => setEditingId(null)}
           />
         </section>

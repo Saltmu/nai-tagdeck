@@ -18,6 +18,16 @@ const withTag = (ws: Workspace, tag: string) =>
   workspaceReducer(ws, { type: 'add', target: BASE, category: 'quality', tag });
 
 describe('presets', () => {
+  it('ケモノモードをバックアップで復元できる', () => {
+    const generation = { ...DEFAULT_GENERATION, mode: 'furry' as const };
+    const parsed = parseBackup(toBackupJSON({
+      dictionary: [], presets: [], workspace: emptyWorkspace(), settings: DEFAULT_SETTINGS, generation,
+    }));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.data.generation).toEqual(generation);
+  });
+
   it('15人と6人のチェック状態をプリセットとバックアップで保持する', () => {
     const ws = Array.from({ length: 15 }).reduce<Workspace>(
       (state) => workspaceReducer(state, { type: 'addCharacter' }), emptyWorkspace(),

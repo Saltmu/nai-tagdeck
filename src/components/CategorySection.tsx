@@ -4,6 +4,7 @@ import type { WorkspaceAction } from '../lib/workspace';
 import { categoryLabel } from '../lib/categories';
 import { buildCategoryPrompt } from '../lib/prompt';
 import { useCategoryOpen } from '../hooks/useCategoryOpen';
+import { normalize } from '../lib/suggest';
 import { TagRow } from './TagRow';
 import { TagInput } from './TagInput';
 
@@ -111,6 +112,14 @@ export const CategorySection = memo(function CategorySection({
                 }
                 onToggle={() => dispatch({ type: 'toggle', target, category, id: t.id })}
                 onWeight={(weight) => dispatch({ type: 'setWeight', target, category, id: t.id, weight })}
+                onEdit={(tag) => {
+                  if (!tag.trim()) return 'タグを入力してください';
+                  if (tags.some((other) => other.id !== t.id && normalize(other.tag) === normalize(tag))) {
+                    return '同じタグがこのカテゴリにあります';
+                  }
+                  dispatch({ type: 'setTag', target, category, id: t.id, tag });
+                  return null;
+                }}
                 onRemove={() => dispatch({ type: 'remove', target, category, id: t.id })}
                 onRegister={isKnown(t.tag) ? undefined : () => onRegister(t, category)}
               />

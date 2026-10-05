@@ -29,7 +29,7 @@ const TABS: Array<{ key: Tab; label: string }> = [
   { key: 'settings', label: '設定' },
 ];
 
-export default function App() {
+export default function App({ onResetAll }: { onResetAll: () => void }) {
   const dictionary = useDictionary();
   const { workspace, dispatch, loaded } = useWorkspace();
   const [settings, updateSettings] = useSettings();
@@ -154,13 +154,6 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <h1 className="app-title">nai-tagdeck</h1>
-        <QuickGenerate
-          size={generation.size}
-          onSizeChange={(size) => updateGeneration({ size })}
-          generating={generator.generating}
-          blocker={blocker}
-          onGenerate={startGenerate}
-        />
         <nav className="tabbar" aria-label="画面切り替え">
           {TABS.map((t) => (
             <button
@@ -193,6 +186,13 @@ export default function App() {
           <CopyIcon />
           <span className="copy-label">{characterPrompts.length ? 'ベースをコピー' : '全体コピー'}</span>
         </button>
+        <QuickGenerate
+          size={generation.size}
+          onSizeChange={(size) => updateGeneration({ size })}
+          generating={generator.generating}
+          blocker={blocker}
+          onGenerate={startGenerate}
+        />
       </header>
 
       {dictionary.error && (
@@ -251,6 +251,7 @@ export default function App() {
             notify={show}
             getBackup={getBackup}
             onImportBackup={importBackup}
+            onResetAll={onResetAll}
           />
         )}
       </main>

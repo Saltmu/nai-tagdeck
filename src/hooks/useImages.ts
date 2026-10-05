@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { newId } from '../lib/id';
 
 /** 生成画像はメモリ（Blob URL）にだけ置き、タブを閉じたら消える。 */
@@ -25,6 +25,11 @@ export interface ImageStore {
 
 export function useImages(): ImageStore {
   const [images, setImages] = useState<GeneratedImage[]>([]);
+  const latest = useRef(images);
+  latest.current = images;
+  useEffect(() => () => {
+    for (const img of latest.current) URL.revokeObjectURL(img.url);
+  }, []);
 
   const add = useCallback((list: NewImage[]) => {
     const created = list.map((img) => ({ ...img, id: newId(), url: URL.createObjectURL(img.blob) }));

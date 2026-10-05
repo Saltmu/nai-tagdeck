@@ -13,6 +13,7 @@ type TagAction =
   | { type: 'add'; tag: string; weight?: number }
   | { type: 'toggle'; id: string }
   | { type: 'setWeight'; id: string; weight: number }
+  | { type: 'setTag'; id: string; tag: string }
   | { type: 'remove'; id: string }
   | { type: 'move'; id: string; delta: -1 | 1 }
   | { type: 'setAll'; enabled: boolean };
@@ -114,6 +115,11 @@ function reduceTags(tags: WorkTag[], action: TagAction): WorkTag[] {
       return tags.map((t) => (t.id === action.id ? { ...t, enabled: !t.enabled } : t));
     case 'setWeight':
       return tags.map((t) => (t.id === action.id ? { ...t, weight: clampWeight(action.weight) } : t));
+    case 'setTag': {
+      const tag = action.tag.trim();
+      if (!tag || tags.some((t) => t.id !== action.id && normalize(t.tag) === normalize(tag))) return tags;
+      return tags.map((t) => (t.id === action.id ? { ...t, tag } : t));
+    }
     case 'remove':
       return tags.filter((t) => t.id !== action.id);
     case 'move':
