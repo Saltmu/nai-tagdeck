@@ -8,6 +8,8 @@ import { normalize } from '../lib/suggest';
 import { newId } from '../lib/id';
 import { CategorySection } from './CategorySection';
 import { CharacterCard } from './CharacterCard';
+import { PresetBar } from './PresetBar';
+import type { PresetStore } from '../hooks/usePresets';
 
 interface Props {
   workspace: Workspace;
@@ -20,6 +22,7 @@ interface Props {
   onSyntaxChange: (syntax: WeightSyntax) => void;
   onCopy: (text: string, label: string) => void;
   notify: (message: string) => void;
+  presets: PresetStore;
 }
 
 export function Editor({
@@ -33,6 +36,7 @@ export function Editor({
   onSyntaxChange,
   onCopy,
   notify,
+  presets,
 }: Props) {
   const knownTags = useMemo(
     () => new Set(dictionary.entries.map((e) => normalize(e.tag))),
@@ -61,6 +65,8 @@ export function Editor({
 
   return (
     <div className="editor" aria-busy={!loaded}>
+      <PresetBar store={presets} workspace={workspace} dispatch={dispatch} notify={notify} />
+
       <section className="card preview" aria-labelledby="preview-heading">
         <div className="card-head">
           <h2 id="preview-heading" className="card-title">

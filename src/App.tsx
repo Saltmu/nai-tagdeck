@@ -10,6 +10,9 @@ import { useToast } from './hooks/useToast';
 import { useToken } from './hooks/useToken';
 import { useImages } from './hooks/useImages';
 import { useGenerator } from './hooks/useGenerator';
+import { usePresets } from './hooks/usePresets';
+import { mergePresets } from './lib/presets';
+import type { Backup } from './lib/backup';
 import { buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { sizeOf } from './lib/generation';
 import { copyText } from './lib/browser';
@@ -29,6 +32,7 @@ export default function App() {
   const [settings, updateSettings] = useSettings();
   const [generation, updateGeneration] = useGenerationSettings();
   const token = useToken();
+  const presets = usePresets();
   const imageStore = useImages();
   const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
@@ -60,6 +64,29 @@ export default function App() {
       show(`シード ${seed} を次の生成に使います`);
     },
     [updateGeneration, show],
+  );
+
+  const getBackup = useCallback(
+    (): Backup => ({
+      dictionary: dictionary.entries,
+      presets: presets.presets,
+      workspace,
+      settings,
+      generation,
+    }),
+    [dictionary.entries, presets.presets, workspace, settings, generation],
+  );
+
+  const importBackup = useCallback(
+    async (data: Backup) => {
+      await dictionary.importEntries(data.dictionary, 'merge');
+      presets.setPresets(mergePresets(presets.presets, data.presets));
+      presets.setActiveId(null);
+      dispatch({ type: 'replace', workspace: data.workspace });
+      updateSettings(data.settings);
+      updateGeneration(data.generation);
+    },
+    [dictionary, presets, dispatch, updateSettings, updateGeneration],
   );
 
   const showWorkbench = tab === 'editor' || tab === 'generate';
@@ -120,6 +147,7 @@ export default function App() {
               onSyntaxChange={(weightSyntax) => updateSettings({ weightSyntax })}
               onCopy={copy}
               notify={show}
+              presets={presets}
             />
           </div>
           <div className="pane pane-generate">
@@ -145,7 +173,14 @@ export default function App() {
         </div>
         {tab === 'dictionary' && <DictionaryView dictionary={dictionary} notify={show} />}
         {tab === 'settings' && (
-          <SettingsView settings={settings} onChange={updateSettings} token={token} notify={show} />
+          <SettingsView
+            settings={settings}
+            onChange={updateSettings}
+            token={token}
+            notify={show}
+            getBackup={getBackup}
+            onImportBackup={importBackup}
+          />
         )}
       </main>
 

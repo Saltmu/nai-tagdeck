@@ -3,12 +3,16 @@ import type { Settings } from '../types';
 import type { TokenState } from '../hooks/useToken';
 import { DEFAULT_SETTINGS } from '../lib/settings';
 import { TokenSettings } from './TokenSettings';
+import { BackupCard } from './BackupCard';
+import type { Backup } from '../lib/backup';
 
 interface Props {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   token: TokenState;
   notify: (message: string) => void;
+  getBackup: () => Backup;
+  onImportBackup: (data: Backup) => Promise<void>;
 }
 
 type TextKey = 'negativePrompt' | 'characterNegativePrompt';
@@ -26,7 +30,7 @@ const FIELDS: Array<{ key: TextKey; label: string; help: string }> = [
   },
 ];
 
-export function SettingsView({ settings, onChange, token, notify }: Props) {
+export function SettingsView({ settings, onChange, token, notify, getBackup, onImportBackup }: Props) {
   const id = useId();
   return (
     <div className="settings">
@@ -60,6 +64,7 @@ export function SettingsView({ settings, onChange, token, notify }: Props) {
           </div>
         ))}
       </section>
+      <BackupCard getData={getBackup} onImport={onImportBackup} notify={notify} />
     </div>
   );
 }

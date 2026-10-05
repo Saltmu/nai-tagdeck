@@ -17,8 +17,8 @@ Require valid-user
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "DENY"
   Header always set Referrer-Policy "no-referrer"
-  # index.html はキャッシュさせず、ハッシュ付きの js/css は長くキャッシュする
-  <FilesMatch "\.html$">
+  # index.html・sw.js・manifest はキャッシュさせず、ハッシュ付きの js/css は長くキャッシュする
+  <FilesMatch "(\.html|sw\.js|\.webmanifest)$">
     Header set Cache-Control "no-cache"
   </FilesMatch>
   <FilesMatch "-[A-Za-z0-9_-]{8}\.(js|css)$">

@@ -33,6 +33,8 @@ export const CategorySection = memo(function CategorySection({
   onRegister,
 }: Props) {
   const [open, setOpen] = useState(true);
+  const [sorting, setSorting] = useState(false);
+  const canSort = tags.length > 1;
   const bodyId = useId();
   const label = categoryLabel(category);
   const fullLabel = scopeLabel ? `${scopeLabel} / ${label}` : label;
@@ -59,6 +61,16 @@ export const CategorySection = memo(function CategorySection({
           </button>
         </h3>
         <div className="head-actions">
+          {(canSort || sorting) && (
+            <button
+              type="button"
+              className={`btn btn-small${sorting ? ' btn-primary' : ''}`}
+              aria-pressed={sorting}
+              onClick={() => setSorting((v) => !v)}
+            >
+              {sorting ? '完了' : '並べ替え'}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-small"
@@ -81,10 +93,21 @@ export const CategorySection = memo(function CategorySection({
       <div id={bodyId} hidden={!open}>
         {tags.length > 0 && (
           <ul className="tag-list">
-            {tags.map((t) => (
+            {tags.map((t, i) => (
               <TagRow
                 key={t.id}
                 tag={t}
+                sorting={
+                  sorting && canSort
+                    ? {
+                        onUp: i > 0 ? () => dispatch({ type: 'move', target, category, id: t.id, delta: -1 }) : null,
+                        onDown:
+                          i < tags.length - 1
+                            ? () => dispatch({ type: 'move', target, category, id: t.id, delta: 1 })
+                            : null,
+                      }
+                    : undefined
+                }
                 onToggle={() => dispatch({ type: 'toggle', target, category, id: t.id })}
                 onWeight={(weight) => dispatch({ type: 'setWeight', target, category, id: t.id, weight })}
                 onRemove={() => dispatch({ type: 'remove', target, category, id: t.id })}
@@ -93,12 +116,14 @@ export const CategorySection = memo(function CategorySection({
             ))}
           </ul>
         )}
-        <TagInput
-          category={category}
-          label={fullLabel}
-          entries={entries}
-          onAdd={(tag, weight) => dispatch({ type: 'add', target, category, tag, weight })}
-        />
+        {!sorting && (
+          <TagInput
+            category={category}
+            label={fullLabel}
+            entries={entries}
+            onAdd={(tag, weight) => dispatch({ type: 'add', target, category, tag, weight })}
+          />
+        )}
       </div>
     </section>
   );

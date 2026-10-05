@@ -1181,3 +1181,96 @@ textarea {
 .card-title .count {
   margin-left: 0.4rem;
 }
+
+/* ---- phase 3: presets / weight / sort ---- */
+.preset-bar {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.preset-select {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.preset-select select {
+  flex: 1;
+  min-width: 0;
+  font-weight: 400;
+}
+
+.preset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.weight-control {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
+.weight-control .weight {
+  width: 3.9rem;
+  border-radius: 0;
+  text-align: center;
+  /* ブラウザ標準のスピンボタンは ± ボタンと重複するので隠す */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.weight-control .weight::-webkit-inner-spin-button,
+.weight-control .weight::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.step-btn {
+  width: 32px;
+  min-height: 40px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.step-btn:first-child {
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+}
+
+.step-btn:last-child {
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+}
+
+.step-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.step-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sort-control {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.sort-control .icon-btn {
+  border: 1px solid var(--border);
+}
