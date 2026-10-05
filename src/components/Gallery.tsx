@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
-import { ImageViewer } from './ImageViewer';
+import { downloadBlob } from '../lib/browser';
+import { ImageViewer, imageFileName } from './ImageViewer';
 
 interface Props {
   images: GeneratedImage[];
@@ -47,6 +48,17 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
             <li key={img.id} className="thumb" style={{ aspectRatio: `${img.width} / ${img.height}` }}>
               <button type="button" className="thumb-btn" onClick={() => setOpenId(img.id)}>
                 <img src={img.url} alt={`生成画像 ${images.length - i}（シード ${img.seed}）`} loading="lazy" />
+              </button>
+              <button
+                type="button"
+                className="btn thumb-download"
+                aria-label={`生成画像 ${images.length - i}をダウンロード`}
+                title="ダウンロード"
+                onClick={() => downloadBlob(imageFileName(img), img.blob)}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5" />
+                </svg>
               </button>
             </li>
           ))}

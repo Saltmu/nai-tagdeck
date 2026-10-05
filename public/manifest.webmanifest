@@ -1,7 +1,7 @@
 {
   "name": "nai-tagdeck",
   "short_name": "tagdeck",
-  "description": "NovelAI のプロンプトをタグの ON/OFF で組み立てて生成する",
+  "description": "NovelAIのタグを日本語で検索し、ON/OFF・重み調整でプロンプトを編集。キャラクター編集、アニメ・ケモノの画像生成、辞書・プリセットの保存に対応。",
   "lang": "ja",
   "start_url": "./",
   "scope": "./",

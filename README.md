@@ -40,14 +40,24 @@ npm run build      # 型チェック + dist/ に出力
 ## 配置
 
 `npm run build` で出来た `dist/` の中身を、レンタルサーバーの任意のディレクトリにアップロードする
-（相対パスで出力しているのでサブディレクトリでも動く）。`.htaccess` 以外に必要なファイルはすべて `dist/` に入っている。
+（相対パスで出力しているのでサブディレクトリでも動く）。必要なファイルはすべて `dist/` に入っている。HTTPSリダイレクトはサーバー側で設定する。
 
 - PWA（ホーム画面に追加・オフライン）は HTTPS のときだけ有効になる。Service Worker（`sw.js`）は更新が
   すぐ反映されるよう、ページ本体は毎回サーバーから取り、取れないときだけキャッシュを使う。
 - アイコンを作り直すときは `node scripts/make-icons.mjs`（`public/icons/` に出力）。
 
-- サイト全体を HTTPS + Basic 認証にする。設定例は [`deploy/htaccess.example`](deploy/htaccess.example)。
+- PHP・Basic認証は使用せず、静的ファイルだけで公開する。HTTPSリダイレクトはサーバー側で設定し、`.htaccess` には設定しない。[`deploy/htaccess.example`](deploy/htaccess.example) はセキュリティヘッダー・キャッシュ制御用の任意の設定例。サーバーに以前のBasic認証設定がある場合は削除する。
 - 本番ビルドの `index.html` には CSP（外部スクリプト禁止、通信先は自サイトと `image.novelai.net` のみ）が入る。
+
+## 検索への掲載（SEO）
+
+- HTMLにサービス名と用途が分かるtitle、description、OGP・SNS共有用metaタグを設定し、`noindex, nofollow` を `index, follow` に変更している。検索掲載や順位を保証するものではない。
+- 公開時は認証を使用せず、検索エンジンが取得できる状態にする。サーバー側の `X-Robots-Tag: noindex` やドメイン直下のrobots.txtによるクロール禁止が残っていないことも確認する。
+- 公開URLは `https://www.shishio.x0.to/nai-tagdeck/`。canonical、`og:url`、共有画像の`og:image`と`twitter:image`、`public/sitemap.xml`をこのURLに統一している。SSL証明書が有効になった後、HTTPからHTTPSへのリダイレクトをサーバー側で有効化する。
+- `dist/sitemap.xml`もアプリと一緒にアップロードする。Google Search Consoleでサイトの所有権を確認し、`https://www.shishio.x0.to/nai-tagdeck/sitemap.xml`を送信する。
+- robots.txtはドメイン直下に置く必要がある。`deploy/robots.txt.example`を参考に、既存のrobots.txtのルールと統合して配置する（`dist`には含めない）。
+- 次の施策は、公開の紹介文・使い方ページの追加、Search ConsoleのURL検査によるインデックス登録のリクエスト、モバイル表示と表示速度の確認。現在のタブはアプリ内の画面切り替えであり、サイトマップに別ページとして登録しない。
+- meta keywordsはGoogleの検索順位やインデックス登録には使われないため設定しない。検索語は自然なtitle・descriptionと、公開の紹介文・使い方に含める。
 
 ## 辞書ファイルの形式
 

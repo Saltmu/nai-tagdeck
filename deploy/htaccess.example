@@ -1,16 +1,6 @@
 # dist/ と同じディレクトリに .htaccess として置く設定例（Apache）。
-# AuthUserFile は公開ディレクトリの外に置いた .htpasswd の絶対パスにする。
-
-# HTTPS に統一
-RewriteEngine On
-RewriteCond %{HTTPS} off
-RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
-
-# Basic 認証
-AuthType Basic
-AuthName "nai-tagdeck"
-AuthUserFile /home/USER/.htpasswd
-Require valid-user
+# Basic 認証は使用しない。静的ファイルのみで公開する。
+# HTTPS リダイレクトはサーバー側で設定するため、ここでは設定しない。
 
 <IfModule mod_headers.c>
   Header always set Strict-Transport-Security "max-age=31536000"
