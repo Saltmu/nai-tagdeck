@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BASE,
   MAX_CHARACTERS,
+  MAX_ENABLED_CHARACTERS,
   emptyGroups,
   emptyWorkspace,
   normalizeWorkspace,
@@ -93,6 +94,27 @@ describe('workspaceReducer: キャラクター', () => {
     expect(run(emptyWorkspace(), ...actions).characters).toHaveLength(MAX_CHARACTERS);
   });
 
+  it('15人まで保存し、追加時は6人まで自動でONにする', () => {
+    const actions = Array.from({ length: 16 }, () => ({ type: 'addCharacter' }) as const);
+    const ws = run(emptyWorkspace(), ...actions);
+    expect(ws.characters).toHaveLength(15);
+    expect(ws.characters.filter((c) => c.enabled)).toHaveLength(6);
+    expect(ws.characters.slice(6).every((c) => !c.enabled)).toBe(true);
+  });
+
+  it('6人がONのときは7人目をONにせず、チェックを外すと別の人をONにできる', () => {
+    let ws = run(emptyWorkspace(), ...Array.from({ length: 7 }, () => ({ type: 'addCharacter' }) as const));
+    const first = ws.characters[0]!;
+    const seventh = ws.characters[6]!;
+    expect(run(ws, { type: 'toggleCharacter', id: seventh.id })).toBe(ws);
+    ws = run(ws, { type: 'toggleCharacter', id: first.id }, { type: 'toggleCharacter', id: seventh.id });
+    expect(ws.characters[0]!.enabled).toBe(false);
+    expect(ws.characters[6]!.enabled).toBe(true);
+    expect(ws.characters.filter((c) => c.enabled)).toHaveLength(MAX_ENABLED_CHARACTERS);
+    ws = run(ws, { type: 'removeCharacter', id: seventh.id }, { type: 'addCharacter' });
+    expect(ws.characters.at(-1)?.enabled).toBe(true);
+  });
+
   it('タグ操作は指定したキャラクターだけに効く', () => {
     let ws = run(emptyWorkspace(), { type: 'addCharacter' }, { type: 'addCharacter' });
     const [c1, c2] = ws.characters;
@@ -110,6 +132,46 @@ describe('workspaceReducer: キャラクター', () => {
 });
 
 describe('normalizeWorkspace', () => {
+  it('読み込み・置き換えでも15人を保持してチェックは先頭の6人までにする', () => {
+    const raw = {
+      base: {},
+      characters: Array.from({ length: 17 }, (_, i) => ({
+        id: `character-${i}`, name: `キャラ${i}`, enabled: i !== 0,
+        tags: { appearance: [{ tag: `tag-${i}` }] },
+      })),
+    };
+    const ws = normalizeWorkspace(raw);
+    expect(ws.characters).toHaveLength(15);
+    expect(ws.characters.filter((c) => c.enabled).map((c) => c.id))
+      .toEqual(Array.from({ length: 6 }, (_, i) => `character-${i + 1}`));
+    expect(ws.characters[14]?.tags.appearance[0]?.tag).toBe('tag-14');
+    const replaced = run(emptyWorkspace(), { type: 'replace', workspace: { ...ws, characters: ws.characters.map((c) => ({ ...c, enabled: true })) } });
+    expect(replaced.characters.filter((c) => c.enabled)).toHaveLength(6);
+    expect(replaced.characters).toHaveLength(15);
+  });
+
+  it('新カテゴリ追加前のデータを保持し、背景・天候に空の配列を補う', () => {
+    const ws = normalizeWorkspace({
+      base: { composition: [{ id: 'bg', tag: 'white background' }], effect: [{ id: 'rain', tag: 'rain' }] },
+      characters: [{ id: 'character', tags: { appearance: [{ tag: 'smile' }] } }],
+    });
+    expect(ws.base.composition[0]?.tag).toBe('white background');
+    expect(ws.base.effect[0]?.tag).toBe('rain');
+    expect(ws.base.background).toEqual([]);
+    expect(ws.base.weather).toEqual([]);
+    expect(ws.characters[0]?.tags.background).toEqual([]);
+    expect(ws.characters[0]?.tags.weather).toEqual([]);
+    expect(ws.characters[0]?.tags.appearance[0]?.tag).toBe('smile');
+  });
+
+  it('背景・天候のタグを保存データから復元する', () => {
+    const ws = run(emptyWorkspace(),
+      { type: 'add', target: BASE, category: 'background', tag: 'forest' },
+      { type: 'add', target: BASE, category: 'weather', tag: 'night' },
+    );
+    expect(normalizeWorkspace(JSON.parse(JSON.stringify(ws)))).toEqual(ws);
+  });
+
   it('壊れた保存データを補正する', () => {
     const ws = normalizeWorkspace({
       base: {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DictEntry } from '../types';
 import { deleteEntry, listEntries, putEntry, replaceAllEntries } from '../lib/db';
 import { mergeEntries, sortEntries, type ImportMode } from '../lib/io';
+import { restoreInitialDictionary } from '../lib/sampleDictionary';
 
 export interface Dictionary {
   entries: DictEntry[];
@@ -10,6 +11,7 @@ export interface Dictionary {
   save: (entry: DictEntry) => Promise<void>;
   remove: (id: string) => Promise<void>;
   importEntries: (incoming: DictEntry[], mode: ImportMode) => Promise<number>;
+  restoreInitial: () => Promise<number>;
 }
 
 export function useDictionary(): Dictionary {
@@ -44,5 +46,13 @@ export function useDictionary(): Dictionary {
     return merged.length;
   }, []);
 
-  return { entries, loaded, error, save, remove, importEntries };
+  const restoreInitial = useCallback(async () => {
+    const merged = restoreInitialDictionary(latest.current);
+    await replaceAllEntries(merged);
+    latest.current = merged;
+    setEntries(merged);
+    return merged.length;
+  }, []);
+
+  return { entries, loaded, error, save, remove, importEntries, restoreInitial };
 }

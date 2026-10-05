@@ -3,6 +3,7 @@ import type { CategoryKey, DictEntry, TargetId, WeightSyntax, WorkTag } from '..
 import type { WorkspaceAction } from '../lib/workspace';
 import { categoryLabel } from '../lib/categories';
 import { buildCategoryPrompt } from '../lib/prompt';
+import { useCategoryOpen } from '../hooks/useCategoryOpen';
 import { TagRow } from './TagRow';
 import { TagInput } from './TagInput';
 
@@ -32,7 +33,7 @@ export const CategorySection = memo(function CategorySection({
   onCopy,
   onRegister,
 }: Props) {
-  const [open, setOpen] = useState(true);
+  const [open, toggleOpen] = useCategoryOpen(target, category);
   const [sorting, setSorting] = useState(false);
   const canSort = tags.length > 1;
   const bodyId = useId();
@@ -51,7 +52,7 @@ export const CategorySection = memo(function CategorySection({
             className="disclosure"
             aria-expanded={open}
             aria-controls={bodyId}
-            onClick={() => setOpen((v) => !v)}
+            onClick={toggleOpen}
           >
             <span className="disclosure-icon" aria-hidden="true" />
             {label}

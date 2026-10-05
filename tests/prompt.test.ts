@@ -48,6 +48,31 @@ describe('clampWeight', () => {
 });
 
 describe('buildPrompt', () => {
+  it('保存された15人からチェック済みの6人だけを生成プロンプトにする', () => {
+    const characters = Array.from({ length: 15 }, (_, i) => {
+      const character = newCharacter(i);
+      character.tags.subject = [tag(`person-${i}`)];
+      character.enabled = i >= 9;
+      return character;
+    });
+    expect(buildCharacterPrompts(characters, 'numeric').map((c) => c.prompt))
+      .toEqual(Array.from({ length: 6 }, (_, i) => `person-${i + 9}`));
+    expect(buildCharacterPrompts(characters.map((c) => ({ ...c, enabled: true })), 'numeric')).toHaveLength(6);
+  });
+
+  it('背景・天候はベースのプロンプトに出力し、キャラクターには出力しない', () => {
+    const groups = emptyGroups();
+    groups.subject = [tag('1girl')];
+    groups.background = [tag('forest')];
+    groups.weather = [tag('night'), tag('rain', false)];
+    expect(buildPrompt(groups, 'numeric')).toBe('1girl, forest, night');
+    const character = newCharacter(0);
+    character.tags.subject = [tag('girl')];
+    character.tags.background = groups.background;
+    character.tags.weather = groups.weather;
+    expect(buildCharacterPrompts([character], 'numeric')[0]?.prompt).toBe('girl');
+  });
+
   it('ON のタグだけを ", " でつなぐ', () => {
     expect(buildCategoryPrompt([tag('a'), tag('b', false), tag('c', true, 1.5)], 'numeric')).toBe(
       'a, 1.5::c::',

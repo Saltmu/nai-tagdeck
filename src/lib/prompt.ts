@@ -1,5 +1,6 @@
 import type { CategoryKey, Character, TagGroups, WeightSyntax, WorkTag } from '../types';
 import { CATEGORY_KEYS, CHARACTER_CATEGORY_KEYS } from './categories';
+import { MAX_ENABLED_CHARACTERS } from './characterLimits';
 
 /** マイナスは V4.5 以降の「取り除く」指定（例: `-1::hat::`）。 */
 export const WEIGHT_MIN = -3;
@@ -67,8 +68,7 @@ export function buildCharacterPrompts(
   syntax: WeightSyntax,
   keys: readonly CategoryKey[] = CHARACTER_CATEGORY_KEYS,
 ): CharacterPrompt[] {
-  return characters.flatMap((c) => {
-    if (!c.enabled) return [];
+  return characters.filter((c) => c.enabled).slice(0, MAX_ENABLED_CHARACTERS).flatMap((c) => {
     const prompt = buildPrompt(c.tags, syntax, keys);
     return prompt ? [{ id: c.id, name: c.name, prompt }] : [];
   });

@@ -8,13 +8,15 @@ export const CATEGORIES = [
   { key: 'pose', label: 'ポーズ' },
   { key: 'effect', label: 'エフェクト' },
   { key: 'composition', label: '構図' },
+  { key: 'background', label: '背景・場所' },
+  { key: 'weather', label: '時間・天候' },
 ] as const;
 
 export type CategoryKey = (typeof CATEGORIES)[number]['key'];
 
 export const CATEGORY_KEYS: readonly CategoryKey[] = CATEGORIES.map((c) => c.key);
 
-/** キャラクタープロンプトで編集するカテゴリ（品質・画風・エフェクト・構図はベース側で扱う）。 */
+/** キャラクタープロンプトで編集するカテゴリ（品質・画風・エフェクト・構図・背景・天候はベース側で扱う）。 */
 export const CHARACTER_CATEGORY_KEYS: readonly CategoryKey[] = [
   'subject',
   'appearance',

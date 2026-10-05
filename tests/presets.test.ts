@@ -18,6 +18,22 @@ const withTag = (ws: Workspace, tag: string) =>
   workspaceReducer(ws, { type: 'add', target: BASE, category: 'quality', tag });
 
 describe('presets', () => {
+  it('15人と6人のチェック状態をプリセットとバックアップで保持する', () => {
+    const ws = Array.from({ length: 15 }).reduce<Workspace>(
+      (state) => workspaceReducer(state, { type: 'addCharacter' }), emptyWorkspace(),
+    );
+    const preset = createPreset('15人', ws);
+    expect(preset.workspace.characters).toHaveLength(15);
+    expect(preset.workspace.characters.filter((c) => c.enabled)).toHaveLength(6);
+    const backup = parseBackup(toBackupJSON({
+      dictionary: [], presets: [preset], workspace: ws, settings: DEFAULT_SETTINGS, generation: DEFAULT_GENERATION,
+    }));
+    expect(backup.ok).toBe(true);
+    if (!backup.ok) throw new Error(backup.error);
+    expect(backup.data.workspace).toEqual(ws);
+    expect(backup.data.presets[0]?.workspace).toEqual(ws);
+  });
+
   it('保存した内容は、その後の編集の影響を受けない', () => {
     const ws = withTag(emptyWorkspace(), 'masterpiece');
     const preset = createPreset('  基本  ', ws);

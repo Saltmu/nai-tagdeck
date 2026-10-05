@@ -1,7 +1,9 @@
 import type { CategoryKey, DictEntry } from '../types';
 import { newId } from './id';
+import { sortEntries } from './io';
+import { normalize } from './suggest';
 
-// 動作確認用の最小限のサンプル（NovelAI Diffusion V5 向け）。辞書が空のときだけ読み込みを提案する。
+// 初期カテゴリに登録するタグ（NovelAI Diffusion V5 向け）。
 const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   // 公式UIの品質プリセット「light」が付けるタグ
   ['quality', 'very aesthetic', '美的 びてき'],
@@ -87,6 +89,13 @@ const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   ['appearance', 'bob cut', 'ボブ'],
   ['appearance', 'ahoge', 'アホ毛 あほげ'],
   ['appearance', 'bangs', '前髪 まえがみ'],
+  ['appearance', 'messy hair', '乱れ髪 くせ毛 みだれがみ'],
+  ['appearance', 'wavy hair', 'ウェーブヘア 波打つ髪'],
+  ['appearance', 'curly hair', '巻き髪 カール まきがみ'],
+  ['appearance', 'hair bun', 'お団子ヘア おだんご'],
+  ['appearance', 'blunt bangs', 'ぱっつん前髪 まえがみ'],
+  ['appearance', 'parted bangs', '分けた前髪 わけたまえがみ'],
+  ['appearance', 'hair over one eye', '片目にかかる髪 かため'],
   ['appearance', 'brown hair', '茶髪 ちゃぱつ'],
   ['appearance', 'silver hair', '銀髪 ぎんぱつ'],
   ['appearance', 'pink hair', 'ピンク髪 ぴんくがみ'],
@@ -95,6 +104,9 @@ const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   ['appearance', 'green eyes', '緑の目 みどりのめ'],
   ['appearance', 'purple eyes', '紫の目 むらさきのめ'],
   ['appearance', 'brown eyes', '茶色い目 ちゃいろのめ'],
+  ['appearance', 'yellow eyes', '黄色い目 きいろいめ'],
+  ['appearance', 'heterochromia', 'オッドアイ 左右で違う目の色'],
+  ['appearance', 'narrowed eyes', '目を細める めをほそめる'],
   ['appearance', 'blush', '赤面 せきめん 照れ'],
   ['appearance', 'open mouth', '口を開ける くちをあける'],
   ['appearance', 'closed mouth', '口を閉じる'],
@@ -102,11 +114,30 @@ const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   ['appearance', 'tears', '涙 なみだ'],
   ['appearance', 'angry', '怒り おこ'],
   ['appearance', 'embarrassed', '恥ずかしい はずかしい'],
+  ['appearance', 'grin', '歯を見せた笑顔 は えがお'],
+  ['appearance', 'smirk', 'にやり 得意げ とくいげ'],
+  ['appearance', 'pout', '不満顔 ふくれっ面 ふまんがお'],
+  ['appearance', 'expressionless', '無表情 むひょうじょう'],
+  ['appearance', 'freckles', 'そばかす'],
+  ['appearance', 'scar', '傷跡 きずあと'],
+  ['appearance', 'pointy ears', '尖った耳 とがったみみ'],
+  ['appearance', 'fangs', '牙 きば'],
   ['appearance', 'glasses', 'メガネ 眼鏡'],
   ['appearance', 'animal ears', '獣耳 けものみみ'],
   ['appearance', 'cat ears', '猫耳 ねこみみ'],
   ['appearance', 'fox ears', '狐耳 きつねみみ'],
   ['appearance', 'tail', 'しっぽ 尻尾'],
+  ['appearance', 'lean muscular', '細マッチョ 引き締まった体型 ほそまっちょ たいけい'],
+  ['appearance', 'muscular', '筋肉質 マッチョ きんにくしつ たいけい'],
+  ['appearance', 'slim', '細身 スリム ほそみ たいけい'],
+  ['appearance', 'skinny', '痩せ型 やせがた たいけい'],
+  ['appearance', 'plump', 'ぽっちゃり ふくよか たいけい'],
+  ['appearance', 'curvy', '曲線的な体型 きょくせんてき たいけい'],
+  ['appearance', 'wide hips', '幅広い腰 はばひろいこし たいけい'],
+  ['appearance', 'narrow waist', 'くびれ 細い腰 ほそいこし たいけい'],
+  ['appearance', 'broad shoulders', '広い肩幅 ひろいかたはば たいけい'],
+  ['appearance', 'abs', '腹筋 ふっきん たいけい'],
+  ['appearance', 'toned', '引き締まった体 ひきしまったからだ たいけい'],
   ['appearance', 'large breasts', '巨乳 きょにゅう'],
   ['appearance', 'small breasts', '貧乳 ひんにゅう'],
   ['appearance', 'dark skin', '褐色 かっしょく'],
@@ -163,6 +194,11 @@ const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   ['outfit', 'gloves', '手袋 てぶくろ'],
   ['outfit', 'necktie', 'ネクタイ'],
   ['outfit', 'choker', 'チョーカー'],
+  ['outfit', 'cardigan', 'カーディガン'],
+  ['outfit', 'vest', 'ベスト'],
+  ['outfit', 'suit', 'スーツ'],
+  ['outfit', 'boots', 'ブーツ'],
+  ['outfit', 'earrings', 'イヤリング ピアス'],
   ['dress_state', 'open jacket', '前開き まえあき'],
   ['dress_state', 'sleeves rolled up', '腕まくり うでまくり'],
   ['dress_state', 'barefoot', '裸足 はだし'],
@@ -176,6 +212,7 @@ const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   ['dress_state', 'shirt tucked in', 'シャツイン'],
   ['dress_state', 'off shoulder', '肩出し かただし'],
   ['dress_state', 'shoes removed', '靴を脱ぐ くつをぬぐ'],
+  ['dress_state', 'open shirt', '前を開けたシャツ まえあき'],
   ['pose', 'standing', '立ち たち'],
   ['pose', 'sitting', '座り すわり'],
   ['pose', 'arms up', '腕を上げる うであげ'],
@@ -197,6 +234,10 @@ const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   ['pose', 'looking away', '目をそらす'],
   ['pose', 'looking back', '振り返る ふりかえる'],
   ['pose', 'head tilt', '首をかしげる'],
+  ['pose', 'smoking', '喫煙 タバコ きつえん'],
+  ['pose', 'reading', '読書 本を読む どくしょ'],
+  ['pose', 'eating', '食事 食べる しょくじ たべる'],
+  ['pose', 'holding a cup', 'カップを持つ かっぷをもつ'],
   // キャラ同士の動作: source#（する側）/ target#（される側）/ mutual#（お互い）
   ['pose', 'mutual#holding hands', '手をつなぐ てをつなぐ'],
   ['pose', 'source#hug', '抱きしめる側 だきしめる'],
@@ -213,8 +254,6 @@ const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   ['effect', 'glowing', '発光 はっこう'],
   ['effect', 'petals', '花びら'],
   ['effect', 'falling petals', '舞う花びら'],
-  ['effect', 'snow', '雪 ゆき'],
-  ['effect', 'rain', '雨 あめ'],
   ['effect', 'particles', '粒子 りゅうし'],
   ['effect', 'film grain', 'フィルムグレイン'],
   ['effect', 'vignetting', 'ビネット 周辺減光'],
@@ -237,8 +276,23 @@ const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   ['composition', 'dutch angle', '斜め構図 ななめ'],
   ['composition', 'pov', '主観視点 しゅかんしてん'],
   ['composition', 'centered', '中央 ちゅうおう'],
-  ['composition', 'simple background', 'シンプル背景 無地'],
-  ['composition', 'white background', '白背景 しろはいけい'],
+  ['composition', 'profile', '横顔 よこがお'],
+  ['composition', 'back view', '背面 後ろ姿 はいめん うしろすがた'],
+  ['composition', "bird's-eye view", '真上からの俯瞰 まうえ ふかん'],
+  ['background', 'simple background', 'シンプル背景 無地'],
+  ['background', 'white background', '白背景 しろはいけい'],
+  ['background', 'indoors', '屋内 室内 おくない しつない'],
+  ['background', 'outdoors', '屋外 外 おくがい そと'],
+  ['background', 'bedroom', '寝室 しんしつ'],
+  ['background', 'classroom', '教室 きょうしつ'],
+  ['background', 'forest', '森 もり'],
+  ['background', 'beach', '海辺 砂浜 うみべ すなはま'],
+  ['weather', 'day', '昼 日中 ひる にっちゅう'],
+  ['weather', 'night', '夜 よる'],
+  ['weather', 'sunset', '夕焼け 日没 ゆうやけ にちぼつ'],
+  ['weather', 'cloudy sky', '曇り空 くもりぞら'],
+  ['weather', 'snow', '雪 ゆき'],
+  ['weather', 'rain', '雨 あめ'],
 ];
 
 export function sampleDictionary(): DictEntry[] {
@@ -252,4 +306,16 @@ export function sampleDictionary(): DictEntry[] {
     sort_order: i,
     updated_at: now,
   }));
+}
+
+/** 同名タグはカテゴリによらず既存の設定を保ち、不足する初期タグだけを補う。 */
+export function restoreInitialDictionary(existing: readonly DictEntry[]): DictEntry[] {
+  const names = new Set(existing.map((entry) => normalize(entry.tag)));
+  const missing = sampleDictionary().filter((entry) => {
+    const name = normalize(entry.tag);
+    if (names.has(name)) return false;
+    names.add(name);
+    return true;
+  });
+  return sortEntries([...existing, ...missing]);
 }

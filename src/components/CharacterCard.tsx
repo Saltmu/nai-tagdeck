@@ -3,12 +3,14 @@ import type { Character, CategoryKey, DictEntry, WeightSyntax, WorkTag } from '.
 import type { WorkspaceAction } from '../lib/workspace';
 import { CHARACTER_CATEGORY_KEYS } from '../lib/categories';
 import { buildPrompt } from '../lib/prompt';
+import { MAX_ENABLED_CHARACTERS } from '../lib/characterLimits';
 import { CategorySection } from './CategorySection';
 
 interface Props {
   character: Character;
   index: number;
   count: number;
+  canEnable: boolean;
   dispatch: Dispatch<WorkspaceAction>;
   entries: DictEntry[];
   syntax: WeightSyntax;
@@ -21,6 +23,7 @@ export function CharacterCard({
   character,
   index,
   count,
+  canEnable,
   dispatch,
   entries,
   syntax,
@@ -44,8 +47,11 @@ export function CharacterCard({
         <input
           type="checkbox"
           checked={enabled}
+          disabled={!enabled && !canEnable}
           aria-label={`${name} を生成に含める`}
-          title="OFF にすると出力・生成から外します"
+          title={!enabled && !canEnable
+            ? `生成対象は最大${MAX_ENABLED_CHARACTERS}人です。他のキャラクターのチェックを外してください`
+            : 'OFF にすると出力・生成から外します'}
           onChange={() => dispatch({ type: 'toggleCharacter', id })}
         />
         <input

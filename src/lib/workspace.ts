@@ -3,10 +3,11 @@ import { CATEGORY_KEYS } from './categories';
 import { newId } from './id';
 import { clampWeight } from './prompt';
 import { normalize } from './suggest';
+import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
+
+export { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
 
 export const BASE: TargetId = 'base';
-/** 公式UIのキャラクタープロンプトの上限に合わせる。 */
-export const MAX_CHARACTERS = 6;
 
 type TagAction =
   | { type: 'add'; tag: string; weight?: number }
@@ -86,7 +87,13 @@ export function normalizeWorkspace(raw: unknown): Workspace {
         ];
       })
     : [];
-  return { base: normalizeGroups(obj.base), characters: characters.slice(0, MAX_CHARACTERS) };
+  let enabledCount = 0;
+  const limited = characters.slice(0, MAX_CHARACTERS).map((character) => {
+    if (!character.enabled) return character;
+    enabledCount++;
+    return enabledCount <= MAX_ENABLED_CHARACTERS ? character : { ...character, enabled: false };
+  });
+  return { base: normalizeGroups(obj.base), characters: limited };
 }
 
 // ---- reducer ----
@@ -138,19 +145,23 @@ function updateCharacter(state: Workspace, id: string, fn: (c: Character) => Cha
 
 export function workspaceReducer(state: Workspace, action: WorkspaceAction): Workspace {
   switch (action.type) {
-    case 'addCharacter':
+    case 'addCharacter': {
       if (state.characters.length >= MAX_CHARACTERS) return state;
-      return { ...state, characters: [...state.characters, newCharacter(state.characters.length)] };
+      const enabled = state.characters.filter((c) => c.enabled).length < MAX_ENABLED_CHARACTERS;
+      return { ...state, characters: [...state.characters, { ...newCharacter(state.characters.length), enabled }] };
+    }
     case 'removeCharacter':
       return { ...state, characters: state.characters.filter((c) => c.id !== action.id) };
     case 'renameCharacter':
       return updateCharacter(state, action.id, (c) => ({ ...c, name: action.name }));
     case 'toggleCharacter':
+      if (state.characters.some((c) => c.id === action.id && !c.enabled) &&
+          state.characters.filter((c) => c.enabled).length >= MAX_ENABLED_CHARACTERS) return state;
       return updateCharacter(state, action.id, (c) => ({ ...c, enabled: !c.enabled }));
     case 'moveCharacter':
       return { ...state, characters: moveItem(state.characters, action.id, action.delta) };
     case 'replace':
-      return action.workspace;
+      return normalizeWorkspace(action.workspace);
     default: {
       const { target, category } = action;
       if (target === BASE) {

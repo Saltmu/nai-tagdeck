@@ -1,7 +1,7 @@
 import { useCallback, useMemo, type Dispatch } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
-import { BASE, MAX_CHARACTERS, type WorkspaceAction } from '../lib/workspace';
+import { BASE, MAX_CHARACTERS, MAX_ENABLED_CHARACTERS, type WorkspaceAction } from '../lib/workspace';
 import type { CharacterPrompt } from '../lib/prompt';
 import { CATEGORY_KEYS } from '../lib/categories';
 import { normalize } from '../lib/suggest';
@@ -62,6 +62,7 @@ export function Editor({
   );
 
   const { characters } = workspace;
+  const enabledCount = characters.filter((c) => c.enabled).length;
 
   return (
     <div className="editor" aria-busy={!loaded}>
@@ -130,7 +131,7 @@ export function Editor({
         <h2 className="section-title">
           キャラクター
           <span className="count">
-            {characters.length}/{MAX_CHARACTERS}
+            保存 {characters.length}/{MAX_CHARACTERS} · 生成対象 {enabledCount}/{MAX_ENABLED_CHARACTERS}
           </span>
         </h2>
         <button
@@ -154,6 +155,7 @@ export function Editor({
             character={c}
             index={i}
             count={characters.length}
+            canEnable={enabledCount < MAX_ENABLED_CHARACTERS}
             dispatch={dispatch}
             entries={dictionary.entries}
             syntax={syntax}

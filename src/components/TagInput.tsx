@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CategoryKey, DictEntry } from '../types';
 import { categoryLabel } from '../lib/categories';
 import { parseTagList } from '../lib/prompt';
@@ -16,13 +16,20 @@ export function TagInput({ category, label, entries, onAdd }: Props) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const listId = useId();
 
   const suggestions = useMemo(
-    () => (open && !text.includes(',') ? suggest(entries, text, { category }) : []),
+    () => (open && !text.includes(',') ? suggest(entries, text, { category, showCategoryOnEmpty: true }) : []),
     [open, entries, text, category],
   );
   const expanded = suggestions.length > 0;
+
+  useEffect(() => {
+    if (!expanded) return;
+    const option = listRef.current?.children[active];
+    if (option instanceof HTMLElement) option.scrollIntoView({ block: 'nearest' });
+  }, [active, suggestions, expanded]);
 
   const reset = () => {
     setText('');
@@ -65,7 +72,10 @@ export function TagInput({ category, label, entries, onAdd }: Props) {
           setActive(0);
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          setActive(0);
+          setOpen(true);
+        }}
         onBlur={() => setOpen(false)}
         onKeyDown={(e) => {
           // IME 変換確定の Enter は無視する
@@ -96,7 +106,7 @@ export function TagInput({ category, label, entries, onAdd }: Props) {
         追加
       </button>
 
-      <ul id={listId} role="listbox" className="suggestions" hidden={!expanded} onMouseDown={(e) => e.preventDefault()}>
+      <ul ref={listRef} id={listId} role="listbox" className="suggestions" hidden={!expanded} onMouseDown={(e) => e.preventDefault()}>
         {suggestions.map(({ entry }, i) => (
           <li
             key={entry.id}

@@ -52,6 +52,24 @@ describe('suggest', () => {
   it('空の入力では何も返さない', () => {
     expect(tags('  ')).toEqual([]);
   });
+  it('空欄のカテゴリ候補は、そのカテゴリの登録タグをすべて並び順で返す', () => {
+    const entries = Array.from({ length: 12 }, (_, i) => entry(`tag-${i}`, '', 'appearance', 11 - i));
+    const original = [...entries];
+    entries.push(entry('standing', '', 'pose'));
+    const result = suggest(entries, '　 ', { category: 'appearance', showCategoryOnEmpty: true, limit: 2 });
+    expect(result.map((s) => s.entry.tag)).toEqual(original.reverse().map((e) => e.tag));
+    expect(result).toHaveLength(12);
+    expect(entries[0]?.tag).toBe('tag-0');
+  });
+  it('空欄でもカテゴリが未指定または登録がなければ候補を返さない', () => {
+    expect(tags('', { showCategoryOnEmpty: true })).toEqual([]);
+    expect(tags('', { category: 'weather', showCategoryOnEmpty: true })).toEqual([]);
+  });
+  it('カテゴリ全件表示が有効でも、入力後は既存の検索と件数制限を使う', () => {
+    expect(tags('bl', { category: 'appearance', showCategoryOnEmpty: true }))
+      .toEqual(tags('bl', { category: 'appearance' }));
+    expect(tags('bl', { category: 'appearance', showCategoryOnEmpty: true, limit: 1 })).toHaveLength(1);
+  });
   it('件数を制限する', () => {
     expect(tags('b', { limit: 1 })).toHaveLength(1);
   });

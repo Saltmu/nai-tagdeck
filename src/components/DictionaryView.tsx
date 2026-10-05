@@ -7,7 +7,6 @@ import { formatWeight, isNeutralWeight } from '../lib/prompt';
 import { matchesFilter } from '../lib/suggest';
 import { dateStamp, downloadText } from '../lib/browser';
 import { newId } from '../lib/id';
-import { sampleDictionary } from '../lib/sampleDictionary';
 import { EntryForm } from './EntryForm';
 import { ImportPanel } from './ImportPanel';
 
@@ -24,11 +23,12 @@ function blankEntry(category: CategoryKey): DictEntry {
 }
 
 export function DictionaryView({ dictionary, notify }: Props) {
-  const { entries, loaded, save, remove, importEntries } = dictionary;
+  const { entries, loaded, save, remove, importEntries, restoreInitial } = dictionary;
   const [query, setQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<CategoryKey | 'all'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ImportResult } | null>(null);
+  const [restoring, setRestoring] = useState(false);
 
   const filtered = useMemo(
     () =>
@@ -80,6 +80,18 @@ export function DictionaryView({ dictionary, notify }: Props) {
     else downloadText(name, '﻿' + toCSV(entries), 'text/csv');
   };
 
+  const handleRestore = async () => {
+    setRestoring(true);
+    try {
+      const total = await restoreInitial();
+      notify(`初期カテゴリを復元しました（辞書は ${total}件）`);
+    } catch (e) {
+      notify(`初期カテゴリを復元できませんでした: ${String(e)}`);
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   return (
     <div className="dictionary">
       <section className="card dict-toolbar" aria-label="辞書の操作">
@@ -110,6 +122,9 @@ export function DictionaryView({ dictionary, notify }: Props) {
             ＋ 新規登録
           </button>
           <span className="spacer" />
+          <button type="button" className="btn" disabled={!loaded || restoring || !!dictionary.error} onClick={handleRestore}>
+            {restoring ? '復元中…' : '初期カテゴリを復元'}
+          </button>
           <button type="button" className="btn" disabled={entries.length === 0} onClick={() => exportAs('json')}>
             JSON書き出し
           </button>
@@ -126,6 +141,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
             />
           </label>
         </div>
+        <p className="hint">初期カテゴリのタグを補います。同名タグは既存のカテゴリ・日本語名・重み・並び順を保持します。</p>
       </section>
 
       {pendingImport && (
@@ -155,12 +171,10 @@ export function DictionaryView({ dictionary, notify }: Props) {
           <button
             type="button"
             className="btn"
-            onClick={async () => {
-              const total = await importEntries(sampleDictionary(), 'merge');
-              notify(`サンプルを読み込みました（${total}件）`);
-            }}
+            disabled={restoring || !!dictionary.error}
+            onClick={handleRestore}
           >
-            サンプル辞書を読み込む
+            初期タグを読み込む
           </button>
         </section>
       ) : (

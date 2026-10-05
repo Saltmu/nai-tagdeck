@@ -22,6 +22,14 @@ const e = (id: string, tag: string, extra: Partial<DictEntry> = {}): DictEntry =
 });
 
 describe('JSON', () => {
+  it('背景・場所と時間・天候をJSON/CSVで読み戻せる', () => {
+    const entries = [e('bg', 'forest', { category: 'background' }), e('time', 'night', { category: 'weather' })];
+    expect(fromJSON(toJSON(entries))).toEqual({ entries, errors: [] });
+    expect(fromCSV(toCSV(entries))).toEqual({ entries, errors: [] });
+    expect(fromCSV('category,tag\n背景・場所,forest\n時間・天候,night\n').entries.map((entry) => entry.category))
+      .toEqual(['background', 'weather']);
+  });
+
   it('書き出した内容を読み戻せる', () => {
     const entries = [e('1', 'masterpiece', { alias: '傑作' }), e('2', 'solo', { category: 'subject' })];
     expect(fromJSON(toJSON(entries))).toEqual({ entries, errors: [] });

@@ -42,15 +42,23 @@ export interface SuggestOptions {
   limit?: number;
   /** このカテゴリのエントリを先に並べる。 */
   category?: CategoryKey;
+  /** 空欄では指定カテゴリの全登録タグを件数制限なしで返す。 */
+  showCategoryOnEmpty?: boolean;
 }
 
 export function suggest(
   entries: readonly DictEntry[],
   query: string,
-  { limit = 8, category }: SuggestOptions = {},
+  { limit = 8, category, showCategoryOnEmpty = false }: SuggestOptions = {},
 ): Suggestion[] {
   const q = normalize(query);
-  if (!q) return [];
+  if (!q) {
+    if (!showCategoryOnEmpty || !category) return [];
+    return entries
+      .filter((entry) => entry.category === category)
+      .sort((a, b) => a.sort_order - b.sort_order || a.tag.localeCompare(b.tag))
+      .map((entry) => ({ entry, matchedBy: 'tag' }));
+  }
 
   const hits: Suggestion[] = [];
   for (const entry of entries) {
