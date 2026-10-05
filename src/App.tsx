@@ -3,6 +3,7 @@ import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
 import { SettingsView } from './components/SettingsView';
 import { GeneratePanel } from './components/GeneratePanel';
+import { PromptPreview } from './components/PromptPreview';
 import { Gallery } from './components/Gallery';
 import { QuickGenerate } from './components/QuickGenerate';
 import { LatestPreview } from './components/LatestPreview';
@@ -209,11 +210,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               workspace={workspace}
               dispatch={dispatch}
               loaded={loaded}
-              basePrompt={basePrompt}
-              characterPrompts={characterPrompts}
               dictionary={dictionary}
               syntax={settings.weightSyntax}
-              onSyntaxChange={(weightSyntax) => updateSettings({ weightSyntax })}
               onCopy={copy}
               notify={show}
               presets={presets}
@@ -231,6 +229,13 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onOpenSettings={() => setTab('settings')}
               blocker={blocker}
               onGenerate={startGenerate}
+            />
+            <PromptPreview
+              basePrompt={basePrompt}
+              characterPrompts={characterPrompts}
+              syntax={settings.weightSyntax}
+              onSyntaxChange={(weightSyntax) => updateSettings({ weightSyntax })}
+              onCopy={copy}
             />
             <Gallery
               images={imageStore.images}

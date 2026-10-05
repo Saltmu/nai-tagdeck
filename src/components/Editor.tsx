@@ -2,7 +2,6 @@ import { useCallback, useMemo, type Dispatch } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import { BASE, MAX_CHARACTERS, MAX_ENABLED_CHARACTERS, type WorkspaceAction } from '../lib/workspace';
-import type { CharacterPrompt } from '../lib/prompt';
 import { CATEGORY_KEYS } from '../lib/categories';
 import { normalize } from '../lib/suggest';
 import { newId } from '../lib/id';
@@ -15,11 +14,8 @@ interface Props {
   workspace: Workspace;
   dispatch: Dispatch<WorkspaceAction>;
   loaded: boolean;
-  basePrompt: string;
-  characterPrompts: CharacterPrompt[];
   dictionary: Dictionary;
   syntax: WeightSyntax;
-  onSyntaxChange: (syntax: WeightSyntax) => void;
   onCopy: (text: string, label: string) => void;
   notify: (message: string) => void;
   presets: PresetStore;
@@ -29,11 +25,8 @@ export function Editor({
   workspace,
   dispatch,
   loaded,
-  basePrompt,
-  characterPrompts,
   dictionary,
   syntax,
-  onSyntaxChange,
   onCopy,
   notify,
   presets,
@@ -67,47 +60,6 @@ export function Editor({
   return (
     <div className="editor" aria-busy={!loaded}>
       <PresetBar store={presets} workspace={workspace} dispatch={dispatch} notify={notify} />
-
-      <section className="card preview" aria-labelledby="preview-heading">
-        <div className="card-head">
-          <h2 id="preview-heading" className="card-title">
-            プロンプト
-          </h2>
-          <label className="inline-field">
-            <span>強調の記法</span>
-            <select value={syntax} onChange={(e) => onSyntaxChange(e.target.value as WeightSyntax)}>
-              <option value="numeric">1.2::tag::</option>
-              <option value="brace">{'{tag} / [tag]'}</option>
-            </select>
-          </label>
-        </div>
-        <dl className="preview-list">
-          <div className="preview-item">
-            <dt>ベース</dt>
-            <dd>
-              <output className={`preview-text${basePrompt ? '' : ' is-empty'}`}>
-                {basePrompt || 'ONのタグがありません'}
-              </output>
-            </dd>
-          </div>
-          {characterPrompts.map((c) => (
-            <div className="preview-item" key={c.id}>
-              <dt>
-                {c.name}
-                <button type="button" className="btn btn-small" onClick={() => onCopy(c.prompt, c.name)}>
-                  コピー
-                </button>
-              </dt>
-              <dd>
-                <output className="preview-text">{c.prompt}</output>
-              </dd>
-            </div>
-          ))}
-        </dl>
-        {syntax === 'brace' && (
-          <p className="hint">マイナスや 0 の重みは括弧で表せないため、そのタグだけ数値の記法で出力します。</p>
-        )}
-      </section>
 
       <h2 className="section-title">ベース</h2>
       <div className="category-grid">

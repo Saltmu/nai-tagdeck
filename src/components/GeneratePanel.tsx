@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import type { Settings } from '../types';
 import type { CharacterPrompt } from '../lib/prompt';
 import type { Generator } from '../hooks/useGenerator';
@@ -17,7 +17,6 @@ import {
 } from '../lib/generation';
 import { FREE_LIMITS } from '../lib/novelai';
 import { NumberField } from './NumberField';
-import { usePanelOpen } from '../hooks/usePanelOpen';
 
 interface Props {
   generation: GenerationSettings;
@@ -46,20 +45,19 @@ export function GeneratePanel({
   onGenerate,
 }: Props) {
   const id = useId();
-  const [open, toggleOpen] = usePanelOpen('generate');
+  const [open, setOpen] = useState(false);
   const { generating, error } = generator;
 
   return (
     <section className={`card generate${open ? '' : ' is-collapsed'}`} aria-labelledby={`${id}-title`}>
       <div className="card-head">
         <h2 id={`${id}-title`} className="card-title">
-          <span className="generate-title-text">生成</span>
           <button
             type="button"
             className="disclosure generate-disclosure"
             aria-expanded={open}
             aria-controls={`${id}-body`}
-            onClick={toggleOpen}
+            onClick={() => setOpen((value) => !value)}
           >
             <span className="disclosure-icon" aria-hidden="true" />
             生成
@@ -71,7 +69,7 @@ export function GeneratePanel({
         </span>
       </div>
 
-      <div id={`${id}-body`} className="generate-body">
+      <div id={`${id}-body`} className="generate-body" hidden={!open}>
       {!token.token && (
         <p className="notice">
           NovelAI のトークンが未設定です。
