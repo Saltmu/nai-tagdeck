@@ -26,6 +26,9 @@ interface Props {
   characterPrompts: CharacterPrompt[];
   settings: Settings;
   onOpenSettings: () => void;
+  /** 生成できない理由（なければ null）。 */
+  blocker: string | null;
+  onGenerate: () => void;
 }
 
 export function GeneratePanel({
@@ -37,25 +40,11 @@ export function GeneratePanel({
   characterPrompts,
   settings,
   onOpenSettings,
+  blocker,
+  onGenerate,
 }: Props) {
   const id = useId();
   const { generating, error } = generator;
-  const blocker = !token.token
-    ? 'トークンが未設定です'
-    : !basePrompt
-      ? 'ベースに ON のタグがありません'
-      : null;
-
-  const generate = () => {
-    if (!token.token || !basePrompt) return;
-    void generator.generate({
-      token: token.token,
-      prompt: basePrompt,
-      negative: settings.negativePrompt,
-      characters: characterPrompts.map((c) => ({ prompt: c.prompt, negative: settings.characterNegativePrompt })),
-      settings: generation,
-    });
-  };
 
   return (
     <section className="card generate" aria-labelledby={`${id}-title`}>
@@ -183,7 +172,7 @@ export function GeneratePanel({
           className="btn btn-primary btn-large"
           disabled={generating || blocker !== null}
           title={blocker ?? undefined}
-          onClick={generate}
+          onClick={onGenerate}
         >
           {generating ? '生成中…' : '生成する'}
         </button>
