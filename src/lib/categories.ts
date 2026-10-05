@@ -1,5 +1,6 @@
 export const CATEGORIES = [
   { key: 'quality', label: '品質' },
+  { key: 'style', label: '画風' },
   { key: 'subject', label: '被写体・人数・関係性' },
   { key: 'appearance', label: '外見' },
   { key: 'outfit', label: '衣装' },
@@ -13,7 +14,7 @@ export type CategoryKey = (typeof CATEGORIES)[number]['key'];
 
 export const CATEGORY_KEYS: readonly CategoryKey[] = CATEGORIES.map((c) => c.key);
 
-/** キャラクタープロンプトで編集するカテゴリ（品質・エフェクト・構図はベース側で扱う）。 */
+/** キャラクタープロンプトで編集するカテゴリ（品質・画風・エフェクト・構図はベース側で扱う）。 */
 export const CHARACTER_CATEGORY_KEYS: readonly CategoryKey[] = [
   'subject',
   'appearance',

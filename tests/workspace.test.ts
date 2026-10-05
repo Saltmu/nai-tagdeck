@@ -132,6 +132,7 @@ describe('normalizeWorkspace', () => {
   it('キャラクター対応前の保存形式はベースとして読む', () => {
     const ws = normalizeWorkspace({ quality: [{ tag: 'masterpiece' }] });
     expect(ws.base.quality[0]!.tag).toBe('masterpiece');
+    expect(ws.base.style).toEqual([]); // 画風カテゴリ追加前のデータ
     expect(ws.characters).toEqual([]);
     expect(Object.keys(ws.base)).toEqual(Object.keys(emptyGroups()));
   });

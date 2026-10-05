@@ -52,6 +52,7 @@ JSON（書き出し形式）:
 | キー | 表示名 |
 | --- | --- |
 | `quality` | 品質 |
+| `style` | 画風 |
 | `subject` | 被写体・人数・関係性 |
 | `appearance` | 外見 |
 | `outfit` | 衣装 |

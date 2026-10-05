@@ -58,6 +58,9 @@ describe('buildPrompt', () => {
     groups.composition = [tag('upper body')];
     groups.quality = [tag('masterpiece'), tag('off', false)];
     expect(buildPrompt(groups, 'numeric')).toBe('masterpiece, upper body');
+    groups.style = [tag('watercolor (medium)')];
+    groups.subject = [tag('1girl')];
+    expect(buildPrompt(groups, 'numeric')).toBe('masterpiece, watercolor (medium), 1girl, upper body');
   });
   it('キャラクターは ON でタグがあるものだけ、キャラ用カテゴリの順に出す', () => {
     const c1 = newCharacter(0);
