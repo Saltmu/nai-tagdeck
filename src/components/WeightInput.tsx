@@ -36,7 +36,7 @@ export function WeightInput({ value, label, onChange, id }: Props) {
       id={id}
       type="number"
       inputMode="decimal"
-      className={`weight${isNeutralWeight(value) ? '' : ' is-weighted'}`}
+      className={`weight${value <= 0 ? ' is-negative' : isNeutralWeight(value) ? '' : ' is-weighted'}`}
       min={WEIGHT_MIN}
       max={WEIGHT_MAX}
       step={WEIGHT_STEP}

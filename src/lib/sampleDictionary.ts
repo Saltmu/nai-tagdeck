@@ -1,16 +1,24 @@
 import type { CategoryKey, DictEntry } from '../types';
 import { newId } from './id';
 
-// 動作確認用の最小限のサンプル。辞書が空のときだけ読み込みを提案する。
+// 動作確認用の最小限のサンプル（NovelAI Diffusion V5 向け）。辞書が空のときだけ読み込みを提案する。
 const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   ['quality', 'masterpiece', '傑作 けっさく'],
   ['quality', 'best quality', '最高品質 さいこうひんしつ'],
   ['quality', 'very aesthetic', '美的 びてき'],
-  ['quality', 'absurdres', '高解像度 こうかいぞうど'],
+  // V5 の複雑さタグ（high が既定。low は簡素、ultra は描き込みが多い）
+  ['quality', 'high complexity', '描き込み 複雑さ ふくざつさ'],
+  ['quality', 'low complexity', '簡素 シンプル かんそ'],
+  ['quality', 'ultra complexity', '高密度 こうみつど'],
+  ['quality', 'no text', '文字なし もじなし'],
   ['subject', '1girl', '女の子1人 おんなのこ ひとり'],
   ['subject', '1boy', '男の子1人 おとこのこ ひとり'],
   ['subject', 'solo', 'ソロ 一人 ひとり'],
   ['subject', '2girls', '女の子2人 おんなのこ ふたり'],
+  // キャラクタープロンプトでは人数を付けずに girl / boy / other と書く
+  ['subject', 'girl', '女の子 おんなのこ キャラ用'],
+  ['subject', 'boy', '男の子 おとこのこ キャラ用'],
+  ['subject', 'other', 'その他 そのた キャラ用'],
   ['appearance', 'long hair', 'ロングヘア 長髪 ちょうはつ'],
   ['appearance', 'short hair', 'ショートヘア 短髪 たんぱつ'],
   ['appearance', 'blonde hair', '金髪 きんぱつ'],
@@ -28,6 +36,10 @@ const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   ['pose', 'sitting', '座り すわり'],
   ['pose', 'arms up', '腕を上げる うであげ'],
   ['pose', 'looking at viewer', 'カメラ目線 めせん'],
+  // キャラ同士の動作: source#（する側）/ target#（される側）/ mutual#（お互い）
+  ['pose', 'mutual#holding hands', '手をつなぐ てをつなぐ'],
+  ['pose', 'source#hug', '抱きしめる側 だきしめる'],
+  ['pose', 'target#hug', '抱きしめられる側 だきしめられる'],
   ['effect', 'lens flare', 'レンズフレア'],
   ['effect', 'depth of field', '被写界深度 ひしゃかいしんど'],
   ['effect', 'sparkle', 'キラキラ'],

@@ -1,17 +1,20 @@
 import { useCallback, useMemo, type Dispatch } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
-import type { WorkspaceAction } from '../lib/workspace';
-import { CATEGORIES } from '../lib/categories';
+import { BASE, MAX_CHARACTERS, type WorkspaceAction } from '../lib/workspace';
+import type { CharacterPrompt } from '../lib/prompt';
+import { CATEGORY_KEYS } from '../lib/categories';
 import { normalize } from '../lib/suggest';
 import { newId } from '../lib/id';
 import { CategorySection } from './CategorySection';
+import { CharacterCard } from './CharacterCard';
 
 interface Props {
   workspace: Workspace;
   dispatch: Dispatch<WorkspaceAction>;
   loaded: boolean;
-  prompt: string;
+  basePrompt: string;
+  characterPrompts: CharacterPrompt[];
   dictionary: Dictionary;
   syntax: WeightSyntax;
   onSyntaxChange: (syntax: WeightSyntax) => void;
@@ -23,7 +26,8 @@ export function Editor({
   workspace,
   dispatch,
   loaded,
-  prompt,
+  basePrompt,
+  characterPrompts,
   dictionary,
   syntax,
   onSyntaxChange,
@@ -53,6 +57,8 @@ export function Editor({
     [save, notify],
   );
 
+  const { characters } = workspace;
+
   return (
     <div className="editor" aria-busy={!loaded}>
       <section className="card preview" aria-labelledby="preview-heading">
@@ -63,23 +69,47 @@ export function Editor({
           <label className="inline-field">
             <span>強調の記法</span>
             <select value={syntax} onChange={(e) => onSyntaxChange(e.target.value as WeightSyntax)}>
-              <option value="numeric">1.2::tag::（V4）</option>
+              <option value="numeric">1.2::tag::</option>
               <option value="brace">{'{tag} / [tag]'}</option>
             </select>
           </label>
         </div>
-        <output className={`preview-text${prompt ? '' : ' is-empty'}`}>
-          {prompt || 'ONのタグがありません'}
-        </output>
+        <dl className="preview-list">
+          <div className="preview-item">
+            <dt>ベース</dt>
+            <dd>
+              <output className={`preview-text${basePrompt ? '' : ' is-empty'}`}>
+                {basePrompt || 'ONのタグがありません'}
+              </output>
+            </dd>
+          </div>
+          {characterPrompts.map((c) => (
+            <div className="preview-item" key={c.id}>
+              <dt>
+                {c.name}
+                <button type="button" className="btn btn-small" onClick={() => onCopy(c.prompt, c.name)}>
+                  コピー
+                </button>
+              </dt>
+              <dd>
+                <output className="preview-text">{c.prompt}</output>
+              </dd>
+            </div>
+          ))}
+        </dl>
+        {syntax === 'brace' && (
+          <p className="hint">マイナスや 0 の重みは括弧で表せないため、そのタグだけ数値の記法で出力します。</p>
+        )}
       </section>
 
+      <h2 className="section-title">ベース</h2>
       <div className="category-grid">
-        {CATEGORIES.map((c) => (
+        {CATEGORY_KEYS.map((key) => (
           <CategorySection
-            key={c.key}
-            category={c.key}
-            label={c.label}
-            tags={workspace[c.key]}
+            key={key}
+            target={BASE}
+            category={key}
+            tags={workspace.base[key]}
             dispatch={dispatch}
             entries={dictionary.entries}
             syntax={syntax}
@@ -89,6 +119,44 @@ export function Editor({
           />
         ))}
       </div>
+
+      <div className="section-head">
+        <h2 className="section-title">
+          キャラクター
+          <span className="count">
+            {characters.length}/{MAX_CHARACTERS}
+          </span>
+        </h2>
+        <button
+          type="button"
+          className="btn"
+          disabled={characters.length >= MAX_CHARACTERS}
+          onClick={() => dispatch({ type: 'addCharacter' })}
+        >
+          ＋ キャラクターを追加
+        </button>
+      </div>
+      {characters.length === 0 ? (
+        <p className="hint">
+          複数のキャラクターを描くときは、キャラクターごとにタグを分けて登録します（V4 以降のキャラクタープロンプト）。
+          人数は付けずに girl / boy / other と書き、キャラ同士の動作は source# / target# / mutual# を付けます。
+        </p>
+      ) : (
+        characters.map((c, i) => (
+          <CharacterCard
+            key={c.id}
+            character={c}
+            index={i}
+            count={characters.length}
+            dispatch={dispatch}
+            entries={dictionary.entries}
+            syntax={syntax}
+            isKnown={isKnown}
+            onCopy={onCopy}
+            onRegister={register}
+          />
+        ))
+      )}
     </div>
   );
 }

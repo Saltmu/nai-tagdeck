@@ -13,6 +13,15 @@ export type CategoryKey = (typeof CATEGORIES)[number]['key'];
 
 export const CATEGORY_KEYS: readonly CategoryKey[] = CATEGORIES.map((c) => c.key);
 
+/** キャラクタープロンプトで編集するカテゴリ（品質・エフェクト・構図はベース側で扱う）。 */
+export const CHARACTER_CATEGORY_KEYS: readonly CategoryKey[] = [
+  'subject',
+  'appearance',
+  'outfit',
+  'dress_state',
+  'pose',
+];
+
 export function isCategoryKey(value: unknown): value is CategoryKey {
   return typeof value === 'string' && (CATEGORY_KEYS as readonly string[]).includes(value);
 }

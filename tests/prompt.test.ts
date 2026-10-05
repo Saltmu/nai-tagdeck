@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildCategoryPrompt,
+  buildCharacterPrompts,
   buildPrompt,
   clampWeight,
   formatTag,
   parseTagList,
 } from '../src/lib/prompt';
-import { emptyWorkspace } from '../src/lib/workspace';
+import { emptyGroups, newCharacter } from '../src/lib/workspace';
 import type { WorkTag } from '../src/types';
 
 const tag = (t: string, enabled = true, weight = 1): WorkTag => ({ id: t, tag: t, enabled, weight });
@@ -26,6 +27,11 @@ describe('formatTag', () => {
     expect(formatTag('a', 0.95, 'brace')).toBe('[a]');
     expect(formatTag('a', 1.01, 'brace')).toBe('a');
   });
+  it('マイナスと 0 は brace 指定でも数値の記法で出す', () => {
+    expect(formatTag('hat', -1, 'numeric')).toBe('-1::hat::');
+    expect(formatTag('hat', -1, 'brace')).toBe('-1::hat::');
+    expect(formatTag('hat', 0, 'brace')).toBe('0::hat::');
+  });
   it('空白だけのタグは出力しない', () => {
     expect(formatTag('  ', 1.2, 'numeric')).toBe('');
   });
@@ -33,7 +39,8 @@ describe('formatTag', () => {
 
 describe('clampWeight', () => {
   it('範囲外と非数を丸める', () => {
-    expect(clampWeight(0)).toBe(0.1);
+    expect(clampWeight(0)).toBe(0);
+    expect(clampWeight(-10)).toBe(-3);
     expect(clampWeight(10)).toBe(3);
     expect(clampWeight(Number.NaN)).toBe(1);
     expect(clampWeight(1.234)).toBe(1.23);
@@ -47,10 +54,23 @@ describe('buildPrompt', () => {
     );
   });
   it('カテゴリ順に連結し、空カテゴリは飛ばす', () => {
-    const ws = emptyWorkspace();
-    ws.composition = [tag('upper body')];
-    ws.quality = [tag('masterpiece'), tag('off', false)];
-    expect(buildPrompt(ws, 'numeric')).toBe('masterpiece, upper body');
+    const groups = emptyGroups();
+    groups.composition = [tag('upper body')];
+    groups.quality = [tag('masterpiece'), tag('off', false)];
+    expect(buildPrompt(groups, 'numeric')).toBe('masterpiece, upper body');
+  });
+  it('キャラクターは ON でタグがあるものだけ、キャラ用カテゴリの順に出す', () => {
+    const c1 = newCharacter(0);
+    c1.tags.appearance = [tag('red hair')];
+    c1.tags.subject = [tag('girl')];
+    c1.tags.quality = [tag('ignored')]; // キャラ用カテゴリではないので出さない
+    const c2 = { ...newCharacter(1), enabled: false };
+    c2.tags.subject = [tag('boy')];
+    const c3 = newCharacter(2);
+    c3.tags.subject = [tag('other', false)];
+    expect(buildCharacterPrompts([c1, c2, c3], 'numeric')).toEqual([
+      { id: c1.id, name: 'キャラ1', prompt: 'girl, red hair' },
+    ]);
   });
 });
 
@@ -76,6 +96,13 @@ describe('parseTagList', () => {
       { tag: 'c', weight: 1.05 },
       { tag: 'd', weight: 1.05 },
       { tag: 'e', weight: 1 },
+    ]);
+  });
+  it('マイナスの重みを読む', () => {
+    expect(parseTagList('-1::hat::, -0.5::blur, noise::')).toEqual([
+      { tag: 'hat', weight: -1 },
+      { tag: 'blur', weight: -0.5 },
+      { tag: 'noise', weight: -0.5 },
     ]);
   });
   it('出力した記法を読み戻せる', () => {

@@ -4,7 +4,7 @@ import { DictionaryView } from './components/DictionaryView';
 import { useDictionary } from './hooks/useDictionary';
 import { useSettings, useWorkspace } from './hooks/useWorkspace';
 import { useToast } from './hooks/useToast';
-import { buildPrompt } from './lib/prompt';
+import { buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { copyText } from './lib/browser';
 
 type Tab = 'editor' | 'dictionary';
@@ -21,9 +21,13 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('editor');
   const { message, show } = useToast();
 
-  const fullPrompt = useMemo(
-    () => buildPrompt(workspace, settings.weightSyntax),
-    [workspace, settings.weightSyntax],
+  const basePrompt = useMemo(
+    () => buildPrompt(workspace.base, settings.weightSyntax),
+    [workspace.base, settings.weightSyntax],
+  );
+  const characterPrompts = useMemo(
+    () => buildCharacterPrompts(workspace.characters, settings.weightSyntax),
+    [workspace.characters, settings.weightSyntax],
   );
 
   const copy = useCallback(
@@ -55,13 +59,14 @@ export default function App() {
             </button>
           ))}
         </nav>
+        {/* キャラクタープロンプトは公式UIでも別の欄なので、ここではベースだけをコピーする */}
         <button
           type="button"
           className="btn btn-primary"
-          disabled={!fullPrompt}
-          onClick={() => copy(fullPrompt, 'プロンプト全体')}
+          disabled={!basePrompt}
+          onClick={() => copy(basePrompt, characterPrompts.length ? 'ベース' : 'プロンプト全体')}
         >
-          全体コピー
+          {characterPrompts.length ? 'ベースをコピー' : '全体コピー'}
         </button>
       </header>
 
@@ -77,7 +82,8 @@ export default function App() {
             workspace={workspace}
             dispatch={dispatch}
             loaded={loaded}
-            prompt={fullPrompt}
+            basePrompt={basePrompt}
+            characterPrompts={characterPrompts}
             dictionary={dictionary}
             syntax={settings.weightSyntax}
             onSyntaxChange={(weightSyntax) => updateSettings({ weightSyntax })}

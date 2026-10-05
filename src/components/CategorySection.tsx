@@ -1,13 +1,16 @@
 import { memo, useId, useState, type Dispatch } from 'react';
-import type { CategoryKey, DictEntry, WeightSyntax, WorkTag } from '../types';
+import type { CategoryKey, DictEntry, TargetId, WeightSyntax, WorkTag } from '../types';
 import type { WorkspaceAction } from '../lib/workspace';
+import { categoryLabel } from '../lib/categories';
 import { buildCategoryPrompt } from '../lib/prompt';
 import { TagRow } from './TagRow';
 import { TagInput } from './TagInput';
 
 interface Props {
+  target: TargetId;
+  /** コピー時のトーストや入力欄のラベルに使う（例: 「キャラ1 / 外見」）。 */
+  scopeLabel?: string;
   category: CategoryKey;
-  label: string;
   tags: WorkTag[];
   dispatch: Dispatch<WorkspaceAction>;
   entries: DictEntry[];
@@ -18,8 +21,9 @@ interface Props {
 }
 
 export const CategorySection = memo(function CategorySection({
+  target,
+  scopeLabel,
   category,
-  label,
   tags,
   dispatch,
   entries,
@@ -30,6 +34,8 @@ export const CategorySection = memo(function CategorySection({
 }: Props) {
   const [open, setOpen] = useState(true);
   const bodyId = useId();
+  const label = categoryLabel(category);
+  const fullLabel = scopeLabel ? `${scopeLabel} / ${label}` : label;
   const enabledCount = tags.filter((t) => t.enabled).length;
   const allOn = tags.length > 0 && enabledCount === tags.length;
   const text = buildCategoryPrompt(tags, syntax);
@@ -37,7 +43,7 @@ export const CategorySection = memo(function CategorySection({
   return (
     <section className="card category">
       <div className="card-head">
-        <h2 className="card-title">
+        <h3 className="card-title">
           <button
             type="button"
             className="disclosure"
@@ -51,13 +57,13 @@ export const CategorySection = memo(function CategorySection({
               {enabledCount}/{tags.length}
             </span>
           </button>
-        </h2>
+        </h3>
         <div className="head-actions">
           <button
             type="button"
             className="btn btn-small"
             disabled={tags.length === 0}
-            onClick={() => dispatch({ type: 'setAll', category, enabled: !allOn })}
+            onClick={() => dispatch({ type: 'setAll', target, category, enabled: !allOn })}
           >
             {allOn ? '全OFF' : '全ON'}
           </button>
@@ -65,7 +71,7 @@ export const CategorySection = memo(function CategorySection({
             type="button"
             className="btn btn-small"
             disabled={!text}
-            onClick={() => onCopy(text, label)}
+            onClick={() => onCopy(text, fullLabel)}
           >
             コピー
           </button>
@@ -79,19 +85,19 @@ export const CategorySection = memo(function CategorySection({
               <TagRow
                 key={t.id}
                 tag={t}
-                category={category}
-                dispatch={dispatch}
-                known={isKnown(t.tag)}
-                onRegister={onRegister}
+                onToggle={() => dispatch({ type: 'toggle', target, category, id: t.id })}
+                onWeight={(weight) => dispatch({ type: 'setWeight', target, category, id: t.id, weight })}
+                onRemove={() => dispatch({ type: 'remove', target, category, id: t.id })}
+                onRegister={isKnown(t.tag) ? undefined : () => onRegister(t, category)}
               />
             ))}
           </ul>
         )}
         <TagInput
           category={category}
-          label={label}
+          label={fullLabel}
           entries={entries}
-          onAdd={(tag, weight) => dispatch({ type: 'add', category, tag, weight })}
+          onAdd={(tag, weight) => dispatch({ type: 'add', target, category, tag, weight })}
         />
       </div>
     </section>

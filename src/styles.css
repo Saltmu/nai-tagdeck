@@ -176,9 +176,9 @@ input[type='checkbox'] {
   touch-action: manipulation;
 }
 
-.icon-btn:hover {
+.icon-btn:hover:not(:disabled) {
   background: var(--surface-2);
-  color: var(--danger);
+  color: var(--text);
 }
 
 /* ---- layout ---- */
@@ -404,8 +404,119 @@ input[type='checkbox'] {
   font-weight: 600;
 }
 
+.weight.is-negative {
+  border-color: var(--danger);
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .tag-row.is-off .weight {
   opacity: 0.55;
+}
+
+/* ---- sections / characters ---- */
+.section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0;
+  font-size: 1.05rem;
+}
+
+.section-title + .category-grid {
+  margin-top: 0.5rem;
+}
+
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.section-head .section-title {
+  margin: 0;
+}
+
+.hint {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.character {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.character.is-off {
+  border-left-color: var(--border);
+}
+
+.character.is-off .category-grid {
+  opacity: 0.55;
+}
+
+.character-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.character-name {
+  flex: 1 1 8rem;
+  font-weight: 700;
+}
+
+.character .category-grid {
+  margin-top: 0.6rem;
+}
+
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.icon-btn-danger:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.character .icon-btn:hover:not(:disabled) {
+  background: var(--surface);
+}
+
+/* ---- preview list ---- */
+.preview-list {
+  margin: 0;
+}
+
+.preview-item + .preview-item {
+  margin-top: 0.6rem;
+}
+
+.preview-item dt {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.preview-item dd {
+  margin: 0;
+}
+
+.preview-item .preview-text {
+  margin-top: 0.3rem;
 }
 
 /* ---- tag input / suggestions ---- */

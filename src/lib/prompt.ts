@@ -1,7 +1,8 @@
-import type { WeightSyntax, WorkTag, Workspace } from '../types';
-import { CATEGORY_KEYS } from './categories';
+import type { CategoryKey, Character, TagGroups, WeightSyntax, WorkTag } from '../types';
+import { CATEGORY_KEYS, CHARACTER_CATEGORY_KEYS } from './categories';
 
-export const WEIGHT_MIN = 0.1;
+/** マイナスは V4.5 以降の「取り除く」指定（例: `-1::hat::`）。 */
+export const WEIGHT_MIN = -3;
 export const WEIGHT_MAX = 3;
 export const WEIGHT_STEP = 0.05;
 const BRACE_RATIO = 1.05;
@@ -25,7 +26,8 @@ export function formatTag(tag: string, weight: number, syntax: WeightSyntax): st
   if (!t) return '';
   const w = clampWeight(weight);
   if (isNeutralWeight(w)) return t;
-  if (syntax === 'numeric') return `${formatWeight(w)}::${t}::`;
+  // 0 以下は括弧で表せないので、brace 指定でも数値の記法で出す
+  if (syntax === 'numeric' || w <= 0) return `${formatWeight(w)}::${t}::`;
   const n = Math.round(Math.log(w) / Math.log(BRACE_RATIO));
   if (n === 0) return t;
   const [open, close] = n > 0 ? ['{', '}'] : ['[', ']'];
@@ -41,10 +43,35 @@ export function buildCategoryPrompt(tags: readonly WorkTag[], syntax: WeightSynt
     .join(', ');
 }
 
-export function buildPrompt(workspace: Workspace, syntax: WeightSyntax): string {
-  return CATEGORY_KEYS.map((key) => buildCategoryPrompt(workspace[key] ?? [], syntax))
+/** ベースでもキャラクターでも、カテゴリ順に連結する。 */
+export function buildPrompt(
+  groups: TagGroups,
+  syntax: WeightSyntax,
+  keys: readonly CategoryKey[] = CATEGORY_KEYS,
+): string {
+  return keys
+    .map((key) => buildCategoryPrompt(groups[key] ?? [], syntax))
     .filter(Boolean)
     .join(', ');
+}
+
+export interface CharacterPrompt {
+  id: string;
+  name: string;
+  prompt: string;
+}
+
+/** ON のキャラクターのうち、出力するタグがあるものだけを返す。 */
+export function buildCharacterPrompts(
+  characters: readonly Character[],
+  syntax: WeightSyntax,
+  keys: readonly CategoryKey[] = CHARACTER_CATEGORY_KEYS,
+): CharacterPrompt[] {
+  return characters.flatMap((c) => {
+    if (!c.enabled) return [];
+    const prompt = buildPrompt(c.tags, syntax, keys);
+    return prompt ? [{ id: c.id, name: c.name, prompt }] : [];
+  });
 }
 
 export interface ParsedTag {

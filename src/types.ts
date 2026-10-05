@@ -19,12 +19,30 @@ export interface WorkTag {
   id: string;
   tag: string;
   enabled: boolean;
+  /** -3〜3。マイナスは V4.5 以降の「取り除く」指定。 */
   weight: number;
 }
 
-export type Workspace = Record<CategoryKey, WorkTag[]>;
+export type TagGroups = Record<CategoryKey, WorkTag[]>;
 
-/** numeric: V4 の `1.2::tag::`、brace: `{tag}` / `[tag]`（1段 = 1.05 倍）。 */
+/** V4 以降のキャラクタープロンプト（char_captions の1件）。 */
+export interface Character {
+  id: string;
+  /** 画面上の呼び名。プロンプトには出力しない。 */
+  name: string;
+  enabled: boolean;
+  tags: TagGroups;
+}
+
+export interface Workspace {
+  base: TagGroups;
+  characters: Character[];
+}
+
+/** 'base' かキャラクターの id。 */
+export type TargetId = string;
+
+/** numeric: V4 以降の `1.2::tag::`、brace: `{tag}` / `[tag]`（1段 = 1.05 倍）。 */
 export type WeightSyntax = 'numeric' | 'brace';
 
 export interface Settings {
