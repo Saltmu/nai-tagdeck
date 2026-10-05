@@ -2,16 +2,23 @@ import { useCallback, useMemo, useState } from 'react';
 import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
 import { SettingsView } from './components/SettingsView';
+import { GeneratePanel } from './components/GeneratePanel';
+import { Gallery } from './components/Gallery';
 import { useDictionary } from './hooks/useDictionary';
-import { useSettings, useWorkspace } from './hooks/useWorkspace';
+import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWorkspace';
 import { useToast } from './hooks/useToast';
+import { useToken } from './hooks/useToken';
+import { useImages } from './hooks/useImages';
+import { useGenerator } from './hooks/useGenerator';
 import { buildCharacterPrompts, buildPrompt } from './lib/prompt';
+import { sizeOf } from './lib/generation';
 import { copyText } from './lib/browser';
 
-type Tab = 'editor' | 'dictionary' | 'settings';
+type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
 
 const TABS: Array<{ key: Tab; label: string }> = [
   { key: 'editor', label: '編集' },
+  { key: 'generate', label: '生成' },
   { key: 'dictionary', label: '辞書' },
   { key: 'settings', label: '設定' },
 ];
@@ -20,6 +27,10 @@ export default function App() {
   const dictionary = useDictionary();
   const { workspace, dispatch, loaded } = useWorkspace();
   const [settings, updateSettings] = useSettings();
+  const [generation, updateGeneration] = useGenerationSettings();
+  const token = useToken();
+  const imageStore = useImages();
+  const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
   const { message, show } = useToast();
 
@@ -43,6 +54,16 @@ export default function App() {
     [show],
   );
 
+  const applySeed = useCallback(
+    (seed: number) => {
+      updateGeneration({ seed });
+      show(`シード ${seed} を次の生成に使います`);
+    },
+    [updateGeneration, show],
+  );
+
+  const showWorkbench = tab === 'editor' || tab === 'generate';
+
   return (
     <div className="app">
       <header className="app-header">
@@ -52,11 +73,17 @@ export default function App() {
             <button
               key={t.key}
               type="button"
-              className="tab"
+              className={`tab tab-${t.key}`}
               aria-current={tab === t.key ? 'page' : undefined}
               onClick={() => setTab(t.key)}
             >
               {t.label}
+              {t.key === 'generate' &&
+                (generator.generating ? (
+                  <span className="spinner spinner-small" aria-label="生成中" />
+                ) : (
+                  imageStore.images.length > 0 && <span className="tab-count">{imageStore.images.length}</span>
+                ))}
               {t.key === 'dictionary' && <span className="tab-count">{dictionary.entries.length}</span>}
             </button>
           ))}
@@ -79,23 +106,46 @@ export default function App() {
       )}
 
       <main className="app-main">
-        {tab === 'editor' ? (
-          <Editor
-            workspace={workspace}
-            dispatch={dispatch}
-            loaded={loaded}
-            basePrompt={basePrompt}
-            characterPrompts={characterPrompts}
-            dictionary={dictionary}
-            syntax={settings.weightSyntax}
-            onSyntaxChange={(weightSyntax) => updateSettings({ weightSyntax })}
-            onCopy={copy}
-            notify={show}
-          />
-        ) : tab === 'dictionary' ? (
-          <DictionaryView dictionary={dictionary} notify={show} />
-        ) : (
-          <SettingsView settings={settings} onChange={updateSettings} />
+        {/* 編集と生成は、広い画面では左右に並べ、狭い画面ではタブで切り替える（どちらも表示したまま CSS で隠す） */}
+        <div className="workbench" data-tab={tab} hidden={!showWorkbench}>
+          <div className="pane pane-editor">
+            <Editor
+              workspace={workspace}
+              dispatch={dispatch}
+              loaded={loaded}
+              basePrompt={basePrompt}
+              characterPrompts={characterPrompts}
+              dictionary={dictionary}
+              syntax={settings.weightSyntax}
+              onSyntaxChange={(weightSyntax) => updateSettings({ weightSyntax })}
+              onCopy={copy}
+              notify={show}
+            />
+          </div>
+          <div className="pane pane-generate">
+            <GeneratePanel
+              generation={generation}
+              onGenerationChange={updateGeneration}
+              generator={generator}
+              token={token}
+              basePrompt={basePrompt}
+              characterPrompts={characterPrompts}
+              settings={settings}
+              onOpenSettings={() => setTab('settings')}
+            />
+            <Gallery
+              images={imageStore.images}
+              generating={generator.generating}
+              pendingSize={sizeOf(generation.size)}
+              onRemove={imageStore.remove}
+              onClear={imageStore.clear}
+              onUseSeed={applySeed}
+            />
+          </div>
+        </div>
+        {tab === 'dictionary' && <DictionaryView dictionary={dictionary} notify={show} />}
+        {tab === 'settings' && (
+          <SettingsView settings={settings} onChange={updateSettings} token={token} notify={show} />
         )}
       </main>
 

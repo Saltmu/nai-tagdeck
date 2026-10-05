@@ -27,7 +27,7 @@ V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在し�
 ### 公式 Web UI が実際に送っている内容（2026-10-05 取得）
 
 - **送り方**: `multipart/form-data` の `request` パート（`filename="blob"`、`Content-Type: application/json`）に JSON を入れている。
-  OpenAPI 仕様は JSON 本体なので、まず JSON 本体で送り、だめなら同じ形の multipart に切り替える。
+  このツールも同じく multipart で送る（`requestImages()`）。OpenAPI 仕様は JSON 本体だが、公式UIと同じ送り方を優先した。
 - **品質タグと UC プリセットはクライアント側で展開済み**:
   - `qualityPresetId: "light"` → `input` の末尾に `very aesthetic, amazing quality, no text` が付いている。
   - `ucPresetId: "heavy"` → `negative_prompt` の先頭に heavy の文面（`DEFAULT_NEGATIVE`）が入り、その後ろにユーザーが追加した語が続く。
@@ -60,7 +60,6 @@ V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在し�
 
 ## まだ確認が必要なこと（フェーズ2で実際に生成して確かめる）
 
-- JSON 本体で受け付けるか（だめなら multipart の `request` パートで送る）
-- `Accept: application/json` で base64 の JSON が返るか（返らなければ ZIP を展開する）
+- 応答の形式（ZIP・JSON・画像そのもののどれでも読めるようにしてある。`extractImages()`）
 - `tag_hint_qt` / `tag_hint_uc_preset` を送らないと結果が変わるか（同じシードで公式UIと比べる）
 - `use_new_shared_trial` の意味

@@ -1,10 +1,14 @@
 import { useId } from 'react';
 import type { Settings } from '../types';
+import type { TokenState } from '../hooks/useToken';
 import { DEFAULT_SETTINGS } from '../lib/settings';
+import { TokenSettings } from './TokenSettings';
 
 interface Props {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
+  token: TokenState;
+  notify: (message: string) => void;
 }
 
 type TextKey = 'negativePrompt' | 'characterNegativePrompt';
@@ -22,10 +26,11 @@ const FIELDS: Array<{ key: TextKey; label: string; help: string }> = [
   },
 ];
 
-export function SettingsView({ settings, onChange }: Props) {
+export function SettingsView({ settings, onChange, token, notify }: Props) {
   const id = useId();
   return (
     <div className="settings">
+      <TokenSettings token={token} notify={notify} />
       <section className="card" aria-labelledby={`${id}-gen`}>
         <h2 id={`${id}-gen`} className="card-title">
           生成の設定

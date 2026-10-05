@@ -788,10 +788,6 @@ input[type='checkbox'] {
     padding: 1rem 1.25rem 2rem;
   }
 
-  .category-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .entry-form {
     grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 2fr) 6.5rem 6rem;
     align-items: end;
@@ -804,12 +800,6 @@ input[type='checkbox'] {
 
   .toast {
     bottom: 1.5rem;
-  }
-}
-
-@media (min-width: 1200px) {
-  .category-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -849,4 +839,345 @@ textarea {
 
 .settings {
   max-width: 860px;
+}
+
+/* ---- workbench: 編集と生成 ---- */
+.pane-editor {
+  container-type: inline-size;
+}
+
+@container (min-width: 620px) {
+  .category-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 980px) {
+  .category-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.workbench[data-tab='editor'] .pane-generate,
+.workbench[data-tab='generate'] .pane-editor {
+  display: none;
+}
+
+.pane-generate > * + * {
+  margin-top: 0.75rem;
+}
+
+@media (min-width: 1100px) {
+  .app-main {
+    max-width: 1680px;
+  }
+
+  .tab-generate {
+    display: none;
+  }
+
+  .workbench {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+    align-items: start;
+    gap: 1rem;
+  }
+
+  .workbench[data-tab] .pane-editor,
+  .workbench[data-tab] .pane-generate {
+    display: block;
+  }
+
+  .pane-generate {
+    position: sticky;
+    top: 4.25rem;
+    max-height: calc(100dvh - 5.25rem);
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* ---- generate panel ---- */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background: var(--accent-soft);
+}
+
+.gen-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+.seed-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.seed-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.gen-summary {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.gen-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.btn-large {
+  flex: 1;
+  min-height: 48px;
+  font-size: 1.05rem;
+}
+
+.gen-blocker {
+  text-align: center;
+}
+
+.gen-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  color: var(--danger);
+}
+
+.gen-error p {
+  flex: 1;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---- gallery ---- */
+.thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 40%), 1fr));
+  align-items: start;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.thumb {
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.thumb-btn {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb.is-pending {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--border);
+}
+
+.spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.spinner-small {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-width: 2px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- viewer ---- */
+.viewer {
+  width: min(1200px, 100vw - 1rem);
+  max-width: none;
+  max-height: calc(100dvh - 1rem);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.viewer::backdrop {
+  background: rgb(0 0 0 / 0.75);
+}
+
+.viewer-body {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 1rem);
+}
+
+.viewer-img {
+  display: block;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 65dvh;
+  margin: 0 auto;
+  object-fit: contain;
+  background: var(--surface-2);
+}
+
+.viewer-side {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  overflow: auto;
+}
+
+.viewer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.viewer-meta dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.viewer-meta dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-prompt summary {
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.viewer-prompt p {
+  margin: 0.4rem 0 0;
+  font-family: ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.viewer-actions,
+.viewer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (min-width: 900px) {
+  .viewer-body {
+    flex-direction: row;
+  }
+
+  .viewer-img {
+    flex: 1;
+    max-width: calc(100% - 320px);
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .viewer-side {
+    flex: 0 0 320px;
+    align-content: start;
+  }
+}
+
+/* ---- token ---- */
+.token-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+}
+
+.token-status code {
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.token-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.radio-group {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.radio-group legend {
+  margin-bottom: 0.35rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.radio input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent);
+}
+
+.settings > * + * {
+  margin-top: 0.75rem;
+}
+
+.card-title .count {
+  margin-left: 0.4rem;
 }

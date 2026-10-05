@@ -1,3 +1,5 @@
+import { unzipSync } from 'fflate';
+
 /**
  * NovelAI Diffusion V5 の生成リクエスト。公式 Web UI が送っている内容（2026-10-05 に取得）に合わせている。
  * 値の根拠と未確認の点は docs/novelai-api.md を参照。
@@ -141,4 +143,136 @@ export function buildGenerateRequest({ prompt, negative, characters, params }: G
       negative_prompt: negative,
     },
   };
+}
+
+// ---- 送信と応答の解釈 ----
+
+export class NovelAIError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'NovelAIError';
+  }
+}
+
+export interface ImageResult {
+  blob: Blob;
+  /** JSON 応答にシードが含まれていればその値。 */
+  seed?: number;
+}
+
+/** 先頭のバイト列から画像の種類を判定する。 */
+export function sniffImageType(bytes: Uint8Array): string | null {
+  const at = (i: number) => bytes[i] ?? -1;
+  if (at(0) === 0x89 && at(1) === 0x50 && at(2) === 0x4e && at(3) === 0x47) return 'image/png';
+  if (at(0) === 0xff && at(1) === 0xd8) return 'image/jpeg';
+  const ascii = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
+  if (bytes.length >= 12 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp';
+  return null;
+}
+
+function isZip(bytes: Uint8Array): boolean {
+  return bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64.replace(/^data:[^,]*,/, ''));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function toImage(bytes: Uint8Array, seed?: number): ImageResult | null {
+  const type = sniffImageType(bytes);
+  return type ? { blob: new Blob([bytes as BlobPart], { type }), seed } : null;
+}
+
+/** 応答は ZIP・JSON（base64）・画像そのもののどれでも受け付ける。 */
+export function extractImages(buffer: ArrayBuffer): ImageResult[] {
+  const bytes = new Uint8Array(buffer);
+  let images: Array<ImageResult | null>;
+
+  if (isZip(bytes)) {
+    const files = unzipSync(bytes);
+    images = Object.keys(files)
+      .sort()
+      .map((name) => toImage(files[name]!));
+  } else if (sniffImageType(bytes)) {
+    images = [toImage(bytes)];
+  } else {
+    const data = JSON.parse(new TextDecoder().decode(bytes)) as {
+      images?: Array<{ image?: string; seed?: number }>;
+    };
+    images = (data.images ?? []).map((img) =>
+      typeof img.image === 'string' ? toImage(base64ToBytes(img.image), img.seed) : null,
+    );
+  }
+
+  const found = images.filter((i): i is ImageResult => i !== null);
+  if (found.length === 0) throw new NovelAIError(0, '応答に画像が含まれていませんでした');
+  return found;
+}
+
+async function readErrorMessage(res: Response): Promise<string> {
+  const text = await res.text().catch(() => '');
+  try {
+    const data = JSON.parse(text) as { message?: unknown };
+    if (typeof data.message === 'string' && data.message) return data.message;
+  } catch {
+    // JSON でなければ本文をそのまま使う
+  }
+  return text.slice(0, 300);
+}
+
+/**
+ * 公式 Web UI と同じく multipart/form-data の `request` パートに JSON を入れて送る。
+ * トークンは Authorization ヘッダーにだけ載せ、URL には入れない。
+ */
+export async function requestImages(
+  token: string,
+  body: GenerateRequest,
+  signal?: AbortSignal,
+): Promise<ImageResult[]> {
+  const form = new FormData();
+  form.append('request', new Blob([JSON.stringify(body)], { type: 'application/json' }), 'blob');
+
+  const res = await fetch(GENERATE_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+    signal,
+    credentials: 'omit',
+    cache: 'no-store',
+    referrerPolicy: 'no-referrer',
+  });
+  if (!res.ok) throw new NovelAIError(res.status, await readErrorMessage(res));
+  return extractImages(await res.arrayBuffer());
+}
+
+/** 画面に出すエラー文。 */
+export function describeError(error: unknown): string {
+  if (error instanceof NovelAIError) {
+    const detail = error.message ? `（${error.message}）` : '';
+    switch (error.status) {
+      case 0:
+        return error.message;
+      case 400:
+        return `リクエストの内容が受け付けられませんでした${detail}`;
+      case 401:
+        return 'トークンが無効です。設定でトークンを確認してください';
+      case 402:
+        return `Anlas が足りないか、プランの範囲外です${detail}`;
+      case 429:
+        return '同時に生成できる数の上限です。前の生成が終わってから、もう一度押してください';
+      default:
+        return error.status >= 500
+          ? `NovelAI 側でエラーが起きました（${error.status}）${detail}`
+          : `生成できませんでした（${error.status}）${detail}`;
+    }
+  }
+  if (error instanceof TypeError) return 'NovelAI に接続できませんでした。通信状態を確認してください';
+  if (error instanceof SyntaxError) return '応答を読み取れませんでした';
+  return `生成できませんでした: ${String(error)}`;
 }
