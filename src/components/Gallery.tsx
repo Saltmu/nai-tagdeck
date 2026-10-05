@@ -11,11 +11,16 @@ interface Props {
   onRemove: (id: string) => void;
   onClear: () => void;
   onUseSeed: (seed: number) => void;
+  onDownloaded: (id: string) => void;
 }
 
-export function Gallery({ images, generating, pendingSize, onRemove, onClear, onUseSeed }: Props) {
+export function Gallery({ images, generating, pendingSize, onRemove, onClear, onUseSeed, onDownloaded }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
   const openIndex = images.findIndex((img) => img.id === openId);
+  const downloadImage = (image: GeneratedImage) => {
+    downloadBlob(imageFileName(image), image.blob);
+    onDownloaded(image.id);
+  };
 
   return (
     <section className="card gallery" aria-label="生成した画像">
@@ -51,10 +56,10 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
               </button>
               <button
                 type="button"
-                className="btn thumb-download"
-                aria-label={`生成画像 ${images.length - i}をダウンロード`}
-                title="ダウンロード"
-                onClick={() => downloadBlob(imageFileName(img), img.blob)}
+                className={`btn thumb-download${img.downloaded ? ' is-downloaded' : ''}`}
+                aria-label={`生成画像 ${images.length - i}を${img.downloaded ? '再ダウンロード（ダウンロード済み）' : 'ダウンロード'}`}
+                title={img.downloaded ? 'ダウンロード済み（再ダウンロード）' : 'ダウンロード'}
+                onClick={() => downloadImage(img)}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5" />
@@ -79,6 +84,7 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
             setOpenId(next?.id ?? null);
           }}
           onUseSeed={onUseSeed}
+          onDownload={() => downloadImage(images[openIndex]!)}
         />
       )}
     </section>

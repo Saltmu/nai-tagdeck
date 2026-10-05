@@ -239,6 +239,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onRemove={imageStore.remove}
               onClear={imageStore.clear}
               onUseSeed={applySeed}
+              onDownloaded={imageStore.markDownloaded}
             />
           </div>
         </div>

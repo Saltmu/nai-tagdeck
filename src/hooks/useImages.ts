@@ -12,15 +12,17 @@ export interface GeneratedImage {
   prompt: string;
   characterPrompts: string[];
   createdAt: number;
+  downloaded: boolean;
 }
 
-export type NewImage = Omit<GeneratedImage, 'id' | 'url'>;
+export type NewImage = Omit<GeneratedImage, 'id' | 'url' | 'downloaded'>;
 
 export interface ImageStore {
   images: GeneratedImage[];
   add: (images: NewImage[]) => void;
   remove: (id: string) => void;
   clear: () => void;
+  markDownloaded: (id: string) => void;
 }
 
 export function useImages(): ImageStore {
@@ -32,7 +34,7 @@ export function useImages(): ImageStore {
   }, []);
 
   const add = useCallback((list: NewImage[]) => {
-    const created = list.map((img) => ({ ...img, id: newId(), url: URL.createObjectURL(img.blob) }));
+    const created = list.map((img) => ({ ...img, id: newId(), url: URL.createObjectURL(img.blob), downloaded: false }));
     setImages((prev) => [...created, ...prev]);
   }, []);
 
@@ -63,5 +65,9 @@ export function useImages(): ImageStore {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [hasImages]);
 
-  return { images, add, remove, clear };
+  const markDownloaded = useCallback((id: string) => {
+    setImages((prev) => prev.map((img) => img.id === id ? { ...img, downloaded: true } : img));
+  }, []);
+
+  return { images, add, remove, clear, markDownloaded };
 }

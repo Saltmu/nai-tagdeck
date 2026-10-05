@@ -1069,6 +1069,9 @@ textarea {
 }
 
 .thumb-download {
+  color: #1c2029;
+  background: #ffffff;
+  border-color: #d6dbe3;
   position: absolute;
   top: 0.4rem;
   right: 0.4rem;
@@ -1076,6 +1079,20 @@ textarea {
   min-height: 44px;
   padding: 0;
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+}
+
+.thumb-download:hover:not(:disabled) {
+  background: #eef0f4;
+}
+
+.thumb-download.is-downloaded {
+  color: #858e9c;
+  background: #b8bec8;
+  border-color: #a8b0bc;
+}
+
+.thumb-download.is-downloaded:hover:not(:disabled) {
+  background: #a8b0bc;
 }
 
 .thumb.is-pending {

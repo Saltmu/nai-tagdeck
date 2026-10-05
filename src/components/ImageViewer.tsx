@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
-import { downloadBlob, timeStamp } from '../lib/browser';
+import { timeStamp } from '../lib/browser';
 
 interface Props {
   image: GeneratedImage;
@@ -11,6 +11,7 @@ interface Props {
   onClose: () => void;
   onRemove: () => void;
   onUseSeed: (seed: number) => void;
+  onDownload: () => void;
 }
 
 const EXT: Record<string, string> = { 'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg' };
@@ -19,7 +20,7 @@ export function imageFileName(image: GeneratedImage): string {
   return `nai-tagdeck-${timeStamp(new Date(image.createdAt))}-${image.seed}.${EXT[image.blob.type] ?? 'png'}`;
 }
 
-export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed }: Props) {
+export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -74,7 +75,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => downloadBlob(imageFileName(image), image.blob)}
+              onClick={onDownload}
             >
               保存
             </button>
