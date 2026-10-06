@@ -577,21 +577,59 @@ input[type='checkbox'] {
   flex: 1;
 }
 
-.suggestions {
+.suggest-popup {
   position: absolute;
-  top: calc(100% + 4px);
   left: 0;
   right: 0;
   z-index: 10;
-  max-height: min(18rem, 50vh);
-  margin: 0;
-  padding: 4px;
-  overflow: auto;
-  list-style: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: var(--shadow-pop);
+}
+
+.suggest-popup[hidden] {
+  display: none;
+}
+
+.suggest-popup.is-below {
+  top: calc(100% + 4px);
+}
+
+/* 上に出すときは閉じるボタンの行を入力欄側（下）に置く */
+.suggest-popup.is-above {
+  bottom: calc(100% + 4px);
+  flex-direction: column-reverse;
+}
+
+.suggest-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 4px 4px 4px 0.7rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.suggest-popup.is-above .suggest-head {
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+}
+
+.suggestions {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 4px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  list-style: none;
 }
 
 .suggestion {
@@ -1506,4 +1544,10 @@ textarea {
   .latest-preview {
     display: none;
   }
+}
+
+.negative-section {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
 }

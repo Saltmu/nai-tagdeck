@@ -14,6 +14,10 @@ interface Props {
   onDownload: () => void;
 }
 
+const VIEWER_STATE = 'naiTagdeckViewer';
+const isViewerState = (state: unknown) =>
+  typeof state === 'object' && state !== null && (state as Record<string, unknown>)[VIEWER_STATE] === true;
+
 const EXT: Record<string, string> = { 'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg' };
 
 export function imageFileName(image: GeneratedImage): string {
@@ -26,6 +30,25 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
   useEffect(() => {
     const d = dialog.current;
     if (d && !d.open) d.showModal();
+  }, []);
+
+  // 拡大表示中にブラウザの「戻る」を押したら、ページを離れずに拡大表示だけを閉じる。
+  // 開いたときに履歴を1つ積み、戻るで消えたら閉じる。ボタンなどで閉じたときは積んだ履歴を自分で戻す。
+  const active = useRef(false);
+  useEffect(() => {
+    active.current = true;
+    // StrictMode の再実行で二重に積まないよう、すでに積んであれば何もしない
+    if (!isViewerState(window.history.state)) window.history.pushState({ [VIEWER_STATE]: true }, '');
+    const onPopState = () => dialog.current?.close();
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      active.current = false;
+      window.removeEventListener('popstate', onPopState);
+      // StrictMode の仮のアンマウント直後は再マウントされているので、本当に閉じたときだけ戻す
+      queueMicrotask(() => {
+        if (!active.current && isViewerState(window.history.state)) window.history.back();
+      });
+    };
   }, []);
 
   return (

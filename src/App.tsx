@@ -153,9 +153,9 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
 
   return (
     <div className="app">
-      <header className="app-header">
+      <header className="app-header" data-occludes>
         <h1 className="app-title">nai-tagdeck</h1>
-        <nav className="tabbar" aria-label="画面切り替え">
+        <nav className="tabbar" aria-label="画面切り替え" data-occludes>
           {TABS.map((t) => (
             <button
               key={t.key}
@@ -236,6 +236,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               syntax={settings.weightSyntax}
               onSyntaxChange={(weightSyntax) => updateSettings({ weightSyntax })}
               onCopy={copy}
+              settings={settings}
+              onSettingsChange={updateSettings}
             />
             <Gallery
               images={imageStore.images}
@@ -251,8 +253,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         {tab === 'dictionary' && <DictionaryView dictionary={dictionary} notify={show} />}
         {tab === 'settings' && (
           <SettingsView
-            settings={settings}
-            onChange={updateSettings}
             token={token}
             notify={show}
             getBackup={getBackup}

@@ -41,3 +41,23 @@ export function dateStamp(d = new Date()): string {
 export function timeStamp(d = new Date()): string {
   return `${dateStamp(d)}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
+
+/**
+ * 画面上で実際に見えている縦の範囲（ビューポート座標）。
+ * スマホのキーボードで狭くなった分（visualViewport）と、
+ * data-occludes を付けた固定ヘッダー・固定タブバーに隠れる分を除く。
+ */
+export function visibleBounds(): { top: number; bottom: number } {
+  const vv = window.visualViewport;
+  let top = vv ? vv.offsetTop : 0;
+  let bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+  const middle = (top + bottom) / 2;
+  for (const el of document.querySelectorAll('[data-occludes]')) {
+    const rect = el.getBoundingClientRect();
+    if (rect.height === 0) continue;
+    // 画面の上半分にあるものは上から、下半分にあるものは下から隠しているとみなす
+    if (rect.bottom <= middle) top = Math.max(top, rect.bottom);
+    else if (rect.top >= middle) bottom = Math.min(bottom, rect.top);
+  }
+  return { top, bottom };
+}

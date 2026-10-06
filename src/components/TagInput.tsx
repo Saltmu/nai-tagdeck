@@ -1,8 +1,14 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CategoryKey, DictEntry } from '../types';
 import { categoryLabel } from '../lib/categories';
 import { parseTagList } from '../lib/prompt';
 import { suggest } from '../lib/suggest';
+import { visibleBounds } from '../lib/browser';
+import { choosePlacement, type Placement } from '../lib/placement';
+
+/** 候補リストの高さの上限（18rem）と、入力欄との間隔。 */
+const POPUP_MAX = 288;
+const POPUP_GAP = 4;
 
 interface Props {
   category: CategoryKey;
@@ -16,8 +22,14 @@ export function TagInput({ category, label, entries, onAdd }: Props) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const listId = useId();
+  const [layout, setLayout] = useState<{ placement: Placement; maxHeight: number }>({
+    placement: 'below',
+    maxHeight: POPUP_MAX,
+  });
 
   const suggestions = useMemo(
     () => (open && !text.includes(',') ? suggest(entries, text, { category, showCategoryOnEmpty: true }) : []),
@@ -30,6 +42,44 @@ export function TagInput({ category, label, entries, onAdd }: Props) {
     const option = listRef.current?.children[active];
     if (option instanceof HTMLElement) option.scrollIntoView({ block: 'nearest' });
   }, [active, suggestions, expanded]);
+
+  // 候補を出している間は、入力欄の上下どちらに広く空きがあるかを見て出す向きと高さを決め直す
+  useLayoutEffect(() => {
+    if (!expanded) return;
+    const update = () => {
+      const row = rowRef.current;
+      const popup = popupRef.current;
+      const list = listRef.current;
+      if (!row || !popup || !list) return;
+      const rect = row.getBoundingClientRect();
+      const bounds = visibleBounds();
+      // ヘッダー行などリスト以外の高さ ＋ リストを全部出したときの高さ
+      const natural = popup.offsetHeight - list.clientHeight + list.scrollHeight;
+      const next = choosePlacement({
+        anchorTop: rect.top,
+        anchorBottom: rect.bottom,
+        boundsTop: bounds.top,
+        boundsBottom: bounds.bottom,
+        desired: Math.min(natural, POPUP_MAX),
+        gap: POPUP_GAP,
+      });
+      setLayout((prev) =>
+        prev.placement === next.placement && prev.maxHeight === next.maxHeight ? prev : next,
+      );
+    };
+    update();
+    const vv = window.visualViewport;
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    vv?.addEventListener('resize', update);
+    vv?.addEventListener('scroll', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+      vv?.removeEventListener('resize', update);
+      vv?.removeEventListener('scroll', update);
+    };
+  }, [expanded, suggestions]);
 
   const reset = () => {
     setText('');
@@ -51,7 +101,7 @@ export function TagInput({ category, label, entries, onAdd }: Props) {
   };
 
   return (
-    <div className="tag-input">
+    <div className="tag-input" ref={rowRef}>
       <input
         ref={inputRef}
         type="text"
@@ -76,12 +126,16 @@ export function TagInput({ category, label, entries, onAdd }: Props) {
           setActive(0);
           setOpen(true);
         }}
+        onClick={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onKeyDown={(e) => {
           // IME 変換確定の Enter は無視する
           if (e.nativeEvent.isComposing || e.keyCode === 229) return;
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-            if (!expanded) return;
+            if (!expanded) {
+              setOpen(true);
+              return;
+            }
             e.preventDefault();
             const delta = e.key === 'ArrowDown' ? 1 : -1;
             setActive((i) => (i + delta + suggestions.length) % suggestions.length);
@@ -106,23 +160,38 @@ export function TagInput({ category, label, entries, onAdd }: Props) {
         追加
       </button>
 
-      <ul ref={listRef} id={listId} role="listbox" className="suggestions" hidden={!expanded} onMouseDown={(e) => e.preventDefault()}>
-        {suggestions.map(({ entry }, i) => (
-          <li
-            key={entry.id}
-            id={`${listId}-${i}`}
-            role="option"
-            aria-selected={i === active}
-            className="suggestion"
-            onMouseEnter={() => setActive(i)}
-            onClick={() => pick(entry)}
-          >
-            <span className="suggestion-tag">{entry.tag}</span>
-            {entry.alias && <span className="suggestion-alias">{entry.alias}</span>}
-            {entry.category !== category && <span className="chip">{categoryLabel(entry.category)}</span>}
-          </li>
-        ))}
-      </ul>
+      {/* 押してもフォーカスを入力欄に残す（閉じたあともそのまま入力を続けられる） */}
+      <div
+        ref={popupRef}
+        className={`suggest-popup is-${layout.placement}`}
+        style={{ maxHeight: layout.maxHeight }}
+        hidden={!expanded}
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        <div className="suggest-head">
+          <span>候補 {suggestions.length}件</span>
+          <button type="button" className="btn btn-small" aria-label="候補を閉じる" onClick={() => setOpen(false)}>
+            閉じる ✕
+          </button>
+        </div>
+        <ul ref={listRef} id={listId} role="listbox" className="suggestions">
+          {suggestions.map(({ entry }, i) => (
+            <li
+              key={entry.id}
+              id={`${listId}-${i}`}
+              role="option"
+              aria-selected={i === active}
+              className="suggestion"
+              onMouseEnter={() => setActive(i)}
+              onClick={() => pick(entry)}
+            >
+              <span className="suggestion-tag">{entry.tag}</span>
+              {entry.alias && <span className="suggestion-alias">{entry.alias}</span>}
+              {entry.category !== category && <span className="chip">{categoryLabel(entry.category)}</span>}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
