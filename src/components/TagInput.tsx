@@ -1,15 +1,10 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CategoryKey, DictEntry } from '../types';
 import { categoryLabel } from '../lib/categories';
 import { parseTagList } from '../lib/prompt';
 import { normalize, suggest } from '../lib/suggest';
-import { visibleBounds } from '../lib/browser';
-import { choosePlacement, type Placement } from '../lib/placement';
+import { useSuggestionPopup } from '../hooks/useSuggestionPopup';
 import { INTERACTIONS, splitInteraction, withInteraction, type Interaction } from '../lib/interaction';
-
-/** 候補リストの高さの上限（18rem）と、入力欄との間隔。 */
-const POPUP_MAX = 288;
-const POPUP_GAP = 4;
 
 interface Props {
   category: CategoryKey;
@@ -28,16 +23,7 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
   const [active, setActive] = useState(0);
   const [picked, setPicked] = useState<Interaction | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const areaRef = useRef<HTMLDivElement>(null);
-  const rowRef = useRef<HTMLDivElement>(null);
-  const popupRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
   const listId = useId();
-  const [layout, setLayout] = useState<{ placement: Placement; maxHeight: number }>({
-    placement: 'below',
-    maxHeight: POPUP_MAX,
-  });
-
   // 打ち込んだ "source#…" も読み取り、# より後ろで候補を探す
   const typed = interactions ? splitInteraction(text) : { interaction: null, body: text };
   const interaction = typed.interaction ?? picked;
@@ -56,72 +42,12 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
     });
   }, [open, entries, query, category, interaction]);
   const expanded = suggestions.length > 0;
+  const { areaRef, rowRef, popupRef, listRef, layout } = useSuggestionPopup(expanded, suggestions, active, setOpen);
 
   useEffect(() => {
     onExpandedChange?.(expanded);
     return () => onExpandedChange?.(false);
   }, [expanded, onExpandedChange]);
-
-  useEffect(() => {
-    if (!expanded) return;
-    const option = listRef.current?.children[active];
-    if (option instanceof HTMLElement) option.scrollIntoView({ block: 'nearest' });
-  }, [active, suggestions, expanded]);
-
-  // 候補を出している間は、入力欄の上下どちらに広く空きがあるかを見て出す向きと高さを決め直す
-  useLayoutEffect(() => {
-    if (!expanded) return;
-    const update = () => {
-      const row = rowRef.current;
-      const popup = popupRef.current;
-      const list = listRef.current;
-      if (!row || !popup || !list) return;
-      const rect = row.getBoundingClientRect();
-      const bounds = visibleBounds();
-      // ヘッダー行などリスト以外の高さ ＋ リストを全部出したときの高さ
-      const natural = popup.offsetHeight - list.clientHeight + list.scrollHeight;
-      const next = choosePlacement({
-        anchorTop: rect.top,
-        anchorBottom: rect.bottom,
-        boundsTop: bounds.top,
-        boundsBottom: bounds.bottom,
-        desired: Math.min(natural, POPUP_MAX),
-        gap: POPUP_GAP,
-      });
-      setLayout((prev) =>
-        prev.placement === next.placement && prev.maxHeight === next.maxHeight ? prev : next,
-      );
-    };
-    update();
-    const vv = window.visualViewport;
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
-    vv?.addEventListener('resize', update);
-    vv?.addEventListener('scroll', update);
-    return () => {
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
-      vv?.removeEventListener('resize', update);
-      vv?.removeEventListener('scroll', update);
-    };
-  }, [expanded, suggestions]);
-
-  // 候補を出している間に外側を押したら、候補を閉じるだけにして背後の要素のクリックは起こさない
-  useEffect(() => {
-    if (!expanded) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (e.target instanceof Node && areaRef.current?.contains(e.target)) return;
-      setOpen(false);
-      const swallow = (ev: Event) => {
-        ev.stopPropagation();
-        ev.preventDefault();
-      };
-      window.addEventListener('click', swallow, true);
-      window.setTimeout(() => window.removeEventListener('click', swallow, true), 500);
-    };
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => document.removeEventListener('pointerdown', onPointerDown, true);
-  }, [expanded]);
 
   // 追加したあとは候補を閉じる（入力欄を押す・打つと再び開く）
   const reset = () => {
