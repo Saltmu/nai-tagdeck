@@ -20,6 +20,8 @@ interface Props {
   isKnown: (tag: string) => boolean;
   onCopy: (text: string, label: string) => void;
   onRegister: (tag: WorkTag, category: CategoryKey) => void;
+  /** 先頭に並べる択一ボタン（キャラの girl / boy / other など）。押し直すと外す。 */
+  quickPicks?: readonly string[];
 }
 
 export const CategorySection = memo(function CategorySection({
@@ -33,6 +35,7 @@ export const CategorySection = memo(function CategorySection({
   isKnown,
   onCopy,
   onRegister,
+  quickPicks,
 }: Props) {
   const [open, toggleOpen] = useCategoryOpen(target, category);
   const [sorting, setSorting] = useState(false);
@@ -94,6 +97,24 @@ export const CategorySection = memo(function CategorySection({
       </div>
 
       <div id={bodyId} hidden={!open}>
+        {quickPicks && (
+          <div className="quick-picks" role="group" aria-label={`${fullLabel}の種類`}>
+            {quickPicks.map((pick) => {
+              const on = tags.some((t) => normalize(t.tag) === normalize(pick));
+              return (
+                <button
+                  key={pick}
+                  type="button"
+                  className={`btn btn-small${on ? ' btn-primary' : ''}`}
+                  aria-pressed={on}
+                  onClick={() => dispatch({ type: 'pickOne', target, category, group: quickPicks, tag: on ? null : pick })}
+                >
+                  {pick}
+                </button>
+              );
+            })}
+          </div>
+        )}
         {tags.length > 0 && (
           <ul className="tag-list">
             {tags.map((t, i) => (

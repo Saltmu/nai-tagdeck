@@ -542,6 +542,30 @@ input[type='checkbox'] {
   opacity: 0.55;
 }
 
+.editor-tab-wrap {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+}
+
+/* チェックボックスはタブの左端に重ねる（ボタンの中には置けないため兄弟要素にしている） */
+.editor-tab-check {
+  position: absolute;
+  top: 50%;
+  left: 0.6rem;
+  z-index: 1;
+  margin: 0;
+  transform: translateY(-50%);
+}
+
+.editor-tab-character {
+  padding-left: 2rem;
+}
+
+.editor-tab-wrap:has(.editor-tab[aria-selected='true']) .editor-tab-check {
+  accent-color: #fff;
+}
+
 .editor-tab:disabled {
   opacity: 0.35;
   cursor: not-allowed;
@@ -642,6 +666,14 @@ input[type='checkbox'] {
 
 .preview-item .preview-text {
   margin-top: 0.3rem;
+}
+
+/* ---- quick picks (character kind) ---- */
+.quick-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
 }
 
 /* ---- tag input / suggestions ---- */
@@ -1246,6 +1278,7 @@ textarea {
 
 .app-dialog-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.5rem;
 }

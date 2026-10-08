@@ -29,6 +29,18 @@ describe('workspaceReducer: ベースのタグ', () => {
     expect(normalizeWorkspace(JSON.parse(JSON.stringify(after)))).toEqual(after);
   });
 
+  it('pickOne はグループの1つだけを先頭に置き、ほかを外す', () => {
+    const group = ['girl', 'boy', 'other'];
+    const pick = (ws: Workspace, tag: string | null) =>
+      workspaceReducer(ws, { type: 'pickOne', target: BASE, category: 'subject', group, tag });
+    const base = workspaceReducer(emptyWorkspace(), { type: 'add', target: BASE, category: 'subject', tag: 'mature female' });
+    const girl = pick(base, 'girl');
+    expect(girl.base.subject.map((t) => t.tag)).toEqual(['girl', 'mature female']);
+    const boy = pick(girl, 'boy');
+    expect(boy.base.subject.map((t) => t.tag)).toEqual(['boy', 'mature female']);
+    expect(pick(boy, null).base.subject.map((t) => t.tag)).toEqual(['mature female']);
+  });
+
   it('空欄や同じカテゴリ内の重複タグへの変更は拒否する', () => {
     const before = add(add(undefined, 'long hair'), 'blue eyes');
     const id = before.base.appearance[0]!.id;

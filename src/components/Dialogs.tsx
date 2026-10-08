@@ -5,6 +5,16 @@ export interface DialogApi {
   confirm: (message: string, options?: ConfirmOptions) => Promise<boolean>;
   prompt: (message: string, defaultValue?: string, options?: { okLabel?: string }) => Promise<string | null>;
   alert: (message: string) => Promise<void>;
+  /** ボタンを複数並べて選ばせる。キャンセル（Esc を含む）なら null。 */
+  choose: <V extends string>(message: string, choices: readonly Choice<V>[]) => Promise<V | null>;
+}
+
+export interface Choice<V extends string = string> {
+  value: V;
+  label: string;
+  /** Enter で選ばれる主ボタンにする（1つだけ）。 */
+  primary?: boolean;
+  danger?: boolean;
 }
 
 export interface ConfirmOptions {
@@ -17,6 +27,7 @@ type Request = { id: number } & (
   | { kind: 'confirm'; message: string; okLabel?: string; danger?: boolean; resolve: (v: boolean) => void }
   | { kind: 'prompt'; message: string; defaultValue: string; okLabel?: string; resolve: (v: string | null) => void }
   | { kind: 'alert'; message: string; resolve: () => void }
+  | { kind: 'choose'; message: string; choices: readonly Choice[]; resolve: (v: string | null) => void }
 );
 type NewRequest = Request extends infer R ? (R extends Request ? Omit<R, 'id'> : never) : never;
 
@@ -44,6 +55,10 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       prompt: (message, defaultValue = '', options) =>
         new Promise((resolve) => push({ kind: 'prompt', message, defaultValue, ...options, resolve })),
       alert: (message) => new Promise((resolve) => push({ kind: 'alert', message, resolve })),
+      choose: <V extends string>(message: string, choices: readonly Choice<V>[]) =>
+        new Promise<V | null>((resolve) =>
+          push({ kind: 'choose', message, choices, resolve: resolve as (v: string | null) => void }),
+        ),
     }),
     [push],
   );
@@ -72,17 +87,20 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
     if (request.kind === 'prompt') input.current?.select();
   }, [request.kind]);
 
-  const settle = (ok: boolean) => {
+  // choice: choose で押されたボタンの値（Enter で主ボタンを押したときは省略）
+  const settle = (ok: boolean, choice?: string) => {
     if (settled.current) return;
     settled.current = true;
     if (request.kind === 'confirm') request.resolve(ok);
     else if (request.kind === 'prompt') request.resolve(ok ? value : null);
-    else request.resolve();
+    else if (request.kind === 'choose') {
+      request.resolve(ok ? (choice ?? request.choices.find((c) => c.primary)?.value ?? null) : null);
+    } else request.resolve();
     dialog.current?.close();
     onDone();
   };
 
-  const okLabel = request.kind === 'alert' ? 'OK' : (request.okLabel ?? 'OK');
+  const okLabel = request.kind === 'confirm' || request.kind === 'prompt' ? (request.okLabel ?? 'OK') : 'OK';
   const danger = request.kind === 'confirm' && request.danger;
 
   return (
@@ -120,9 +138,26 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
               キャンセル
             </button>
           )}
-          <button type="submit" className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} autoFocus={request.kind !== 'prompt'}>
-            {okLabel}
-          </button>
+          {request.kind === 'choose' ? (
+            request.choices.map((c) => (
+              <button
+                key={c.value}
+                type={c.primary ? 'submit' : 'button'}
+                className={`btn${c.danger ? ' btn-danger' : c.primary ? ' btn-primary' : ''}`}
+                autoFocus={c.primary}
+                onClick={(e) => {
+                  e.preventDefault();
+                  settle(true, c.value);
+                }}
+              >
+                {c.label}
+              </button>
+            ))
+          ) : (
+            <button type="submit" className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} autoFocus={request.kind !== 'prompt'}>
+              {okLabel}
+            </button>
+          )}
         </div>
       </form>
     </dialog>

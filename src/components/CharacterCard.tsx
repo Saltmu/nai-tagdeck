@@ -3,15 +3,16 @@ import type { Character, CategoryKey, DictEntry, WeightSyntax, WorkTag } from '.
 import type { WorkspaceAction } from '../lib/workspace';
 import { CHARACTER_CATEGORY_KEYS } from '../lib/categories';
 import { buildPrompt } from '../lib/prompt';
-import { MAX_ENABLED_CHARACTERS } from '../lib/characterLimits';
 import { CategorySection } from './CategorySection';
 import { useDialogs } from './Dialogs';
+
+/** キャラクタープロンプトの先頭に書く種類（人数は付けない）。 */
+const CHARACTER_KINDS = ['girl', 'boy', 'other'] as const;
 
 interface Props {
   character: Character;
   index: number;
   count: number;
-  canEnable: boolean;
   dispatch: Dispatch<WorkspaceAction>;
   entries: DictEntry[];
   syntax: WeightSyntax;
@@ -24,7 +25,6 @@ export function CharacterCard({
   character,
   index,
   count,
-  canEnable,
   dispatch,
   entries,
   syntax,
@@ -51,16 +51,6 @@ export function CharacterCard({
   return (
     <section className={`character${enabled ? '' : ' is-off'}`} aria-label={name}>
       <div className="character-head">
-        <input
-          type="checkbox"
-          checked={enabled}
-          disabled={!enabled && !canEnable}
-          aria-label={`${name} を生成に含める`}
-          title={!enabled && !canEnable
-            ? `生成対象は最大${MAX_ENABLED_CHARACTERS}人です。他のキャラクターのチェックを外してください`
-            : 'OFF にすると出力・生成から外します'}
-          onChange={() => dispatch({ type: 'toggleCharacter', id })}
-        />
         <input
           className="character-name"
           value={character.name}
@@ -110,6 +100,7 @@ export function CharacterCard({
             isKnown={isKnown}
             onCopy={onCopy}
             onRegister={onRegister}
+            quickPicks={key === 'subject' ? CHARACTER_KINDS : undefined}
           />
         ))}
       </div>

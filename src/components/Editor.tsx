@@ -115,18 +115,36 @@ export function Editor({
         >
           ベース
         </button>
-        {characters.map((c, i) => (
-          <button
-            key={c.id}
-            type="button"
-            role="tab"
-            aria-selected={c.id === active?.id}
-            className={`editor-tab${c.enabled ? '' : ' is-off'}`}
-            onClick={() => select(c.id)}
-          >
-            {c.name.trim() || `キャラ${i + 1}`}
-          </button>
-        ))}
+        {characters.map((c, i) => {
+          const name = c.name.trim() || `キャラ${i + 1}`;
+          const locked = !c.enabled && enabledCount >= MAX_ENABLED_CHARACTERS;
+          return (
+            <div key={c.id} className="editor-tab-wrap" role="presentation">
+              <input
+                type="checkbox"
+                className="editor-tab-check"
+                checked={c.enabled}
+                disabled={locked}
+                aria-label={`${name} を生成に含める`}
+                title={
+                  locked
+                    ? `生成対象は最大${MAX_ENABLED_CHARACTERS}人です。他のキャラクターのチェックを外してください`
+                    : 'OFF にすると出力・生成から外します'
+                }
+                onChange={() => dispatch({ type: 'toggleCharacter', id: c.id })}
+              />
+              <button
+                type="button"
+                role="tab"
+                aria-selected={c.id === active?.id}
+                className={`editor-tab editor-tab-character${c.enabled ? '' : ' is-off'}`}
+                onClick={() => select(c.id)}
+              >
+                {name}
+              </button>
+            </div>
+          );
+        })}
         <button
           type="button"
           className="editor-tab editor-tab-add"
@@ -145,7 +163,6 @@ export function Editor({
           character={active}
           index={activeIndex}
           count={characters.length}
-          canEnable={enabledCount < MAX_ENABLED_CHARACTERS}
           dispatch={dispatch}
           entries={dictionary.entries}
           syntax={syntax}
@@ -154,31 +171,30 @@ export function Editor({
           onRegister={register}
         />
       ) : (
-        <>
-          <div className="category-grid editor-pane">
-            {CATEGORY_KEYS.map((key) => (
-              <CategorySection
-                key={key}
-                target={BASE}
-                category={key}
-                tags={workspace.base[key]}
-                dispatch={dispatch}
-                entries={dictionary.entries}
-                syntax={syntax}
-                isKnown={isKnown}
-                onCopy={onCopy}
-                onRegister={register}
-              />
-            ))}
-          </div>
-          {characters.length === 0 && (
-            <p className="hint">
-              複数のキャラクターを描くときは、タブ右端の「＋」でキャラクターを追加し、キャラクターごとにタグを分けて登録します（V4 以降のキャラクタープロンプト）。
-              人数は付けずに girl / boy / other と書き、キャラ同士の動作は source# / target# / mutual# を付けます。
-            </p>
-          )}
-        </>
+        <div className="category-grid editor-pane">
+          {CATEGORY_KEYS.map((key) => (
+            <CategorySection
+              key={key}
+              target={BASE}
+              category={key}
+              tags={workspace.base[key]}
+              dispatch={dispatch}
+              entries={dictionary.entries}
+              syntax={syntax}
+              isKnown={isKnown}
+              onCopy={onCopy}
+              onRegister={register}
+            />
+          ))}
+        </div>
       )}
+
+      <p className="hint">
+        複数のキャラクターを描くときは、タブ右端の「＋」でキャラクターを追加し、キャラクターごとにタグを分けて登録します（V4 以降のキャラクタープロンプト）。
+        人数（2girls など）や背景・画風はベースに書き、各キャラは「被写体」の girl / boy / other ボタンで種類を選びます（人数は付けません）。
+        キャラ同士の動作もそれぞれのキャラに書き、する側に source#、される側に target#、お互いなら両方に mutual# を付けます（例: source#hug と
+        target#hug、両方に mutual#holding hands）。
+      </p>
 
       <p className="hint">
         保存 {characters.length}/{MAX_CHARACTERS} · 生成対象 {enabledCount}/{MAX_ENABLED_CHARACTERS}

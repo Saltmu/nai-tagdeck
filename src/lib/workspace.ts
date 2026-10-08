@@ -16,7 +16,9 @@ type TagAction =
   | { type: 'setTag'; id: string; tag: string }
   | { type: 'remove'; id: string }
   | { type: 'move'; id: string; delta: -1 | 1 }
-  | { type: 'setAll'; enabled: boolean };
+  | { type: 'setAll'; enabled: boolean }
+  /** group のタグのうち tag だけを先頭に置き、ほかは外す。tag が null なら group のタグをすべて外す。 */
+  | { type: 'pickOne'; group: readonly string[]; tag: string | null };
 
 export type WorkspaceAction =
   | (TagAction & { target: TargetId; category: CategoryKey })
@@ -126,6 +128,15 @@ function reduceTags(tags: WorkTag[], action: TagAction): WorkTag[] {
       return moveItem(tags, action.id, action.delta);
     case 'setAll':
       return tags.map((t) => ({ ...t, enabled: action.enabled }));
+    case 'pickOne': {
+      const group = new Set(action.group.map(normalize));
+      const rest = tags.filter((t) => !group.has(normalize(t.tag)));
+      if (action.tag === null) return rest;
+      const key = normalize(action.tag);
+      const existing = tags.find((t) => normalize(t.tag) === key);
+      const picked = existing ? { ...existing, enabled: true } : { id: newId(), tag: action.tag, enabled: true, weight: 1 };
+      return [picked, ...rest];
+    }
   }
 }
 

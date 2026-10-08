@@ -28,15 +28,20 @@ export function PresetBar({ store, workspace, dispatch, notify }: Props) {
   const active = presets.find((p) => p.id === activeId) ?? null;
   const dirty = active ? !sameWorkspace(active.workspace, workspace) : !isEmptyWorkspace(workspace);
 
-  /** 保存していない編集を捨てる前に確認する。 */
-  const confirmDiscard = async (action: string, okLabel: string) =>
-    !dirty ||
-    dialogs.confirm(
-      active
-        ? `「${active.name}」への変更は保存されていません。${action}`
-        : `今のタグはプリセットに保存されていません。${action}`,
-      { okLabel },
-    );
+  /**
+   * 保存していない編集を捨てる前に確認する。読み込み中のプリセットがあれば、上書き保存してから進むこともできる。
+   * 進んでよければ true。
+   */
+  const confirmDiscard = async (action: string, okLabel: string) => {
+    if (!dirty) return true;
+    if (!active) return dialogs.confirm(`今のタグはプリセットに保存されていません。${action}`, { okLabel });
+    const choice = await dialogs.choose(`「${active.name}」への変更は保存されていません。${action}`, [
+      { value: 'discard', label: okLabel },
+      { value: 'save', label: `変更を保存して${okLabel}`, primary: true },
+    ]);
+    if (choice === 'save') overwrite();
+    return choice !== null;
+  };
 
   const load = async (presetId: string) => {
     const preset = presets.find((p) => p.id === presetId);
