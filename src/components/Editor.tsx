@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch } from 'react';
+import { useCallback, useMemo, type Dispatch } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import { BASE, MAX_CHARACTERS, MAX_ENABLED_CHARACTERS, type WorkspaceAction } from '../lib/workspace';
@@ -12,26 +12,10 @@ import { PresetBar } from './PresetBar';
 import { useDialogs } from './Dialogs';
 import type { PresetStore } from '../hooks/usePresets';
 
-const SELECTED_KEY = 'nai-tagdeck:editor-tab';
+import { useEditorSelection } from '../hooks/useEditorSelection';
 
 /** ベースの品質でよく使うタグ（公式の Quality Tags と定番）。ボタンで付け外しする。 */
 const QUALITY_PICKS = ['masterpiece', 'best quality', 'amazing quality', 'very aesthetic', 'absurdres', 'no text'] as const;
-
-function loadSelected(): string {
-  try {
-    return window.localStorage.getItem(SELECTED_KEY) ?? BASE;
-  } catch {
-    return BASE;
-  }
-}
-
-function saveSelected(id: string) {
-  try {
-    window.localStorage.setItem(SELECTED_KEY, id);
-  } catch {
-    // 保存できなくてもタブ切替は動かす。
-  }
-}
 
 interface Props {
   workspace: Workspace;
@@ -102,31 +86,9 @@ export function Editor({
 
   const enabledCount = characters.filter((c) => c.enabled).length;
 
-  const [selected, setSelected] = useState(loadSelected);
-  const select = (id: string) => {
-    setSelected(id);
-    saveSelected(id);
-  };
-  // 削除などで選択中のキャラクターが無くなったらベースに戻す。
+  const { selected, select } = useEditorSelection(characters.map((c) => c.id), loaded);
   const activeIndex = characters.findIndex((c) => c.id === selected);
   const active = activeIndex >= 0 ? characters[activeIndex] : undefined;
-
-  // キャラクターが増えたら追加されたタブへ、選択中が削除されたら左隣のタブ（先頭ならベース）へ移る。
-  const prevIds = useRef(characters.map((c) => c.id));
-  useEffect(() => {
-    const before = prevIds.current;
-    const last = characters[characters.length - 1];
-    if (loaded) {
-      if (last && characters.length > before.length) {
-        select(last.id);
-      } else if (characters.length < before.length && !characters.some((c) => c.id === selected)) {
-        const removedAt = before.indexOf(selected);
-        if (removedAt >= 0) select((removedAt > 0 && before[removedAt - 1]) || BASE);
-      }
-    }
-    prevIds.current = characters.map((c) => c.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [characters.length]);
 
   return (
     <div className="editor" aria-busy={!loaded}>
