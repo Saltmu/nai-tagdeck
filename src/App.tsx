@@ -32,9 +32,9 @@ const TABS: Array<{ key: Tab; label: string; icon: ReactNode }> = [
 
 export default function App({ onResetAll }: { onResetAll: () => void }) {
   const dictionary = useDictionary();
-  const { workspace, dispatch, loaded } = useWorkspace();
-  const [settings, updateSettings] = useSettings();
-  const [generation, updateGeneration] = useGenerationSettings();
+  const { workspace, dispatch, loaded, persistence } = useWorkspace();
+  const [settings, updateSettings, settingsPersistence] = useSettings();
+  const [generation, updateGeneration, generationPersistence] = useGenerationSettings();
   const token = useToken();
   const presets = usePresets();
   const imageStore = useImages();
@@ -196,6 +196,9 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         </p>
       )}
 
+      {[persistence, settingsPersistence, generationPersistence, ...presets.persistence].filter((state) => state.error).map((state) => (
+        <p className="error-banner" role="alert" key={state.error}>{state.error}。再読み込みして再試行してください。</p>
+      ))}
       <main className="app-main">
         {/* 編集と生成は、広い画面では左右に並べ、狭い画面ではタブで切り替える（どちらも表示したまま CSS で隠す） */}
         <div className="workbench" data-tab={tab} hidden={!showWorkbench}>
@@ -266,3 +269,4 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     </div>
   );
 }
+
