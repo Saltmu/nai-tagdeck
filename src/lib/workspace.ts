@@ -17,7 +17,10 @@ type TagAction =
   | { type: 'toggle'; id: string }
   | { type: 'setWeight'; id: string; weight: number }
   | { type: 'setTag'; id: string; tag: string }
-  | { type: 'remove'; id: string }
+  /** undo: 取り消し通知の対象にする（タグ行の✕など、利用者が行を消す操作）。reducer では無視する。 */
+  | { type: 'remove'; id: string; undo?: boolean }
+  /** 消したタグを元の位置に戻す。同じタグが今あれば重複させず、現在のタグを優先する。 */
+  | { type: 'restore'; tag: WorkTag; index: number }
   | { type: 'move'; id: string; delta: -1 | 1 }
   | { type: 'setAll'; enabled: boolean }
   /** group のタグのうち tag だけを先頭に置き、ほかは外す。tag が null なら group のタグをすべて外す。 */
@@ -158,6 +161,13 @@ function reduceTags(tags: WorkTag[], action: TagAction): WorkTag[] {
     }
     case 'remove':
       return tags.filter((t) => t.id !== action.id);
+    case 'restore': {
+      const key = normalize(action.tag.tag);
+      if (tags.some((t) => t.id === action.tag.id || normalize(t.tag) === key)) return tags;
+      const next = [...tags];
+      next.splice(Math.min(Math.max(action.index, 0), tags.length), 0, { ...action.tag });
+      return next;
+    }
     case 'move':
       return moveItem(tags, action.id, action.delta);
     case 'setAll':
@@ -181,6 +191,13 @@ function moveItem<T extends { id: string }>(items: T[], id: string, delta: -1 | 
   const next = [...items];
   [next[i], next[j]] = [next[j]!, next[i]!];
   return next;
+}
+
+/** target / category が指すタグの並び。キャラクターがいなければ undefined。 */
+export function tagsOf(state: Workspace, target: TargetId, category: CategoryKey): WorkTag[] | undefined {
+  if (category === 'negative') return state.negative;
+  if (target === BASE) return state.base[category];
+  return state.characters.find((c) => c.id === target)?.tags[category];
 }
 
 function updateGroups(groups: TagGroups, category: PromptCategoryKey, action: TagAction): TagGroups {

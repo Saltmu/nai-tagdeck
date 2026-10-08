@@ -985,6 +985,44 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   display: none;
 }
 
+/* ---- undo bar（タグ削除の取り消し。toast とは別に保持する） ---- */
+.undo-bar-slot {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  z-index: 31;
+  width: max-content;
+  max-width: calc(100vw - 1.5rem);
+  transform: translateX(-50%);
+}
+
+.undo-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.9rem;
+  border-radius: 999px;
+  background: var(--toast-bg);
+  color: var(--toast-text);
+  box-shadow: var(--shadow-pop);
+  font-size: 0.9rem;
+}
+
+.undo-bar-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undo-bar .btn {
+  flex: none;
+}
+
+.toast-raised {
+  bottom: calc(env(safe-area-inset-bottom) + 64px);
+}
+
 /* ---- tablet / desktop ---- */
 @media (min-width: 768px) {
   .app-header {
@@ -1015,6 +1053,14 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
 
   .toast {
     bottom: 1.5rem;
+  }
+
+  .undo-bar-slot {
+    bottom: 1.5rem;
+  }
+
+  .toast-raised {
+    bottom: 4.5rem;
   }
 }
 

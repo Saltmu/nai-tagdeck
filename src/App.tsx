@@ -11,6 +11,8 @@ import { useDictionary } from './hooks/useDictionary';
 import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWorkspace';
 import { useToast } from './hooks/useToast';
 import { useToken } from './hooks/useToken';
+import { useTagUndo } from './hooks/useTagUndo';
+import { UndoBar } from './components/UndoBar';
 import { useImages } from './hooks/useImages';
 import { useGenerator } from './hooks/useGenerator';
 import { usePresets } from './hooks/usePresets';
@@ -37,7 +39,7 @@ const TABS: Array<{ key: Tab; label: string; icon: ReactNode }> = [
 
 export default function App({ onResetAll }: { onResetAll: () => void }) {
   const dictionary = useDictionary();
-  const { workspace, dispatch, loaded, persistence } = useWorkspace();
+  const { workspace, dispatch: rawDispatch, loaded, persistence } = useWorkspace();
   const [settings, updateSettings, settingsPersistence] = useSettings();
   const [generation, updateGeneration, generationPersistence] = useGenerationSettings();
   const token = useToken();
@@ -46,6 +48,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
   const { message, show } = useToast();
+  const tagUndo = useTagUndo(workspace, rawDispatch, show);
+  const dispatch = tagUndo.dispatch;
   const openEditor = useCallback(() => setTab('editor'), []);
   const firstRunReady = dictionary.loaded && !dictionary.error &&
     [persistence, settingsPersistence, generationPersistence, ...presets.persistence].every((state) => state.loaded && !state.error);
@@ -216,7 +220,9 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         <LatestPreview image={latest} onOpen={() => setTab('generate')} onDismiss={dismiss} />
       )}
 
-      <div className="toast" role="status" aria-live="polite">
+      <UndoBar removed={tagUndo.removed} onUndo={tagUndo.undo} onDismiss={tagUndo.dismiss} />
+
+      <div className={`toast${tagUndo.removed.length > 0 ? ' toast-raised' : ''}`} role="status" aria-live="polite">
         {message}
       </div>
     </div>

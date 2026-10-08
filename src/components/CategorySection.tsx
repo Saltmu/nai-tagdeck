@@ -164,7 +164,7 @@ export const CategorySection = memo(function CategorySection({
                   dispatch({ type: 'setTag', target, category, id: t.id, tag });
                   return null;
                 }}
-                onRemove={() => dispatch({ type: 'remove', target, category, id: t.id })}
+                onRemove={() => dispatch({ type: 'remove', target, category, id: t.id, undo: true })}
                 onRegister={isKnown(t.tag) ? undefined : () => onRegister(t, category)}
               />
             ))}
