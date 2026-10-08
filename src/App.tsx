@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
 import { SettingsView } from './components/SettingsView';
@@ -7,7 +7,6 @@ import { PromptPreview } from './components/PromptPreview';
 import { Gallery } from './components/Gallery';
 import { QuickGenerate } from './components/QuickGenerate';
 import { LatestPreview } from './components/LatestPreview';
-import { CopyIcon } from './components/icons';
 import { useDictionary } from './hooks/useDictionary';
 import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWorkspace';
 import { useToast } from './hooks/useToast';
@@ -18,16 +17,17 @@ import { usePresets } from './hooks/usePresets';
 import { mergePresets } from './lib/presets';
 import type { Backup } from './lib/backup';
 import { buildCharacterPrompts, buildPrompt } from './lib/prompt';
+import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { sizeOf } from './lib/generation';
 import { copyText } from './lib/browser';
 
 type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
 
-const TABS: Array<{ key: Tab; label: string }> = [
-  { key: 'editor', label: '編集' },
-  { key: 'generate', label: '生成' },
-  { key: 'dictionary', label: '辞書' },
-  { key: 'settings', label: '設定' },
+const TABS: Array<{ key: Tab; label: string; icon: ReactNode }> = [
+  { key: 'editor', label: '編集', icon: <EditIcon /> },
+  { key: 'generate', label: '生成', icon: <SparkleIcon /> },
+  { key: 'dictionary', label: '辞書', icon: <BookIcon /> },
+  { key: 'settings', label: '設定', icon: <SettingsIcon /> },
 ];
 
 export default function App({ onResetAll }: { onResetAll: () => void }) {
@@ -161,10 +161,13 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               key={t.key}
               type="button"
               className={`tab tab-${t.key}`}
+              aria-label={t.label}
+              title={t.label}
               aria-current={tab === t.key ? 'page' : undefined}
               onClick={() => setTab(t.key)}
             >
-              {t.label}
+              {t.icon}
+              <span className="tab-label">{t.label}</span>
               {t.key === 'generate' &&
                 (generator.generating ? (
                   <span className="spinner spinner-small" aria-label="生成中" />
@@ -175,18 +178,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             </button>
           ))}
         </nav>
-        {/* キャラクタープロンプトは公式UIでも別の欄なので、ここではベースだけをコピーする */}
-        <button
-          type="button"
-          className="btn copy-btn"
-          disabled={!basePrompt}
-          aria-label={characterPrompts.length ? 'ベースをコピー' : 'プロンプト全体をコピー'}
-          title={characterPrompts.length ? 'ベースをコピー' : 'プロンプト全体をコピー'}
-          onClick={() => copy(basePrompt, characterPrompts.length ? 'ベース' : 'プロンプト全体')}
-        >
-          <CopyIcon />
-          <span className="copy-label">{characterPrompts.length ? 'ベースをコピー' : '全体コピー'}</span>
-        </button>
         <QuickGenerate
           size={generation.size}
           onSizeChange={(size) => updateGeneration({ size })}

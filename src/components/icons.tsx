@@ -37,3 +37,34 @@ export function SparkleIcon() {
     </svg>
   );
 }
+
+const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+
+/** 編集（鉛筆）。 */
+export function EditIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M3.5 16.5l.8-3.6L13.6 3.6a1.6 1.6 0 012.3 0l.5.5a1.6 1.6 0 010 2.3l-9.3 9.3zM12 5.2l2.8 2.8" {...stroke} />
+    </svg>
+  );
+}
+
+/** 辞書（本）。 */
+export function BookIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M10 5.5C8.6 4.4 6.6 4 4 4v11c2.6 0 4.6.4 6 1.5M10 5.5C11.4 4.4 13.4 4 16 4v11c-2.6 0-4.6.4-6 1.5M10 5.5v11" {...stroke} />
+    </svg>
+  );
+}
+
+/** 設定（スライダー）。 */
+export function SettingsIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M3.5 6h8M15 6h1.5M3.5 14H5M8.5 14h8" {...stroke} />
+      <circle cx="13.2" cy="6" r="1.7" {...stroke} />
+      <circle cx="6.8" cy="14" r="1.7" {...stroke} />
+    </svg>
+  );
+}

@@ -58,7 +58,17 @@ export function PromptPreview({ basePrompt, characterPrompts, syntax, onSyntaxCh
         </label>
         <dl className="preview-list">
           <div className="preview-item">
-            <dt>ベース</dt>
+            <dt>
+              ベース
+              <button
+                type="button"
+                className="btn btn-small"
+                disabled={!basePrompt}
+                onClick={() => onCopy(basePrompt, characterPrompts.length ? 'ベース' : 'プロンプト全体')}
+              >
+                コピー
+              </button>
+            </dt>
             <dd>
               <output className={`preview-text${basePrompt ? '' : ' is-empty'}`}>
                 {basePrompt || 'ONのタグがありません'}
