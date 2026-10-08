@@ -1073,6 +1073,25 @@ textarea {
   display: inline-flex;
 }
 
+/* 生成の詳細設定は下端に浮かせ、閉じた状態では1行だけ見せる */
+.generate {
+  position: sticky;
+  bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+  z-index: 10;
+  box-shadow: 0 -4px 16px rgb(0 0 0 / 0.12), var(--shadow);
+}
+
+.generate-body {
+  max-height: min(60dvh, 34rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.generate-body > .chip {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
 @media (min-width: 1100px) {
   .app-main {
     max-width: 1680px;
@@ -1137,7 +1156,7 @@ textarea {
 }
 
 .gen-summary {
-  margin: 0.75rem 0 0;
+  margin: 0;
   color: var(--muted);
   font-size: 0.85rem;
 }

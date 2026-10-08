@@ -160,18 +160,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             />
           </div>
           <div className="pane pane-generate">
-            <GeneratePanel
-              generation={generation}
-              onGenerationChange={updateGeneration}
-              generator={generator}
-              token={token}
-              basePrompt={basePrompt}
-              characterPrompts={characterPrompts}
-              settings={settings}
-              onOpenSettings={openSettings}
-              blocker={blocker}
-              onGenerate={startGenerate}
-            />
             <PromptPreview
               basePrompt={basePrompt}
               characterPrompts={characterPrompts}
@@ -189,6 +177,19 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onClear={imageStore.clear}
               onUseSeed={applySeed}
               onDownloaded={imageStore.markDownloaded}
+            />
+            {/* 詳細設定は下端に寄せ、プロンプトと画像を先に見せる */}
+            <GeneratePanel
+              generation={generation}
+              onGenerationChange={updateGeneration}
+              generator={generator}
+              token={token}
+              basePrompt={basePrompt}
+              characterPrompts={characterPrompts}
+              settings={settings}
+              onOpenSettings={openSettings}
+              blocker={blocker}
+              onGenerate={startGenerate}
             />
           </div>
         </div>

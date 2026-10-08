@@ -29,7 +29,7 @@ const NEGATIVE_FIELDS: Array<{ key: NegativeKey; label: string; help: string }> 
 ];
 
 export function PromptPreview({ basePrompt, characterPrompts, syntax, onSyntaxChange, onCopy, settings, onSettingsChange }: Props) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [negativeOpen, setNegativeOpen] = useState(false);
   const id = useId();
   return (

@@ -64,12 +64,16 @@ export function GeneratePanel({
             {generating && <span className="spinner spinner-small" aria-label="生成中" />}
           </button>
         </h2>
-        <span className="chip" title={`${FREE_LIMITS.maxSteps} steps 以下・1024×1024 相当以下・1枚`}>
-          V5 / Anlas 消費なしの範囲
-        </span>
+        <p className="gen-summary">
+          ベース {basePrompt ? `${basePrompt.split(', ').length}タグ` : 'なし'}
+          {' ／ '}キャラ {characterPrompts.length}人{' ／ '}ネガティブ {settings.negativePrompt.trim() ? 'あり' : 'なし'}
+        </p>
       </div>
 
       <div id={`${id}-body`} className="generate-body" hidden={!open}>
+      <span className="chip" title={`${FREE_LIMITS.maxSteps} steps 以下・1024×1024 相当以下・1枚`}>
+        V5 / Anlas 消費なしの範囲
+      </span>
       {!token.token && (
         <p className="notice">
           NovelAI のトークンが未設定です。
@@ -181,11 +185,6 @@ export function GeneratePanel({
         </div>
       </div>
 
-      <p className="gen-summary">
-        ベース {basePrompt ? `${basePrompt.split(', ').length}タグ` : 'なし'}
-        {' ／ '}キャラ {characterPrompts.length}人{' ／ '}ネガティブ {settings.negativePrompt.trim() ? 'あり' : 'なし'}
-      </p>
-
       <div className="gen-actions">
         {generating && (
           <button type="button" className="btn" onClick={generator.cancel}>
@@ -203,7 +202,9 @@ export function GeneratePanel({
         </button>
       </div>
       {blocker && token.token && <p className="hint gen-blocker">{blocker}</p>}
+      </div>
 
+      {/* 閉じていてもエラーは見えるようにする */}
       {error && (
         <div className="gen-error" role="alert">
           <p>{error}</p>
@@ -212,7 +213,6 @@ export function GeneratePanel({
           </button>
         </div>
       )}
-      </div>
     </section>
   );
 }
