@@ -15,9 +15,11 @@ interface Props {
   label: string;
   entries: DictEntry[];
   onAdd: (tag: string, weight: number) => void;
+  /** 候補の表示・非表示が切り替わったとき（表示中のカテゴリを強調するのに使う）。 */
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
-export function TagInput({ category, label, entries, onAdd }: Props) {
+export function TagInput({ category, label, entries, onAdd, onExpandedChange }: Props) {
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -36,6 +38,11 @@ export function TagInput({ category, label, entries, onAdd }: Props) {
     [open, entries, text, category],
   );
   const expanded = suggestions.length > 0;
+
+  useEffect(() => {
+    onExpandedChange?.(expanded);
+    return () => onExpandedChange?.(false);
+  }, [expanded, onExpandedChange]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -81,9 +88,28 @@ export function TagInput({ category, label, entries, onAdd }: Props) {
     };
   }, [expanded, suggestions]);
 
+  // 候補を出している間に外側を押したら、候補を閉じるだけにして背後の要素のクリックは起こさない
+  useEffect(() => {
+    if (!expanded) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.target instanceof Node && rowRef.current?.contains(e.target)) return;
+      setOpen(false);
+      const swallow = (ev: Event) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+      };
+      window.addEventListener('click', swallow, true);
+      window.setTimeout(() => window.removeEventListener('click', swallow, true), 500);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [expanded]);
+
+  // 追加したあとは候補を閉じる（入力欄を押す・打つと再び開く）
   const reset = () => {
     setText('');
     setActive(0);
+    setOpen(false);
     inputRef.current?.focus();
   };
 

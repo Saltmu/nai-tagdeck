@@ -36,6 +36,7 @@ export const CategorySection = memo(function CategorySection({
 }: Props) {
   const [open, toggleOpen] = useCategoryOpen(target, category);
   const [sorting, setSorting] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const canSort = tags.length > 1;
   const bodyId = useId();
   const label = categoryLabel(category);
@@ -45,7 +46,7 @@ export const CategorySection = memo(function CategorySection({
   const text = buildCategoryPrompt(tags, syntax);
 
   return (
-    <section className="card category">
+    <section className={`card category${suggesting ? ' is-suggesting' : ''}`}>
       <div className="card-head">
         <h3 className="card-title">
           <button
@@ -131,6 +132,7 @@ export const CategorySection = memo(function CategorySection({
             category={category}
             label={fullLabel}
             entries={entries}
+            onExpandedChange={setSuggesting}
             onAdd={(tag, weight) => dispatch({ type: 'add', target, category, tag, weight })}
           />
         )}

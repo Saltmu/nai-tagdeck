@@ -603,6 +603,18 @@ input[type='checkbox'] {
   flex: 1;
 }
 
+.category.is-suggesting {
+  position: relative;
+  z-index: 19;
+  /* 候補を出している間、このカテゴリ以外を薄いグレーで覆って強調する */
+  box-shadow: 0 0 0 100vmax rgba(128, 128, 128, 0.3);
+}
+
+/* 候補表示中は、そのカテゴリ以外のボタン等にホバー・フォーカス風の反応を起こさせない */
+body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label, summary):not(.is-suggesting *) {
+  pointer-events: none;
+}
+
 .suggest-popup {
   position: absolute;
   left: 0;
