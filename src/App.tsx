@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
 import { SettingsView } from './components/SettingsView';
@@ -14,8 +14,9 @@ import { useToken } from './hooks/useToken';
 import { useImages } from './hooks/useImages';
 import { useGenerator } from './hooks/useGenerator';
 import { usePresets } from './hooks/usePresets';
-import { mergePresets } from './lib/presets';
-import type { Backup } from './lib/backup';
+import { useBackupTransfer } from './hooks/useBackupTransfer';
+import { useGenerationControls } from './hooks/useGenerationControls';
+import { useLatestImageNotice } from './hooks/useLatestImageNotice';
 import { buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { sizeOf } from './lib/generation';
@@ -70,84 +71,15 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     [updateGeneration, show],
   );
 
-  const getBackup = useCallback(
-    (): Backup => ({
-      dictionary: dictionary.entries,
-      presets: presets.presets,
-      workspace,
-      settings,
-      generation,
-    }),
-    [dictionary.entries, presets.presets, workspace, settings, generation],
-  );
-
-  const importBackup = useCallback(
-    async (data: Backup) => {
-      await dictionary.importEntries(data.dictionary, 'merge');
-      presets.setPresets(mergePresets(presets.presets, data.presets));
-      presets.setActiveId(null);
-      dispatch({ type: 'replace', workspace: data.workspace });
-      updateSettings(data.settings);
-      updateGeneration(data.generation);
-    },
-    [dictionary, presets, dispatch, updateSettings, updateGeneration],
-  );
-
-  // ---- 生成（ヘッダー・生成パネル・Ctrl+Enter の共通処理） ----
-  const blocker = !token.token
-    ? 'トークンが未設定です'
-    : !basePrompt
-      ? 'ベースに ON のタグがありません'
-      : null;
-
-  const startGenerate = useCallback(() => {
-    if (generator.generating) return;
-    if (!token.token) {
-      show('トークンが未設定です。設定タブで入力してください', 3500);
-      setTab('settings');
-      return;
-    }
-    if (!basePrompt) {
-      show('ベースに ON のタグがありません', 3000);
-      return;
-    }
-    void generator.generate({
-      token: token.token,
-      prompt: basePrompt,
-      negative: settings.negativePrompt,
-      characters: characterPrompts.map((c) => ({ prompt: c.prompt, negative: settings.characterNegativePrompt })),
-      settings: generation,
-    });
-  }, [generator, token.token, basePrompt, characterPrompts, settings, generation, show]);
-
-  // Ctrl+Enter（Mac は ⌘+Enter）でどこからでも生成する
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) {
-        e.preventDefault();
-        startGenerate();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [startGenerate]);
-
-  // 生成パネルが見えていないとき（狭い画面の編集タブ）でも失敗に気づけるようにする
-  useEffect(() => {
-    if (generator.error) show(generator.error, 6000);
-  }, [generator.error, show]);
-
-  // 新しい画像が届いたら、編集タブの右下に小さく知らせる
+  const { getBackup, importBackup } = useBackupTransfer({
+    dictionary, presets, workspace, dispatch, settings, updateSettings, generation, updateGeneration,
+  });
+  const openSettings = useCallback(() => setTab('settings'), []);
+  const { blocker, startGenerate } = useGenerationControls({
+    generator, token: token.token, basePrompt, characterPrompts, settings, generation, show, onOpenSettings: openSettings,
+  });
   const latest = imageStore.images[0];
-  const [unseenId, setUnseenId] = useState<string | null>(null);
-  const lastSeenLatest = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (latest && latest.id !== lastSeenLatest.current) setUnseenId(latest.id);
-    lastSeenLatest.current = latest?.id;
-  }, [latest]);
-  useEffect(() => {
-    if (tab === 'generate') setUnseenId(null);
-  }, [tab]);
+  const { unseenId, dismiss } = useLatestImageNotice(latest?.id, tab === 'generate');
 
   const showWorkbench = tab === 'editor' || tab === 'generate';
 
@@ -223,7 +155,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               basePrompt={basePrompt}
               characterPrompts={characterPrompts}
               settings={settings}
-              onOpenSettings={() => setTab('settings')}
+              onOpenSettings={openSettings}
               blocker={blocker}
               onGenerate={startGenerate}
             />
@@ -260,7 +192,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       </main>
 
       {tab === 'editor' && latest && unseenId === latest.id && (
-        <LatestPreview image={latest} onOpen={() => setTab('generate')} onDismiss={() => setUnseenId(null)} />
+        <LatestPreview image={latest} onOpen={() => setTab('generate')} onDismiss={dismiss} />
       )}
 
       <div className="toast" role="status" aria-live="polite">
