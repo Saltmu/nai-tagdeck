@@ -680,6 +680,25 @@ const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   ['weather', 'cloudy', 'くもり空 曇り空 くもりぞら'],
   ['weather', 'heavy rain', '大雨 おおあめ'],
   ['weather', 'winter', '冬 ふゆ'],
+  // 公式UIの UC プリセット「heavy」のタグ（film grain と chromatic aberration はエフェクトに登録済み）
+  ['negative', 'nsfw', '成人向け R18 せいじんむけ'],
+  ['negative', 'lowres', '低解像度 ていかいぞうど'],
+  ['negative', 'artistic error', '作画ミス 作画崩れ さくがみす'],
+  ['negative', 'scan artifacts', 'スキャンノイズ'],
+  ['negative', 'worst quality', '最低品質 さいていひんしつ'],
+  ['negative', 'bad quality', '低品質 ていひんしつ'],
+  ['negative', 'jpeg artifacts', 'JPEGノイズ 圧縮ノイズ あっしゅく'],
+  ['negative', 'very displeasing', '見栄えが悪い みばえ'],
+  ['negative', 'dithering', 'ディザリング'],
+  ['negative', 'halftone', '網点 あみてん ハーフトーン'],
+  ['negative', 'screentone', 'スクリーントーン'],
+  ['negative', 'multiple views', '複数視点 ふくすうしてん'],
+  ['negative', 'logo', 'ロゴ'],
+  ['negative', 'too many watermarks', '透かし ウォーターマーク すかし'],
+  ['negative', 'negative space', '余白 よはく'],
+  ['negative', 'blank page', '白紙 はくし'],
+  // 公式UIがキャラクターごとに付けるネガティブ
+  ['negative', 'aliasing', 'ジャギー エイリアシング'],
 ];
 
 export function sampleDictionary(): DictEntry[] {

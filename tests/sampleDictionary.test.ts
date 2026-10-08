@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { restoreInitialDictionary, sampleDictionary } from '../src/lib/sampleDictionary';
 import { normalize } from '../src/lib/suggest';
 import type { DictEntry } from '../src/types';
+import { tagsFromText } from '../src/lib/workspace';
+import { DEFAULT_NEGATIVE } from '../src/lib/novelai';
 
 describe('初期辞書の復元', () => {
   it('空の辞書にすべての初期タグと体型タグを追加する', () => {
@@ -56,5 +58,16 @@ describe('初期辞書の復元', () => {
     for (const entry of oldEntries) {
       expect(restored.filter((item) => item.tag === entry.tag)).toEqual([entry]);
     }
+  });
+});
+
+describe('初期辞書のネガティブ', () => {
+  it('既定のネガティブのタグをすべて含む（ネガティブかエフェクトとして）', () => {
+    const entries = sampleDictionary();
+    for (const tag of tagsFromText(DEFAULT_NEGATIVE).map((t) => t.tag)) {
+      const entry = entries.find((e) => normalize(e.tag) === normalize(tag));
+      expect(entry?.category, tag).toMatch(/^(negative|effect)$/);
+    }
+    expect(entries.find((e) => e.tag === 'nsfw')?.category).toBe('negative');
   });
 });
