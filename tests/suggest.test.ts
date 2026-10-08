@@ -82,3 +82,10 @@ describe('matchesFilter', () => {
     expect(matchesFilter(dict[0]!, 'eyes')).toBe(false);
   });
 });
+
+describe('suggest: exact match', () => {
+  it('puts the tag typed exactly first, then finds prefixed tags by the part after #', () => {
+    const entries = [entry('hugging own legs', '', 'pose', 0), entry('hug', '', 'pose', 5), entry('source#hug', '', 'pose', 6)];
+    expect(suggest(entries, 'hug').map((s) => s.entry.tag)).toEqual(['hug', 'hugging own legs', 'source#hug']);
+  });
+});

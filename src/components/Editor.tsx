@@ -192,8 +192,8 @@ export function Editor({
       <p className="hint">
         複数のキャラクターを描くときは、タブ右端の「＋」でキャラクターを追加し、キャラクターごとにタグを分けて登録します（V4 以降のキャラクタープロンプト）。
         人数（2girls など）や背景・画風はベースに書き、各キャラは「被写体」の girl / boy / other ボタンで種類を選びます（人数は付けません）。
-        キャラ同士の動作もそれぞれのキャラに書き、する側に source#、される側に target#、お互いなら両方に mutual# を付けます（例: source#hug と
-        target#hug、両方に mutual#holding hands）。
+        キャラ同士の動作はそれぞれのキャラの「ポーズ」に書き、する側に source#、される側に target#、お互いなら両方に mutual# を付けます（例: source#hug と
+        target#hug、両方に mutual#holding hands）。「ポーズ」の入力欄の上のボタンで付けられます。
       </p>
 
       <p className="hint">

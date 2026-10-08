@@ -101,6 +101,8 @@ export function CharacterCard({
             onCopy={onCopy}
             onRegister={onRegister}
             quickPicks={key === 'subject' ? CHARACTER_KINDS : undefined}
+            title={key === 'subject' ? '被写体' : undefined}
+            interactions={key === 'pose'}
           />
         ))}
       </div>

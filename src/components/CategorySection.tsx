@@ -22,6 +22,10 @@ interface Props {
   onRegister: (tag: WorkTag, category: CategoryKey) => void;
   /** 先頭に並べる択一ボタン（キャラの girl / boy / other など）。押し直すと外す。 */
   quickPicks?: readonly string[];
+  /** カテゴリ名の代わりに出す見出し（キャラ側の「被写体」など）。 */
+  title?: string;
+  /** 入力欄にキャラ同士の動作（source# など）のボタンを出す。 */
+  interactions?: boolean;
 }
 
 export const CategorySection = memo(function CategorySection({
@@ -36,13 +40,15 @@ export const CategorySection = memo(function CategorySection({
   onCopy,
   onRegister,
   quickPicks,
+  title,
+  interactions,
 }: Props) {
   const [open, toggleOpen] = useCategoryOpen(target, category);
   const [sorting, setSorting] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const canSort = tags.length > 1;
   const bodyId = useId();
-  const label = categoryLabel(category);
+  const label = title ?? categoryLabel(category);
   const fullLabel = scopeLabel ? `${scopeLabel} / ${label}` : label;
   const enabledCount = tags.filter((t) => t.enabled).length;
   const allOn = tags.length > 0 && enabledCount === tags.length;
@@ -154,6 +160,7 @@ export const CategorySection = memo(function CategorySection({
             label={fullLabel}
             entries={entries}
             onExpandedChange={setSuggesting}
+            interactions={interactions}
             onAdd={(tag, weight) => dispatch({ type: 'add', target, category, tag, weight })}
           />
         )}

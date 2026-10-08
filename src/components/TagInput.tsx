@@ -2,9 +2,10 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 're
 import type { CategoryKey, DictEntry } from '../types';
 import { categoryLabel } from '../lib/categories';
 import { parseTagList } from '../lib/prompt';
-import { suggest } from '../lib/suggest';
+import { normalize, suggest } from '../lib/suggest';
 import { visibleBounds } from '../lib/browser';
 import { choosePlacement, type Placement } from '../lib/placement';
+import { INTERACTIONS, splitInteraction, withInteraction, type Interaction } from '../lib/interaction';
 
 /** 候補リストの高さの上限（18rem）と、入力欄との間隔。 */
 const POPUP_MAX = 288;
@@ -17,13 +18,17 @@ interface Props {
   onAdd: (tag: string, weight: number) => void;
   /** 候補の表示・非表示が切り替わったとき（表示中のカテゴリを強調するのに使う）。 */
   onExpandedChange?: (expanded: boolean) => void;
+  /** キャラ同士の動作（source# / target# / mutual#）を付けるボタンを出す。 */
+  interactions?: boolean;
 }
 
-export function TagInput({ category, label, entries, onAdd, onExpandedChange }: Props) {
+export function TagInput({ category, label, entries, onAdd, onExpandedChange, interactions }: Props) {
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const [picked, setPicked] = useState<Interaction | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const areaRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -33,10 +38,23 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange }: 
     maxHeight: POPUP_MAX,
   });
 
-  const suggestions = useMemo(
-    () => (open && !text.includes(',') ? suggest(entries, text, { category, showCategoryOnEmpty: true }) : []),
-    [open, entries, text, category],
-  );
+  // 打ち込んだ "source#…" も読み取り、# より後ろで候補を探す
+  const typed = interactions ? splitInteraction(text) : { interaction: null, body: text };
+  const interaction = typed.interaction ?? picked;
+  const query = typed.body;
+  const suggestions = useMemo(() => {
+    if (!open || query.includes(',')) return [];
+    const list = suggest(entries, query, { category, showCategoryOnEmpty: true });
+    if (!interaction) return list;
+    // 接頭辞を付け替えると "hug" と "target#hug" が同じになるので1つにまとめる
+    const seen = new Set<string>();
+    return list.filter(({ entry }) => {
+      const key = normalize(withInteraction(entry.tag, interaction));
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [open, entries, query, category, interaction]);
   const expanded = suggestions.length > 0;
 
   useEffect(() => {
@@ -92,7 +110,7 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange }: 
   useEffect(() => {
     if (!expanded) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (e.target instanceof Node && rowRef.current?.contains(e.target)) return;
+      if (e.target instanceof Node && areaRef.current?.contains(e.target)) return;
       setOpen(false);
       const swallow = (ev: Event) => {
         ev.stopPropagation();
@@ -108,13 +126,14 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange }: 
   // 追加したあとは候補を閉じる（入力欄を押す・打つと再び開く）
   const reset = () => {
     setText('');
+    setPicked(null);
     setActive(0);
     setOpen(false);
     inputRef.current?.focus();
   };
 
   const pick = (entry: DictEntry) => {
-    onAdd(entry.tag, entry.default_weight);
+    onAdd(withInteraction(entry.tag, interaction), entry.default_weight);
     reset();
   };
 
@@ -122,101 +141,128 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange }: 
   const addRaw = () => {
     const parsed = parseTagList(text);
     if (parsed.length === 0) return;
-    for (const p of parsed) onAdd(p.tag, p.weight);
+    for (const p of parsed) onAdd(withInteraction(p.tag, picked ?? splitInteraction(p.tag).interaction), p.weight);
     reset();
   };
 
   return (
-    <div className="tag-input" ref={rowRef}>
-      <input
-        ref={inputRef}
-        type="text"
-        role="combobox"
-        aria-label={`${label}にタグを追加`}
-        aria-autocomplete="list"
-        aria-expanded={expanded}
-        aria-controls={listId}
-        aria-activedescendant={expanded ? `${listId}-${active}` : undefined}
-        placeholder="タグ・日本語名・よみ"
-        autoComplete="off"
-        autoCapitalize="off"
-        spellCheck={false}
-        enterKeyHint="enter"
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          setActive(0);
-          setOpen(true);
-        }}
-        onFocus={() => {
-          setActive(0);
-          setOpen(true);
-        }}
-        onClick={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onKeyDown={(e) => {
-          // IME 変換確定の Enter は無視する
-          if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-            if (!expanded) {
-              setOpen(true);
-              return;
-            }
-            e.preventDefault();
-            const delta = e.key === 'ArrowDown' ? 1 : -1;
-            setActive((i) => (i + delta + suggestions.length) % suggestions.length);
-          } else if (e.key === 'Enter') {
-            e.preventDefault();
-            const chosen = suggestions[active];
-            if (chosen) pick(chosen.entry);
-            else addRaw();
-          } else if (e.key === 'Escape') {
-            setOpen(false);
-          }
-        }}
-      />
-      <button
-        type="button"
-        className="btn"
-        disabled={!text.trim()}
-        title="入力した文字をそのままタグとして追加（カンマ区切り可）"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={addRaw}
-      >
-        追加
-      </button>
-
-      {/* 押してもフォーカスを入力欄に残す（閉じたあともそのまま入力を続けられる） */}
-      <div
-        ref={popupRef}
-        className={`suggest-popup is-${layout.placement}`}
-        style={{ maxHeight: layout.maxHeight }}
-        hidden={!expanded}
-        onMouseDown={(e) => e.preventDefault()}
-      >
-        <div className="suggest-head">
-          <span>候補 {suggestions.length}件</span>
-          <button type="button" className="btn btn-small" aria-label="候補を閉じる" onClick={() => setOpen(false)}>
-            閉じる ✕
-          </button>
-        </div>
-        <ul ref={listRef} id={listId} role="listbox" className="suggestions">
-          {suggestions.map(({ entry }, i) => (
-            <li
-              key={entry.id}
-              id={`${listId}-${i}`}
-              role="option"
-              aria-selected={i === active}
-              className="suggestion"
-              onMouseEnter={() => setActive(i)}
-              onClick={() => pick(entry)}
+    <div ref={areaRef}>
+      {interactions && (
+        // 押してもフォーカスを入力欄に残す
+        <div className="interaction-picks" role="group" aria-label="キャラ同士の動作" onMouseDown={(e) => e.preventDefault()}>
+          <span className="interaction-label">キャラ同士</span>
+          {INTERACTIONS.map((it) => (
+            <button
+              key={it.value}
+              type="button"
+              className={`btn btn-small${interaction === it.value ? ' btn-primary' : ''}`}
+              aria-pressed={interaction === it.value}
+              title={`${it.value}# を付けて追加します（${it.label}）`}
+              onClick={() => {
+                const next = interaction === it.value ? null : it.value;
+                // 打ち込んだ接頭辞はボタンの選択に置き換える
+                setText(typed.body);
+                setPicked(next);
+                setOpen(true);
+                inputRef.current?.focus();
+              }}
             >
-              <span className="suggestion-tag">{entry.tag}</span>
-              {entry.alias && <span className="suggestion-alias">{entry.alias}</span>}
-              {entry.category !== category && <span className="chip">{categoryLabel(entry.category)}</span>}
-            </li>
+              {it.value}#<span className="interaction-sub">{it.label}</span>
+            </button>
           ))}
-        </ul>
+        </div>
+      )}
+      <div className="tag-input" ref={rowRef}>
+        <input
+          ref={inputRef}
+          type="text"
+          role="combobox"
+          aria-label={`${label}にタグを追加`}
+          aria-autocomplete="list"
+          aria-expanded={expanded}
+          aria-controls={listId}
+          aria-activedescendant={expanded ? `${listId}-${active}` : undefined}
+          placeholder={interaction ? `${interaction}# に続けるタグ・日本語名・よみ` : 'タグ・日本語名・よみ'}
+          autoComplete="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          enterKeyHint="enter"
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setActive(0);
+            setOpen(true);
+          }}
+          onFocus={() => {
+            setActive(0);
+            setOpen(true);
+          }}
+          onClick={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          onKeyDown={(e) => {
+            // IME 変換確定の Enter は無視する
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              if (!expanded) {
+                setOpen(true);
+                return;
+              }
+              e.preventDefault();
+              const delta = e.key === 'ArrowDown' ? 1 : -1;
+              setActive((i) => (i + delta + suggestions.length) % suggestions.length);
+            } else if (e.key === 'Enter') {
+              e.preventDefault();
+              const chosen = suggestions[active];
+              if (chosen) pick(chosen.entry);
+              else addRaw();
+            } else if (e.key === 'Escape') {
+              setOpen(false);
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="btn"
+          disabled={!text.trim()}
+          title="入力した文字をそのままタグとして追加（カンマ区切り可）"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={addRaw}
+        >
+          追加
+        </button>
+
+        {/* 押してもフォーカスを入力欄に残す（閉じたあともそのまま入力を続けられる） */}
+        <div
+          ref={popupRef}
+          className={`suggest-popup is-${layout.placement}`}
+          style={{ maxHeight: layout.maxHeight }}
+          hidden={!expanded}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <div className="suggest-head">
+            <span>候補 {suggestions.length}件</span>
+            <button type="button" className="btn btn-small" aria-label="候補を閉じる" onClick={() => setOpen(false)}>
+              閉じる ✕
+            </button>
+          </div>
+          <ul ref={listRef} id={listId} role="listbox" className="suggestions">
+            {suggestions.map(({ entry }, i) => (
+              <li
+                key={entry.id}
+                id={`${listId}-${i}`}
+                role="option"
+                aria-selected={i === active}
+                className="suggestion"
+                onMouseEnter={() => setActive(i)}
+                onClick={() => pick(entry)}
+              >
+                <span className="suggestion-tag">{withInteraction(entry.tag, interaction)}</span>
+                {entry.alias && <span className="suggestion-alias">{entry.alias}</span>}
+                {entry.category !== category && <span className="chip">{categoryLabel(entry.category)}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </div>
   );

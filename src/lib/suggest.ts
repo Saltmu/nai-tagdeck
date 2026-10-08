@@ -33,8 +33,8 @@ function matchEntry(entry: DictEntry, q: string): MatchKind | null {
   if (normalize(entry.alias).startsWith(q) || aliasTokens(entry.alias).some((a) => a.startsWith(q))) {
     return 'alias';
   }
-  // "hair" で "long hair" も引けるよう、2語目以降の前方一致を最後に回す
-  if (tag.split(' ').some((w) => w.startsWith(q))) return 'word';
+  // "hair" で "long hair" も、"hug" で "source#hug" も引けるよう、2語目以降の前方一致を最後に回す
+  if (tag.split(/[ #]/).some((w) => w.startsWith(q))) return 'word';
   return null;
 }
 
@@ -67,6 +67,9 @@ export function suggest(
   }
 
   hits.sort((a, b) => {
+    // 打ったとおりのタグを最初に出す
+    const byExact = Number(normalize(b.entry.tag) === q) - Number(normalize(a.entry.tag) === q);
+    if (byExact !== 0) return byExact;
     const byRank = RANK[a.matchedBy] - RANK[b.matchedBy];
     if (byRank !== 0) return byRank;
     if (category) {
