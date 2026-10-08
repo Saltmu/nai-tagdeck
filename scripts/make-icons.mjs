@@ -1,40 +1,21 @@
 // アプリアイコン（PNG）を生成する。依存なし: node scripts/make-icons.mjs
-// 図柄: 紫の背景に、チェックボックスとタグの行が並んだカード（「タグを ON/OFF する」を表す）。
+// 図柄: 採用ロゴ02のチェックタグ。紫背景・白いタグ・紫のチェック。
 import { deflateSync } from 'node:zlib';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
 const BG = [79, 70, 229];
-const CARD_BACK = [165, 160, 255];
-const CARD = [255, 255, 255];
-const ACCENT = [79, 70, 229];
-const MUTED = [205, 208, 222];
-
-/** 角丸長方形の符号付き距離（内側が負）。座標は 0〜1 の正規化。 */
-function roundRect(x, y, cx, cy, w, h, r) {
-  const qx = Math.abs(x - cx) - w / 2 + r;
-  const qy = Math.abs(y - cy) - h / 2 + r;
-  return Math.min(Math.max(qx, qy), 0) + Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) - r;
-}
+const TAG = [255, 255, 255];
 
 function colorAt(x, y) {
-  let c = BG;
-  if (roundRect(x, y, 0.55, 0.45, 0.5, 0.56, 0.06) < 0) c = CARD_BACK;
-  if (roundRect(x, y, 0.47, 0.54, 0.5, 0.56, 0.06) < 0) {
-    c = CARD;
-    const rows = [0.39, 0.54, 0.69];
-    rows.forEach((ry, i) => {
-      const on = i !== 1; // 2行目だけ OFF
-      if (roundRect(x, y, 0.3, ry, 0.08, 0.08, 0.015) < 0) c = on ? ACCENT : MUTED;
-      // チェックマーク（ON の行だけ）
-      if (on) {
-        const d1 = distToSegment(x, y, 0.28, ry, 0.295, ry + 0.017);
-        const d2 = distToSegment(x, y, 0.295, ry + 0.017, 0.322, ry - 0.02);
-        if (Math.min(d1, d2) < 0.008) c = CARD;
-      }
-      if (roundRect(x, y, 0.5, ry, 0.24, 0.04, 0.02) < 0) c = on ? ACCENT : MUTED;
-    });
-  }
-  return c;
+  // Map to the header mark's 48 × 48 grid, at 80% scale for maskable safe area.
+  const px = ((x - 0.5) / 0.8) * 48 + 24;
+  const py = ((y - 0.5) / 0.8) * 48 + 24;
+  // Same outline as public/brand/icon.svg: M7 9h21l14 15-14 15H7Z.
+  if (px < 7 || py < 9 || py > 39 || px > 42 - (14 / 15) * Math.abs(py - 24)) return BG;
+  if (Math.hypot(px - 13, py - 24) <= 3) return BG;
+  // Same rounded check: m22 24 5 5 8-10, stroke width 3.
+  if (Math.min(distToSegment(px, py, 22, 24, 27, 29), distToSegment(px, py, 27, 29, 35, 19)) <= 1.5) return BG;
+  return TAG;
 }
 
 function distToSegment(px, py, ax, ay, bx, by) {
