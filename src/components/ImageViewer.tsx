@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
 import { timeStamp } from '../lib/browser';
 
@@ -22,6 +22,140 @@ const EXT: Record<string, string> = { 'image/png': 'png', 'image/webp': 'webp', 
 
 export function imageFileName(image: GeneratedImage): string {
   return `nai-tagdeck-${timeStamp(new Date(image.createdAt))}-${image.seed}.${EXT[image.blob.type] ?? 'png'}`;
+}
+
+interface View {
+  s: number;
+  x: number;
+  y: number;
+}
+const MIN_SCALE = 1;
+const MAX_SCALE = 8;
+const FIT: View = { s: 1, x: 0, y: 0 };
+
+const clampView = (v: View, w: number, h: number): View => {
+  const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.s));
+  const mx = ((s - 1) * w) / 2;
+  const my = ((s - 1) * h) / 2;
+  return { s, x: Math.min(mx, Math.max(-mx, v.x)), y: Math.min(my, Math.max(-my, v.y)) };
+};
+
+// 固定サイズの枠の中で画像をピンチ・ホイール・ダブルタップで拡大縮小し、ドラッグで動かす
+function ZoomStage({ src, alt }: { src: string; alt: string }) {
+  const stage = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState<View>(FIT);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const lastTap = useRef(0);
+  const moved = useRef(false);
+
+  useEffect(() => setView(FIT), [src]);
+
+  // cx, cy: 枠の中心を原点にした拡大の基準点
+  const zoomAt = (ns: number, cx: number, cy: number) => {
+    const el = stage.current;
+    if (!el) return;
+    const v = viewRef.current;
+    const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, ns));
+    const k = s / v.s;
+    setView(clampView({ s, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k }, el.clientWidth, el.clientHeight));
+  };
+
+  const center = (clientX: number, clientY: number) => {
+    const r = stage.current!.getBoundingClientRect();
+    return { x: clientX - r.left - r.width / 2, y: clientY - r.top - r.height / 2 };
+  };
+
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const c = center(e.clientX, e.clientY);
+      zoomAt(viewRef.current.s * Math.exp(-e.deltaY * 0.0015), c.x, c.y);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // 既に離されたポインタなどは無視
+    }
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    moved.current = false;
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const prev = pointers.current.get(e.pointerId);
+    if (!prev) return;
+    const el = e.currentTarget;
+    const next = { x: e.clientX, y: e.clientY };
+    if (pointers.current.size === 1) {
+      const dx = next.x - prev.x;
+      const dy = next.y - prev.y;
+      if (dx || dy) moved.current = true;
+      const v = viewRef.current;
+      setView(clampView({ ...v, x: v.x + dx, y: v.y + dy }, el.clientWidth, el.clientHeight));
+    } else if (pointers.current.size === 2) {
+      moved.current = true;
+      const other = [...pointers.current.entries()].find(([id]) => id !== e.pointerId)![1];
+      const before = Math.hypot(prev.x - other.x, prev.y - other.y);
+      const after = Math.hypot(next.x - other.x, next.y - other.y);
+      if (before > 0) {
+        const c = center((next.x + other.x) / 2, (next.y + other.y) / 2);
+        zoomAt(viewRef.current.s * (after / before), c.x, c.y);
+      }
+    }
+    pointers.current.set(e.pointerId, next);
+  };
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size > 0 || moved.current) return;
+    // 動かさずに離した = タップ。素早く2回でズーム切り替え
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      lastTap.current = 0;
+      if (viewRef.current.s > 1.01) setView(FIT);
+      else {
+        const c = center(e.clientX, e.clientY);
+        zoomAt(2.5, c.x, c.y);
+      }
+    } else lastTap.current = now;
+  };
+
+  return (
+    <div
+      ref={stage}
+      className="viewer-stage"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
+      <img
+        src={src}
+        alt={alt}
+        className="viewer-img"
+        draggable={false}
+        style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})` }}
+      />
+      {view.s > 1.01 && (
+        <button
+          type="button"
+          className="btn viewer-zoom-reset"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setView(FIT)}
+        >
+          {Math.round(view.s * 100)}% 元に戻す
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload }: Props) {
@@ -67,7 +201,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
       }}
     >
       <div className="viewer-body">
-        <img src={image.url} alt={`生成画像（シード ${image.seed}）`} className="viewer-img" />
+        <ZoomStage src={image.url} alt={`生成画像（シード ${image.seed}）`} />
         <div className="viewer-side">
           <dl className="viewer-meta">
             <div>
