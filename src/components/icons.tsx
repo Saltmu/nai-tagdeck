@@ -68,3 +68,57 @@ export function SettingsIcon() {
     </svg>
   );
 }
+
+/** 前へ（左向き山形）。 */
+export function PrevIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M12.5 4.5L7 10l5.5 5.5" {...stroke} />
+    </svg>
+  );
+}
+
+/** 次へ（右向き山形）。 */
+export function NextIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M7.5 4.5L13 10l-5.5 5.5" {...stroke} />
+    </svg>
+  );
+}
+
+/** 保存（下向き矢印とトレイ）。 */
+export function DownloadIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M10 3.5v9M6 8.8l4 3.9 4-3.9M3.8 13.5v2.2c0 .5.4.8.8.8h10.8c.4 0 .8-.3.8-.8v-2.2" {...stroke} />
+    </svg>
+  );
+}
+
+/** 削除（ごみ箱）。 */
+export function TrashIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M3.5 5.5h13M8 5.5V4c0-.4.3-.7.7-.7h2.6c.4 0 .7.3.7.7v1.5M5.2 5.5l.7 10.3c0 .5.4.9.9.9h6.4c.5 0 .9-.4.9-.9l.7-10.3M8.4 8.6v5.2M11.6 8.6v5.2" {...stroke} />
+    </svg>
+  );
+}
+
+/** 閉じる（×）。 */
+export function CloseIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M5 5l10 10M15 5L5 15" {...stroke} />
+    </svg>
+  );
+}
+
+/** 完了（チェック）。 */
+export function CheckIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M4.5 10.5l3.5 3.5 7.5-8" {...stroke} />
+    </svg>
+  );
+}

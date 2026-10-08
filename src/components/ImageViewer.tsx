@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
 import { timeStamp } from '../lib/browser';
+import { CheckIcon, CloseIcon, CopyIcon, DownloadIcon, NextIcon, PrevIcon, TrashIcon } from './icons';
 
 interface Props {
   image: GeneratedImage;
@@ -160,6 +161,14 @@ function ZoomStage({ src, alt }: { src: string; alt: string }) {
 
 export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const [seedCopied, setSeedCopied] = useState(false);
+
+  useEffect(() => setSeedCopied(false), [image]);
+  useEffect(() => {
+    if (!seedCopied) return;
+    const t = setTimeout(() => setSeedCopied(false), 1500);
+    return () => clearTimeout(t);
+  }, [seedCopied]);
 
   useEffect(() => {
     const d = dialog.current;
@@ -206,7 +215,21 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
           <dl className="viewer-meta">
             <div>
               <dt>シード</dt>
-              <dd>{image.seed}</dd>
+              <dd className="viewer-seed">
+                {image.seed}
+                <button
+                  type="button"
+                  className="icon-btn viewer-seed-copy"
+                  aria-label="このシードを次の生成で使う"
+                  title="このシードを次の生成で使う"
+                  onClick={() => {
+                    onUseSeed(image.seed);
+                    setSeedCopied(true);
+                  }}
+                >
+                  {seedCopied ? <CheckIcon /> : <CopyIcon />}
+                </button>
+              </dd>
             </div>
             <div>
               <dt>サイズ</dt>
@@ -228,38 +251,22 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
               </p>
             ))}
           </details>
-          <div className="viewer-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={onDownload}
-            >
-              保存
+          <div className="viewer-toolbar">
+            <button type="button" className="icon-btn" disabled={!hasPrev} onClick={onPrev} aria-label="新しい画像へ" title="新しい画像へ">
+              <PrevIcon />
             </button>
-            <button
-              type="button"
-              className="btn"
-              title="次の生成でこのシードを使います"
-              onClick={() => {
-                onUseSeed(image.seed);
-                dialog.current?.close();
-              }}
-            >
-              このシードを使う
+            <button type="button" className="icon-btn" disabled={!hasNext} onClick={onNext} aria-label="古い画像へ" title="古い画像へ">
+              <NextIcon />
             </button>
-            <button type="button" className="btn btn-danger" onClick={onRemove}>
-              削除
+            <span className="viewer-toolbar-gap" />
+            <button type="button" className="icon-btn" onClick={onDownload} aria-label="保存" title="保存">
+              <DownloadIcon />
             </button>
-          </div>
-          <div className="viewer-nav">
-            <button type="button" className="btn" disabled={!hasPrev} onClick={onPrev} aria-label="新しい画像へ">
-              ← 新しい
+            <button type="button" className="icon-btn icon-btn-danger" onClick={onRemove} aria-label="削除" title="削除">
+              <TrashIcon />
             </button>
-            <button type="button" className="btn" disabled={!hasNext} onClick={onNext} aria-label="古い画像へ">
-              古い →
-            </button>
-            <button type="button" className="btn" onClick={() => dialog.current?.close()}>
-              閉じる
+            <button type="button" className="icon-btn" onClick={() => dialog.current?.close()} aria-label="閉じる" title="閉じる">
+              <CloseIcon />
             </button>
           </div>
         </div>
