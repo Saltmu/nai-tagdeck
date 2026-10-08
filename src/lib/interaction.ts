@@ -21,3 +21,12 @@ export function withInteraction(tag: string, interaction: Interaction | null): s
   if (!interaction) return tag;
   return `${interaction}#${splitInteraction(tag).body.trim()}`;
 }
+
+const PAIR: Record<Interaction, Interaction> = { source: 'target', target: 'source', mutual: 'mutual' };
+
+/** 相手のキャラに付ける対のタグ（source#hug → target#hug、mutual# はそのまま）。接頭辞が無ければ null。 */
+export function pairedInteraction(tag: string): string | null {
+  const { interaction, body } = splitInteraction(tag);
+  if (!interaction || !body.trim()) return null;
+  return withInteraction(body, PAIR[interaction]);
+}

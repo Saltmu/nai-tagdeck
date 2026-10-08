@@ -77,6 +77,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 function AppDialog({ request, onDone }: { request: Request; onDone: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const primary = useRef<HTMLButtonElement>(null);
   const [value, setValue] = useState(request.kind === 'prompt' ? request.defaultValue : '');
   const settled = useRef(false);
   const id = useId();
@@ -84,7 +85,9 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
   useEffect(() => {
     const d = dialog.current;
     if (d && !d.open) d.showModal();
+    // autoFocus は showModal より先に効いてしまい、先頭の「キャンセル」にフォーカスが移るので、開いた後で当て直す
     if (request.kind === 'prompt') input.current?.select();
+    else primary.current?.focus();
   }, [request.kind]);
 
   // choice: choose で押されたボタンの値（Enter で主ボタンを押したときは省略）
@@ -144,7 +147,7 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
                 key={c.value}
                 type={c.primary ? 'submit' : 'button'}
                 className={`btn${c.danger ? ' btn-danger' : c.primary ? ' btn-primary' : ''}`}
-                autoFocus={c.primary}
+                ref={c.primary ? primary : undefined}
                 onClick={(e) => {
                   e.preventDefault();
                   settle(true, c.value);
@@ -154,7 +157,7 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
               </button>
             ))
           ) : (
-            <button type="submit" className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} autoFocus={request.kind !== 'prompt'}>
+            <button type="submit" className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} ref={primary}>
               {okLabel}
             </button>
           )}

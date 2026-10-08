@@ -26,6 +26,8 @@ interface Props {
   title?: string;
   /** 入力欄にキャラ同士の動作（source# など）のボタンを出す。 */
   interactions?: boolean;
+  /** 入力欄からタグを追加した直後に呼ぶ。 */
+  onAdded?: (tag: string) => void;
 }
 
 export const CategorySection = memo(function CategorySection({
@@ -42,6 +44,7 @@ export const CategorySection = memo(function CategorySection({
   quickPicks,
   title,
   interactions,
+  onAdded,
 }: Props) {
   const [open, toggleOpen] = useCategoryOpen(target, category);
   const [sorting, setSorting] = useState(false);
@@ -161,7 +164,10 @@ export const CategorySection = memo(function CategorySection({
             entries={entries}
             onExpandedChange={setSuggesting}
             interactions={interactions}
-            onAdd={(tag, weight) => dispatch({ type: 'add', target, category, tag, weight })}
+            onAdd={(tag, weight) => {
+              dispatch({ type: 'add', target, category, tag, weight });
+              onAdded?.(tag);
+            }}
           />
         )}
       </div>

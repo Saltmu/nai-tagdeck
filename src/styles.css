@@ -608,10 +608,6 @@ input[type='checkbox'] {
   border-left-color: var(--border);
 }
 
-.character.is-off .category-grid {
-  opacity: 0.55;
-}
-
 .character-head {
   display: flex;
   flex-wrap: wrap;

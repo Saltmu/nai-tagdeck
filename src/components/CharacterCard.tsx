@@ -19,6 +19,8 @@ interface Props {
   isKnown: (tag: string) => boolean;
   onCopy: (text: string, label: string) => void;
   onRegister: (tag: WorkTag, category: CategoryKey) => void;
+  /** ポーズにタグを追加したとき（キャラ同士の動作なら相手にも付けるか尋ねる）。 */
+  onPoseAdded?: (tag: string) => void;
 }
 
 export function CharacterCard({
@@ -31,6 +33,7 @@ export function CharacterCard({
   isKnown,
   onCopy,
   onRegister,
+  onPoseAdded,
 }: Props) {
   const { id, enabled, tags } = character;
   const name = character.name.trim() || `キャラ${index + 1}`;
@@ -103,6 +106,7 @@ export function CharacterCard({
             quickPicks={key === 'subject' ? CHARACTER_KINDS : undefined}
             title={key === 'subject' ? '被写体' : undefined}
             interactions={key === 'pose'}
+            onAdded={key === 'pose' ? onPoseAdded : undefined}
           />
         ))}
       </div>

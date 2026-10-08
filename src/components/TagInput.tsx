@@ -193,8 +193,10 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
             setActive(0);
             setOpen(true);
           }}
-          onFocus={() => {
+          onFocus={(e) => {
             setActive(0);
+            // ダイアログ（相手キャラへの追加など）を閉じてフォーカスが戻ってきただけなら候補は開かない
+            if (e.relatedTarget instanceof Element && e.relatedTarget.closest('dialog')) return;
             setOpen(true);
           }}
           onClick={() => setOpen(true)}

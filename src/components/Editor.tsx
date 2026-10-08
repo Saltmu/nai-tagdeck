@@ -5,9 +5,11 @@ import { BASE, MAX_CHARACTERS, MAX_ENABLED_CHARACTERS, type WorkspaceAction } fr
 import { CATEGORY_KEYS } from '../lib/categories';
 import { normalize } from '../lib/suggest';
 import { newId } from '../lib/id';
+import { pairedInteraction } from '../lib/interaction';
 import { CategorySection } from './CategorySection';
 import { CharacterCard } from './CharacterCard';
 import { PresetBar } from './PresetBar';
+import { useDialogs } from './Dialogs';
 import type { PresetStore } from '../hooks/usePresets';
 
 const SELECTED_KEY = 'nai-tagdeck:editor-tab';
@@ -73,6 +75,28 @@ export function Editor({
   );
 
   const { characters } = workspace;
+  const dialogs = useDialogs();
+
+  /** キャラ同士の動作を追加したら、まだ対のタグを持っていない相手に付けるか尋ねる。 */
+  const offerPair = async (fromId: string, tag: string) => {
+    const pair = pairedInteraction(tag);
+    if (!pair) return;
+    const key = normalize(pair);
+    const others = characters
+      .map((c, i) => ({ c, name: c.name.trim() || `キャラ${i + 1}` }))
+      .filter(({ c }) => c.id !== fromId && !c.tags.pose.some((t) => normalize(t.tag) === key))
+      // 生成対象のキャラを先に並べる
+      .sort((a, b) => Number(b.c.enabled) - Number(a.c.enabled));
+    if (others.length === 0) return;
+    const target = await dialogs.choose(
+      `相手のキャラクターのポーズに「${pair}」を追加しますか？`,
+      others.map(({ c, name }, i) => ({ value: c.id, label: `${name}に追加`, primary: i === 0 })),
+    );
+    if (!target) return;
+    dispatch({ type: 'add', target, category: 'pose', tag: pair });
+    notify(`${others.find(({ c }) => c.id === target)!.name}に「${pair}」を追加しました`);
+  };
+
   const enabledCount = characters.filter((c) => c.enabled).length;
 
   const [selected, setSelected] = useState(loadSelected);
@@ -169,6 +193,7 @@ export function Editor({
           isKnown={isKnown}
           onCopy={onCopy}
           onRegister={register}
+          onPoseAdded={(tag) => void offerPair(active.id, tag)}
         />
       ) : (
         <div className="category-grid editor-pane">
