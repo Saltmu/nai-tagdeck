@@ -1,5 +1,4 @@
 import { useId, useState } from 'react';
-import type { Settings } from '../types';
 import type { CharacterPrompt } from '../lib/prompt';
 import type { Generator } from '../hooks/useGenerator';
 import type { TokenState } from '../hooks/useToken';
@@ -25,7 +24,7 @@ interface Props {
   token: TokenState;
   basePrompt: string;
   characterPrompts: CharacterPrompt[];
-  settings: Settings;
+  negativePrompt: string;
   onOpenSettings: () => void;
   /** 生成できない理由（なければ null）。 */
   blocker: string | null;
@@ -39,7 +38,7 @@ export function GeneratePanel({
   token,
   basePrompt,
   characterPrompts,
-  settings,
+  negativePrompt,
   onOpenSettings,
   blocker,
   onGenerate,
@@ -66,7 +65,7 @@ export function GeneratePanel({
         </h2>
         <p className="gen-summary">
           ベース {basePrompt ? `${basePrompt.split(', ').length}タグ` : 'なし'}
-          {' ／ '}キャラ {characterPrompts.length}人{' ／ '}ネガティブ {settings.negativePrompt.trim() ? 'あり' : 'なし'}
+          {' ／ '}キャラ {characterPrompts.length}人{' ／ '}ネガティブ {negativePrompt ? `${negativePrompt.split(', ').length}タグ` : 'なし'}
         </p>
       </div>
 

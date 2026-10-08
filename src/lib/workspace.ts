@@ -1,13 +1,16 @@
-import type { Character, CategoryKey, TagGroups, TargetId, WorkTag, Workspace } from '../types';
-import { CATEGORY_KEYS } from './categories';
+import type { Character, CategoryKey, PromptCategoryKey, TagGroups, TargetId, WorkTag, Workspace } from '../types';
+import { PROMPT_CATEGORY_KEYS } from './categories';
 import { newId } from './id';
-import { clampWeight } from './prompt';
+import { clampWeight, parseTagList } from './prompt';
+import { DEFAULT_NEGATIVE } from './novelai';
 import { normalize } from './suggest';
 import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
 
 export { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
 
 export const BASE: TargetId = 'base';
+/** ネガティブ欄の target（開閉状態の保存などに使う）。タグの操作は category: 'negative' で判断する。 */
+export const NEGATIVE: TargetId = 'negative';
 
 type TagAction =
   | { type: 'add'; tag: string; weight?: number }
@@ -21,6 +24,7 @@ type TagAction =
   | { type: 'pickOne'; group: readonly string[]; tag: string | null };
 
 export type WorkspaceAction =
+  /** category が 'negative' のときは target によらずネガティブを操作する。 */
   | (TagAction & { target: TargetId; category: CategoryKey })
   | { type: 'addCharacter' }
   | { type: 'removeCharacter'; id: string }
@@ -30,11 +34,28 @@ export type WorkspaceAction =
   | { type: 'replace'; workspace: Workspace };
 
 export function emptyGroups(): TagGroups {
-  return Object.fromEntries(CATEGORY_KEYS.map((k) => [k, []])) as unknown as TagGroups;
+  return Object.fromEntries(PROMPT_CATEGORY_KEYS.map((k) => [k, []])) as unknown as TagGroups;
 }
 
+/** 文字列のプロンプトを作業中のタグにする（すべて ON）。 */
+export function tagsFromText(text: string): WorkTag[] {
+  const seen = new Set<string>();
+  return parseTagList(text).flatMap(({ tag, weight }) => {
+    const key = normalize(tag);
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ id: newId(), tag, enabled: true, weight }];
+  });
+}
+
+/** 既定のネガティブ（公式UIの UC プリセット「heavy」）。 */
+export function defaultNegativeTags(): WorkTag[] {
+  return tagsFromText(DEFAULT_NEGATIVE);
+}
+
+/** タグは空で、ネガティブだけ既定値を入れた状態。 */
 export function emptyWorkspace(): Workspace {
-  return { base: emptyGroups(), characters: [] };
+  return { base: emptyGroups(), characters: [], negative: defaultNegativeTags() };
 }
 
 export function newCharacter(index: number): Character {
@@ -43,38 +64,51 @@ export function newCharacter(index: number): Character {
 
 // ---- 保存データの読み込み ----
 
+function normalizeTags(list: unknown[]): WorkTag[] {
+  return list.flatMap((item): WorkTag[] => {
+    if (!item || typeof item !== 'object') return [];
+    const t = item as Record<string, unknown>;
+    if (typeof t.tag !== 'string' || !t.tag.trim()) return [];
+    return [
+      {
+        id: typeof t.id === 'string' ? t.id : newId(),
+        tag: t.tag.trim(),
+        enabled: t.enabled !== false,
+        weight: clampWeight(typeof t.weight === 'number' ? t.weight : 1),
+      },
+    ];
+  });
+}
+
 function normalizeGroups(raw: unknown): TagGroups {
   const groups = emptyGroups();
   if (!raw || typeof raw !== 'object') return groups;
   const obj = raw as Record<string, unknown>;
-  for (const key of CATEGORY_KEYS) {
+  for (const key of PROMPT_CATEGORY_KEYS) {
     const list = obj[key];
-    if (!Array.isArray(list)) continue;
-    groups[key] = list.flatMap((item): WorkTag[] => {
-      if (!item || typeof item !== 'object') return [];
-      const t = item as Record<string, unknown>;
-      if (typeof t.tag !== 'string' || !t.tag.trim()) return [];
-      return [
-        {
-          id: typeof t.id === 'string' ? t.id : newId(),
-          tag: t.tag.trim(),
-          enabled: t.enabled !== false,
-          weight: clampWeight(typeof t.weight === 'number' ? t.weight : 1),
-        },
-      ];
-    });
+    if (Array.isArray(list)) groups[key] = normalizeTags(list);
   }
   return groups;
+}
+
+/** 保存データがネガティブを持っているか（ネガティブ対応前のデータでは false）。 */
+export function hasNegative(raw: unknown): boolean {
+  return !!raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>).negative);
 }
 
 /**
  * 保存データを読み込むとき、壊れた値や未知のカテゴリを捨てる。
  * キャラクター対応前の形式（カテゴリ → タグの配列）はベースとして読む。
+ * ネガティブ対応前のデータには fallbackNegative を入れる（省略時は既定のネガティブ）。
  */
-export function normalizeWorkspace(raw: unknown): Workspace {
-  if (!raw || typeof raw !== 'object') return emptyWorkspace();
+export function normalizeWorkspace(raw: unknown, fallbackNegative?: readonly WorkTag[]): Workspace {
+  const negative = () =>
+    hasNegative(raw)
+      ? normalizeTags((raw as { negative: unknown[] }).negative)
+      : fallbackNegative ? fallbackNegative.map((t) => ({ ...t })) : defaultNegativeTags();
+  if (!raw || typeof raw !== 'object') return { ...emptyWorkspace(), negative: negative() };
   const obj = raw as Record<string, unknown>;
-  if (!('base' in obj)) return { base: normalizeGroups(obj), characters: [] };
+  if (!('base' in obj)) return { base: normalizeGroups(obj), characters: [], negative: negative() };
 
   const characters = Array.isArray(obj.characters)
     ? obj.characters.flatMap((item, i): Character[] => {
@@ -96,7 +130,7 @@ export function normalizeWorkspace(raw: unknown): Workspace {
     enabledCount++;
     return enabledCount <= MAX_ENABLED_CHARACTERS ? character : { ...character, enabled: false };
   });
-  return { base: normalizeGroups(obj.base), characters: limited };
+  return { base: normalizeGroups(obj.base), characters: limited, negative: negative() };
 }
 
 // ---- reducer ----
@@ -149,7 +183,7 @@ function moveItem<T extends { id: string }>(items: T[], id: string, delta: -1 | 
   return next;
 }
 
-function updateGroups(groups: TagGroups, category: CategoryKey, action: TagAction): TagGroups {
+function updateGroups(groups: TagGroups, category: PromptCategoryKey, action: TagAction): TagGroups {
   const before = groups[category];
   const after = reduceTags(before, action);
   return after === before ? groups : { ...groups, [category]: after };
@@ -181,6 +215,10 @@ export function workspaceReducer(state: Workspace, action: WorkspaceAction): Wor
       return normalizeWorkspace(action.workspace);
     default: {
       const { target, category } = action;
+      if (category === 'negative') {
+        const negative = reduceTags(state.negative, action);
+        return negative === state.negative ? state : { ...state, negative };
+      }
       if (target === BASE) {
         const base = updateGroups(state.base, category, action);
         return base === state.base ? state : { ...state, base };

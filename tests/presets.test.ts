@@ -6,11 +6,12 @@ import {
   mergePresets,
   normalizePresets,
   overwritePreset,
+  presetToWorkspace,
   renamePreset,
   sameWorkspace,
 } from '../src/lib/presets';
 import { parseBackup, toBackupJSON } from '../src/lib/backup';
-import { BASE, emptyWorkspace, workspaceReducer } from '../src/lib/workspace';
+import { BASE, NEGATIVE, emptyWorkspace, workspaceReducer } from '../src/lib/workspace';
 import { DEFAULT_SETTINGS } from '../src/lib/settings';
 import { DEFAULT_GENERATION } from '../src/lib/generation';
 import type { Workspace } from '../src/types';
@@ -101,7 +102,7 @@ describe('backup', () => {
     ],
     presets: [createPreset('基本', withTag(emptyWorkspace(), 'masterpiece'))],
     workspace: withTag(emptyWorkspace(), 'solo'),
-    settings: { ...DEFAULT_SETTINGS, negativePrompt: 'lowres' },
+    settings: { ...DEFAULT_SETTINGS, characterNegativePrompt: 'lowres' },
     generation: { ...DEFAULT_GENERATION, seed: 5 },
   };
 
@@ -121,11 +122,13 @@ describe('backup', () => {
 
   it('欠けた項目は既定値で補う', () => {
     const parsed = parseBackup('{"kind":"backup"}');
-    expect(parsed).toEqual({
+    expect(parsed).toMatchObject({
       ok: true,
-      data: { dictionary: [], presets: [], workspace: emptyWorkspace(), settings: DEFAULT_SETTINGS, generation: DEFAULT_GENERATION },
+      data: { dictionary: [], presets: [], settings: DEFAULT_SETTINGS, generation: DEFAULT_GENERATION },
       warnings: [],
     });
+    if (!parsed.ok) throw new Error('unreachable');
+    expect(parsed.data.workspace.negative.map((t) => t.tag)).toEqual(emptyWorkspace().negative.map((t) => t.tag));
   });
 });
 
@@ -142,5 +145,35 @@ describe('filterPresets', () => {
     expect(filterPresets(list, 'ｃｉｔｙ').map((p) => p.name)).toEqual(['Night City']);
     expect(filterPresets(list, 'かふぇ').map((p) => p.name)).toEqual(['カフェ']);
     expect(filterPresets(list, 'xyz')).toEqual([]);
+  });
+});
+
+describe('プリセットのネガティブ', () => {
+  const withNegative = (ws: Workspace, tag: string) =>
+    workspaceReducer(ws, { type: 'add', target: NEGATIVE, category: 'negative', tag });
+
+  it('ネガティブも保存して読み込む', () => {
+    const saved = createPreset('a', withNegative(emptyWorkspace(), 'bad hands'));
+    const [restored] = normalizePresets(JSON.parse(JSON.stringify([saved])));
+    const loaded = presetToWorkspace(restored!.workspace, { ...emptyWorkspace(), negative: [] });
+    expect(loaded.negative.map((t) => t.tag)).toContain('bad hands');
+  });
+
+  it('ネガティブ対応前のプリセットは、読み込んでも作業中のネガティブを残す', () => {
+    const { negative: _omit, ...old } = withTag(emptyWorkspace(), 'masterpiece');
+    const [restored] = normalizePresets([{ id: 'p', name: '古い', workspace: old, updated_at: 't' }]);
+    expect(restored!.workspace.negative).toBeUndefined();
+    const current = { ...emptyWorkspace(), negative: [{ id: 'n', tag: 'mine', enabled: true, weight: 1 }] };
+    const loaded = presetToWorkspace(restored!.workspace, current);
+    expect(loaded.negative.map((t) => t.tag)).toEqual(['mine']);
+    expect(loaded.base.quality.map((t) => t.tag)).toEqual(['masterpiece']);
+    // 古いプリセットとはネガティブを比べない
+    expect(sameWorkspace(restored!.workspace, withNegative(loaded, 'other'))).toBe(true);
+  });
+
+  it('どちらもネガティブを持つときは違いを検出する', () => {
+    const ws = emptyWorkspace();
+    expect(sameWorkspace(ws, withNegative(ws, 'other'))).toBe(false);
+    expect(isEmptyWorkspace(withNegative(ws, 'other'))).toBe(true);
   });
 });

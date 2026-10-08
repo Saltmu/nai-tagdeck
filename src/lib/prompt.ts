@@ -1,5 +1,5 @@
-import type { CategoryKey, Character, TagGroups, WeightSyntax, WorkTag } from '../types';
-import { CATEGORY_KEYS, CHARACTER_CATEGORY_KEYS } from './categories';
+import type { Character, PromptCategoryKey, TagGroups, WeightSyntax, WorkTag } from '../types';
+import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from './categories';
 import { MAX_ENABLED_CHARACTERS } from './characterLimits';
 
 /** マイナスは V4.5 以降の「取り除く」指定（例: `-1::hat::`）。 */
@@ -48,7 +48,7 @@ export function buildCategoryPrompt(tags: readonly WorkTag[], syntax: WeightSynt
 export function buildPrompt(
   groups: TagGroups,
   syntax: WeightSyntax,
-  keys: readonly CategoryKey[] = CATEGORY_KEYS,
+  keys: readonly PromptCategoryKey[] = PROMPT_CATEGORY_KEYS,
 ): string {
   return keys
     .map((key) => buildCategoryPrompt(groups[key] ?? [], syntax))
@@ -66,7 +66,7 @@ export interface CharacterPrompt {
 export function buildCharacterPrompts(
   characters: readonly Character[],
   syntax: WeightSyntax,
-  keys: readonly CategoryKey[] = CHARACTER_CATEGORY_KEYS,
+  keys: readonly PromptCategoryKey[] = CHARACTER_CATEGORY_KEYS,
 ): CharacterPrompt[] {
   return characters.filter((c) => c.enabled).slice(0, MAX_ENABLED_CHARACTERS).flatMap((c) => {
     const prompt = buildPrompt(c.tags, syntax, keys);

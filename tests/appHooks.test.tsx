@@ -30,7 +30,7 @@ beforeEach(() => {
   root = createRoot(document.createElement('div'));
   args = {
     generator: { generating: false, error: null, generate: vi.fn().mockResolvedValue(undefined), cancel: vi.fn(), dismissError: vi.fn() },
-    token: 'test-token', basePrompt: '1girl', characterPrompts: [], settings: DEFAULT_SETTINGS,
+    token: 'test-token', basePrompt: '1girl', characterPrompts: [], negativePrompt: 'lowres', settings: DEFAULT_SETTINGS,
     generation: DEFAULT_GENERATION, show: vi.fn(), onOpenSettings: vi.fn(),
   };
   backupArgs = {

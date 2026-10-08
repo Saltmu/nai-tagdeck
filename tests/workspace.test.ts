@@ -3,12 +3,17 @@ import {
   BASE,
   MAX_CHARACTERS,
   MAX_ENABLED_CHARACTERS,
+  NEGATIVE,
   emptyGroups,
   emptyWorkspace,
   normalizeWorkspace,
+  tagsFromText,
   workspaceReducer,
   type WorkspaceAction,
 } from '../src/lib/workspace';
+import { migrateNegative } from '../src/lib/backup';
+import { buildPrompt } from '../src/lib/prompt';
+import { DEFAULT_NEGATIVE } from '../src/lib/novelai';
 import { getKV, listEntries, putEntry, replaceAllEntries, setKV } from '../src/lib/db';
 import type { Workspace } from '../src/types';
 
@@ -229,7 +234,9 @@ describe('normalizeWorkspace', () => {
     expect(ws.characters).toHaveLength(1);
     expect(ws.characters[0]).toMatchObject({ name: 'キャラ1', enabled: true });
     expect(ws.characters[0]!.tags.subject[0]!.tag).toBe('girl');
-    expect(normalizeWorkspace(null)).toEqual(emptyWorkspace());
+    const empty = normalizeWorkspace(null);
+    expect(empty).toMatchObject({ base: emptyGroups(), characters: [] });
+    expect(empty.negative.map((t) => t.tag)).toEqual(emptyWorkspace().negative.map((t) => t.tag));
   });
 
   it('キャラクター対応前の保存形式はベースとして読む', () => {
@@ -250,5 +257,63 @@ describe('db (IndexedDB)', () => {
 
     await setKV('workspace', { quality: [] });
     expect(await getKV('workspace')).toEqual({ quality: [] });
+  });
+});
+
+describe('ネガティブ', () => {
+  const tags = (ws: Workspace) => ws.negative.map((t) => t.tag);
+
+  it('空の状態には既定のネガティブ（heavy）が ON で入る', () => {
+    const ws = emptyWorkspace();
+    expect(tags(ws)).toEqual(tagsFromText(DEFAULT_NEGATIVE).map((t) => t.tag));
+    expect(tags(ws)[0]).toBe('nsfw');
+    expect(ws.negative.every((t) => t.enabled && t.weight === 1)).toBe(true);
+  });
+
+  it("category: 'negative' の操作はベースやキャラクターではなくネガティブを変える", () => {
+    const ws = run(
+      { ...emptyWorkspace(), negative: [] },
+      { type: 'add', target: NEGATIVE, category: 'negative', tag: 'bad hands', weight: 1.2 },
+      { type: 'add', target: NEGATIVE, category: 'negative', tag: 'blurry' },
+    );
+    expect(ws.negative.map((t) => [t.tag, t.weight])).toEqual([['bad hands', 1.2], ['blurry', 1]]);
+    expect(ws.base).toEqual(emptyGroups());
+    const off = run(ws, { type: 'toggle', target: NEGATIVE, category: 'negative', id: ws.negative[0]!.id });
+    expect(off.negative[0]!.enabled).toBe(false);
+  });
+
+  it('ネガティブはベースのプロンプトに出力しない', () => {
+    const ws = run(emptyWorkspace(), { type: 'add', target: BASE, category: 'quality', tag: 'masterpiece' });
+    expect(buildPrompt(ws.base, 'numeric')).toBe('masterpiece');
+    expect(Object.keys(ws.base)).not.toContain('negative');
+  });
+
+  it('保存済みのネガティブはそのまま読み、対応前のデータには代わりの値を入れる', () => {
+    expect(tags(normalizeWorkspace({ base: {}, negative: [{ tag: 'lowres', enabled: false }] }))).toEqual(['lowres']);
+    expect(normalizeWorkspace({ base: {}, negative: [] }).negative).toEqual([]);
+    expect(tags(normalizeWorkspace({ base: {} }, tagsFromText('a, b')))).toEqual(['a', 'b']);
+    expect(tags(normalizeWorkspace({ base: {} }))).toEqual(tags(emptyWorkspace()));
+  });
+
+  it('文字列からタグにするとき、重みを読み取り重複を除く', () => {
+    expect(tagsFromText('lowres, {bad hands}, 1.5::blurry::, lowres').map((t) => [t.tag, t.weight])).toEqual([
+      ['lowres', 1],
+      ['bad hands', 1.05],
+      ['blurry', 1.5],
+    ]);
+  });
+});
+
+describe('migrateNegative', () => {
+  it('設定に残っていた文字列のネガティブをタグにして移す', () => {
+    const ws = migrateNegative({ base: {} }, { negativePrompt: 'lowres, worst quality' });
+    expect(ws.negative.map((t) => t.tag)).toEqual(['lowres', 'worst quality']);
+  });
+  it('空文字のネガティブは「なし」として移す', () => {
+    expect(migrateNegative({ base: {} }, { negativePrompt: '' }).negative).toEqual([]);
+  });
+  it('設定にもなければ既定値、ワークスペースが持っていればそちらを使う', () => {
+    expect(migrateNegative({ base: {} }, {}).negative.map((t) => t.tag)).toEqual(emptyWorkspace().negative.map((t) => t.tag));
+    expect(migrateNegative({ base: {}, negative: [{ tag: 'x' }] }, { negativePrompt: 'y' }).negative.map((t) => t.tag)).toEqual(['x']);
   });
 });

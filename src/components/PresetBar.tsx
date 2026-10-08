@@ -6,12 +6,13 @@ import {
   filterPresets,
   isEmptyWorkspace,
   overwritePreset,
+  presetToWorkspace,
   renamePreset,
   sameWorkspace,
   sortPresets,
   type Preset,
 } from '../lib/presets';
-import { emptyWorkspace, normalizeWorkspace, type WorkspaceAction } from '../lib/workspace';
+import { emptyWorkspace, type WorkspaceAction } from '../lib/workspace';
 import { useDialogs } from './Dialogs';
 
 interface Props {
@@ -47,7 +48,7 @@ export function PresetBar({ store, workspace, dispatch, notify }: Props) {
     const preset = presets.find((p) => p.id === presetId);
     if (!preset || preset.id === active?.id) return;
     if (!(await confirmDiscard(`「${preset.name}」を読み込みますか？`, '読み込む'))) return;
-    dispatch({ type: 'replace', workspace: normalizeWorkspace(structuredClone(preset.workspace)) });
+    dispatch({ type: 'replace', workspace: presetToWorkspace(preset.workspace, workspace) });
     setActiveId(preset.id);
     notify(`「${preset.name}」を読み込みました`);
   };
@@ -98,8 +99,8 @@ export function PresetBar({ store, workspace, dispatch, notify }: Props) {
   };
 
   const startNew = async () => {
-    if (!(await confirmDiscard('すべてのタグを消して、空の状態から始めますか？', '新規作成'))) return;
-    dispatch({ type: 'replace', workspace: emptyWorkspace() });
+    if (!(await confirmDiscard('ベースとキャラクターのタグを消して、空の状態から始めますか？（ネガティブは残ります）', '新規作成'))) return;
+    dispatch({ type: 'replace', workspace: { ...emptyWorkspace(), negative: workspace.negative } });
     setActiveId(null);
   };
 

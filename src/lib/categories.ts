@@ -10,14 +10,24 @@ export const CATEGORIES = [
   { key: 'composition', label: '構図' },
   { key: 'background', label: '背景・場所' },
   { key: 'weather', label: '時間・天候' },
+  // ネガティブ（Undesired Content）。辞書のカテゴリとしてだけ使い、プロンプトのカテゴリには含めない。
+  { key: 'negative', label: 'ネガティブ' },
 ] as const;
 
+/** 辞書のカテゴリ（ネガティブを含む）。 */
 export type CategoryKey = (typeof CATEGORIES)[number]['key'];
+
+/** プロンプト（ベース・キャラクター）を組み立てるカテゴリ。 */
+export type PromptCategoryKey = Exclude<CategoryKey, 'negative'>;
 
 export const CATEGORY_KEYS: readonly CategoryKey[] = CATEGORIES.map((c) => c.key);
 
+export const PROMPT_CATEGORY_KEYS: readonly PromptCategoryKey[] = CATEGORY_KEYS.filter(
+  (k): k is PromptCategoryKey => k !== 'negative',
+);
+
 /** キャラクタープロンプトで編集するカテゴリ（品質・画風・エフェクト・構図・背景・天候はベース側で扱う）。 */
-export const CHARACTER_CATEGORY_KEYS: readonly CategoryKey[] = [
+export const CHARACTER_CATEGORY_KEYS: readonly PromptCategoryKey[] = [
   'subject',
   'appearance',
   'outfit',

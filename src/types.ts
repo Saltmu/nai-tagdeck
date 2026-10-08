@@ -1,6 +1,6 @@
-import type { CategoryKey } from './lib/categories';
+import type { CategoryKey, PromptCategoryKey } from './lib/categories';
 
-export type { CategoryKey };
+export type { CategoryKey, PromptCategoryKey };
 
 /** 辞書の1エントリ。 */
 export interface DictEntry {
@@ -23,7 +23,7 @@ export interface WorkTag {
   weight: number;
 }
 
-export type TagGroups = Record<CategoryKey, WorkTag[]>;
+export type TagGroups = Record<PromptCategoryKey, WorkTag[]>;
 
 /** V4 以降のキャラクタープロンプト（char_captions の1件）。 */
 export interface Character {
@@ -37,6 +37,8 @@ export interface Character {
 export interface Workspace {
   base: TagGroups;
   characters: Character[];
+  /** ネガティブ（Undesired Content）。カテゴリに分けず1つの並びで持つ。 */
+  negative: WorkTag[];
 }
 
 /** 'base' かキャラクターの id。 */
@@ -47,8 +49,6 @@ export type WeightSyntax = 'numeric' | 'brace';
 
 export interface Settings {
   weightSyntax: WeightSyntax;
-  /** 生成時のネガティブ（Undesired Content）。タグ編集画面には出さない。 */
-  negativePrompt: string;
-  /** キャラクタープロンプトごとのネガティブ。 */
+  /** キャラクタープロンプトごとのネガティブ。全体のネガティブは Workspace.negative に持つ。 */
   characterNegativePrompt: string;
 }

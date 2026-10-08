@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BASE } from '../lib/workspace';
+import { BASE, NEGATIVE } from '../lib/workspace';
 
 const SELECTED_KEY = 'nai-tagdeck:editor-tab';
 
@@ -30,7 +30,7 @@ export function useEditorSelection(ids: readonly string[], loaded: boolean) {
     let next = selected;
     if (prev && nextIds.length > prev.length && prev.every((id) => nextIds.includes(id))) {
       next = nextIds.filter((id) => !prev.includes(id)).at(-1) ?? BASE;
-    } else if (selected !== BASE && !nextIds.includes(selected)) {
+    } else if (selected !== BASE && selected !== NEGATIVE && !nextIds.includes(selected)) {
       // 左隣も削除されていたら、さらに左へ探す。
       next = prev?.slice(0, prev.indexOf(selected)).filter((id) => nextIds.includes(id)).at(-1) ?? BASE;
     }

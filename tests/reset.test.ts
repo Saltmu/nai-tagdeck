@@ -55,7 +55,7 @@ describe('全設定とデータの削除', () => {
     saveCategoryOpen('base', 'appearance', false);
     await setKV('generation', { mode: 'furry', seed: 123 });
     await setKV('workspace', { base: { quality: [{ tag: 'masterpiece' }] } });
-    await setKV('settings', { negativePrompt: 'custom' });
+    await setKV('settings', { characterNegativePrompt: 'custom' });
     await resetAppData();
     expect(loadToken().token).toBeNull();
     expect(loadCategoryOpen('base', 'appearance')).toBe(true);
@@ -63,7 +63,7 @@ describe('全設定とデータの削除', () => {
     expect(normalizeGeneration(await getKV('generation')).mode).toBe('anime');
     expect(normalizeGeneration(await getKV('generation')).seed).toBeNull();
     expect(normalizeWorkspace(await getKV('workspace')).base.quality).toEqual([]);
-    expect(normalizeSettings(await getKV('settings')).negativePrompt).not.toBe('custom');
+    expect(normalizeSettings(await getKV('settings')).characterNegativePrompt).not.toBe('custom');
   });
 
   it('ストレージの削除に失敗した場合は成功として扱わない', async () => {

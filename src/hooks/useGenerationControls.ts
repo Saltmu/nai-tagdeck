@@ -9,13 +9,15 @@ interface Args {
   token: string | null;
   basePrompt: string;
   characterPrompts: ReturnType<typeof buildCharacterPrompts>;
+  /** ネガティブのタグから組み立てた文面。 */
+  negativePrompt: string;
   settings: Settings;
   generation: GenerationSettings;
   show: (message: string, duration?: number) => void;
   onOpenSettings: () => void;
 }
 
-export function useGenerationControls({ generator, token, basePrompt, characterPrompts, settings, generation, show, onOpenSettings }: Args) {
+export function useGenerationControls({ generator, token, basePrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings }: Args) {
   const { generating, generate, error } = generator;
   // ---- 生成（ヘッダー・生成パネル・Ctrl+Enter の共通処理） ----
   const blocker = !token
@@ -38,11 +40,11 @@ export function useGenerationControls({ generator, token, basePrompt, characterP
     void generate({
       token,
       prompt: basePrompt,
-      negative: settings.negativePrompt,
+      negative: negativePrompt,
       characters: characterPrompts.map((c) => ({ prompt: c.prompt, negative: settings.characterNegativePrompt })),
       settings: generation,
     });
-  }, [generating, generate, token, basePrompt, characterPrompts, settings, generation, show, onOpenSettings]);
+  }, [generating, generate, token, basePrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings]);
 
   // Ctrl+Enter（Mac は ⌘+Enter）でどこからでも生成する
   useEffect(() => {

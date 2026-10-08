@@ -576,6 +576,19 @@ input[type='checkbox'] {
   margin-top: 0.75rem;
 }
 
+/* ベースとネガティブは全体の設定なので、キャラクターのタブと間を空ける */
+.editor-tab-negative {
+  margin-right: 0.6rem;
+}
+
+.negative-pane > * + * {
+  margin-top: 0.75rem;
+}
+
+.negative-actions .hint {
+  margin: 0.4rem 0 0;
+}
+
 .section-head {
   display: flex;
   flex-wrap: wrap;

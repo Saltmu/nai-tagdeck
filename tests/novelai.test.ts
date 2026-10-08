@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_NEGATIVE,
   DEFAULT_PARAMS,
   NAI_MODEL,
   buildGenerateRequest,
@@ -103,18 +102,20 @@ describe('isFreeGeneration', () => {
 });
 
 describe('normalizeSettings', () => {
-  it('古い保存データには既定のネガティブを補う', () => {
+  it('古い保存データには既定値を補う', () => {
     expect(normalizeSettings({ weightSyntax: 'brace' })).toEqual({
       ...DEFAULT_SETTINGS,
       weightSyntax: 'brace',
     });
-    expect(DEFAULT_SETTINGS.negativePrompt).toBe(DEFAULT_NEGATIVE);
   });
-  it('空のネガティブは「なし」として残す', () => {
-    expect(normalizeSettings({ negativePrompt: '' }).negativePrompt).toBe('');
+  it('空のキャラクター用ネガティブは「なし」として残す', () => {
+    expect(normalizeSettings({ characterNegativePrompt: '' }).characterNegativePrompt).toBe('');
+  });
+  it('ネガティブはワークスペースへ移したので設定には残さない', () => {
+    expect(normalizeSettings({ negativePrompt: 'lowres' })).toEqual(DEFAULT_SETTINGS);
   });
   it('壊れた値は既定値にする', () => {
     expect(normalizeSettings('x')).toEqual(DEFAULT_SETTINGS);
-    expect(normalizeSettings({ weightSyntax: 'x', negativePrompt: 1 })).toEqual(DEFAULT_SETTINGS);
+    expect(normalizeSettings({ weightSyntax: 'x', characterNegativePrompt: 1 })).toEqual(DEFAULT_SETTINGS);
   });
 });

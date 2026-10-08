@@ -55,3 +55,9 @@ it('corrects an invalid saved character even when the workspace is empty', async
   await render([]);
   expect(selection.selected).toBe('base');
 });
+it('keeps the negative tab selected when characters change', async () => {
+  await render(['a']);
+  await act(async () => selection.select('negative'));
+  await render([]);
+  expect(selection.selected).toBe('negative');
+});

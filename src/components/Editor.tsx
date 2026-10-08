@@ -1,8 +1,16 @@
-import { useCallback, useMemo, type Dispatch } from 'react';
+import { useCallback, useId, useMemo, useState, type Dispatch } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
-import { BASE, MAX_CHARACTERS, MAX_ENABLED_CHARACTERS, type WorkspaceAction } from '../lib/workspace';
-import { CATEGORY_KEYS } from '../lib/categories';
+import {
+  BASE,
+  MAX_CHARACTERS,
+  MAX_ENABLED_CHARACTERS,
+  NEGATIVE,
+  defaultNegativeTags,
+  type WorkspaceAction,
+} from '../lib/workspace';
+import { PROMPT_CATEGORY_KEYS } from '../lib/categories';
+import { DEFAULT_CHARACTER_NEGATIVE } from '../lib/novelai';
 import { normalize } from '../lib/suggest';
 import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
@@ -26,6 +34,9 @@ interface Props {
   onCopy: (text: string, label: string) => void;
   notify: (message: string) => void;
   presets: PresetStore;
+  /** キャラクタープロンプトに付けるネガティブ（全キャラ共通の文面）。 */
+  characterNegative: string;
+  onCharacterNegativeChange: (value: string) => void;
 }
 
 export function Editor({
@@ -37,6 +48,8 @@ export function Editor({
   onCopy,
   notify,
   presets,
+  characterNegative,
+  onCharacterNegativeChange,
 }: Props) {
   const knownTags = useMemo(
     () => new Set(dictionary.entries.map((e) => normalize(e.tag))),
@@ -87,6 +100,7 @@ export function Editor({
   const enabledCount = characters.filter((c) => c.enabled).length;
 
   const { selected, select } = useEditorSelection(characters.map((c) => c.id), loaded);
+  const negativeSelected = selected === NEGATIVE;
   const activeIndex = characters.findIndex((c) => c.id === selected);
   const active = activeIndex >= 0 ? characters[activeIndex] : undefined;
 
@@ -98,11 +112,20 @@ export function Editor({
         <button
           type="button"
           role="tab"
-          aria-selected={!active}
+          aria-selected={!active && !negativeSelected}
           className="editor-tab"
           onClick={() => select(BASE)}
         >
           ベース
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={negativeSelected}
+          className="editor-tab editor-tab-negative"
+          onClick={() => select(NEGATIVE)}
+        >
+          ネガティブ
         </button>
         {characters.map((c, i) => {
           const name = c.name.trim() || `キャラ${i + 1}`;
@@ -146,7 +169,19 @@ export function Editor({
         </button>
       </div>
 
-      {active ? (
+      {negativeSelected ? (
+        <NegativePane
+          tags={workspace.negative}
+          dispatch={dispatch}
+          entries={dictionary.entries}
+          syntax={syntax}
+          isKnown={isKnown}
+          onCopy={onCopy}
+          onRegister={register}
+          characterNegative={characterNegative}
+          onCharacterNegativeChange={onCharacterNegativeChange}
+        />
+      ) : active ? (
         <CharacterCard
           key={active.id}
           character={active}
@@ -162,7 +197,7 @@ export function Editor({
         />
       ) : (
         <div className="category-grid editor-pane">
-          {CATEGORY_KEYS.map((key) => (
+          {PROMPT_CATEGORY_KEYS.map((key) => (
             <CategorySection
               key={key}
               target={BASE}
@@ -191,6 +226,99 @@ export function Editor({
       <p className="hint">
         保存 {characters.length}/{MAX_CHARACTERS} · 生成対象 {enabledCount}/{MAX_ENABLED_CHARACTERS}
       </p>
+    </div>
+  );
+}
+
+interface NegativePaneProps {
+  tags: WorkTag[];
+  dispatch: Dispatch<WorkspaceAction>;
+  entries: Dictionary['entries'];
+  syntax: WeightSyntax;
+  isKnown: (tag: string) => boolean;
+  onCopy: (text: string, label: string) => void;
+  onRegister: (tag: WorkTag, category: CategoryKey) => void;
+  characterNegative: string;
+  onCharacterNegativeChange: (value: string) => void;
+}
+
+/** ネガティブはカテゴリに分けず、1つの並びで編集する。 */
+function NegativePane({
+  tags,
+  dispatch,
+  entries,
+  syntax,
+  isKnown,
+  onCopy,
+  onRegister,
+  characterNegative,
+  onCharacterNegativeChange,
+}: NegativePaneProps) {
+  const id = useId();
+  const [characterOpen, setCharacterOpen] = useState(false);
+  const defaults = useMemo(() => defaultNegativeTags(), []);
+  const hasAllDefaults = defaults.every((d) => tags.some((t) => t.enabled && normalize(t.tag) === normalize(d.tag)));
+
+  const addDefaults = () => {
+    for (const d of defaults) dispatch({ type: 'add', target: NEGATIVE, category: 'negative', tag: d.tag, weight: d.weight });
+  };
+
+  return (
+    <div className="editor-pane negative-pane">
+      <CategorySection
+        target={NEGATIVE}
+        category="negative"
+        title="ネガティブ（Undesired Content）"
+        tags={tags}
+        dispatch={dispatch}
+        entries={entries}
+        syntax={syntax}
+        isKnown={isKnown}
+        onCopy={onCopy}
+        onRegister={onRegister}
+      />
+      <div className="negative-actions">
+        <button type="button" className="btn btn-small" disabled={hasAllDefaults} onClick={addDefaults}>
+          既定のタグを追加
+        </button>
+        <p className="hint">
+          既定は公式UIの UC プリセット「heavy」と同じタグです。足りないものだけ追加し、OFF のものは ON に戻します。NSFW を生成するときは nsfw を OFF にしてください。
+        </p>
+      </div>
+
+      <div className="card negative-section">
+        <button
+          type="button"
+          className="disclosure"
+          aria-expanded={characterOpen}
+          aria-controls={`${id}-character`}
+          onClick={() => setCharacterOpen((value) => !value)}
+        >
+          <span className="disclosure-icon" aria-hidden="true" />
+          キャラクター用のネガティブ
+        </button>
+        <div id={`${id}-character`} className="setting" hidden={!characterOpen}>
+          <div className="setting-head">
+            <label htmlFor={`${id}-character-text`}>ON のキャラクターすべてに同じ文面を付けます</label>
+            <button
+              type="button"
+              className="btn btn-small"
+              disabled={characterNegative === DEFAULT_CHARACTER_NEGATIVE}
+              onClick={() => onCharacterNegativeChange(DEFAULT_CHARACTER_NEGATIVE)}
+            >
+              既定値に戻す
+            </button>
+          </div>
+          <textarea
+            id={`${id}-character-text`}
+            rows={2}
+            spellCheck={false}
+            autoCapitalize="off"
+            value={characterNegative}
+            onChange={(e) => onCharacterNegativeChange(e.target.value)}
+          />
+        </div>
+      </div>
     </div>
   );
 }

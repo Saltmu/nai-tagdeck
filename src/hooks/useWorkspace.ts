@@ -1,15 +1,24 @@
 import { useReducer, useState, type Dispatch } from 'react';
 import type { Settings, Workspace } from '../types';
-import { emptyWorkspace, normalizeWorkspace, workspaceReducer, type WorkspaceAction } from '../lib/workspace';
+import { emptyWorkspace, hasNegative, normalizeWorkspace, workspaceReducer, type WorkspaceAction } from '../lib/workspace';
+import { migrateNegative } from '../lib/backup';
+import { getKV } from '../lib/db';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../lib/settings';
 import { DEFAULT_GENERATION, normalizeGeneration, type GenerationSettings } from '../lib/generation';
 import { usePersistence, type PersistenceState } from './usePersistence';
 
 export function useWorkspace(): { workspace: Workspace; dispatch: Dispatch<WorkspaceAction>; loaded: boolean; persistence: PersistenceState } {
   const [workspace, dispatch] = useReducer(workspaceReducer, undefined, emptyWorkspace);
-  const persistence = usePersistence('workspace', workspace, (raw) =>
-    dispatch({ type: 'replace', workspace: normalizeWorkspace(raw) }),
-  );
+  const persistence = usePersistence('workspace', workspace, (raw) => {
+    if (hasNegative(raw)) {
+      dispatch({ type: 'replace', workspace: normalizeWorkspace(raw) });
+      return;
+    }
+    // ネガティブ対応前のデータ: 設定に残っている文字列のネガティブを移す（設定は読み込み後に書き直されて消える）
+    void getKV<unknown>('settings')
+      .catch(() => undefined)
+      .then((settings) => dispatch({ type: 'replace', workspace: migrateNegative(raw, settings) }));
+  });
   return { workspace, dispatch, loaded: persistence.loaded, persistence };
 }
 

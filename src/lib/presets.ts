@@ -1,15 +1,30 @@
 import type { Workspace } from '../types';
-import { CATEGORY_KEYS } from './categories';
+import { PROMPT_CATEGORY_KEYS } from './categories';
 import { newId } from './id';
 import { normalize } from './suggest';
-import { normalizeWorkspace } from './workspace';
+import { hasNegative, normalizeWorkspace } from './workspace';
 
-/** 作業中のタグ一式（ベース＋キャラクター）に名前を付けて保存したもの。 */
+/** プリセットのタグ一式。ネガティブ対応前に保存したものは negative を持たない。 */
+export type PresetWorkspace = Omit<Workspace, 'negative'> & Partial<Pick<Workspace, 'negative'>>;
+
+/** 作業中のタグ一式（ベース＋キャラクター＋ネガティブ）に名前を付けて保存したもの。 */
 export interface Preset {
   id: string;
   name: string;
-  workspace: Workspace;
+  workspace: PresetWorkspace;
   updated_at: string;
+}
+
+/** ネガティブを持たない古いプリセットは、読み込み時に作業中のネガティブを残すため negative を省いたままにする。 */
+function normalizePresetWorkspace(raw: unknown): PresetWorkspace {
+  const workspace: PresetWorkspace = normalizeWorkspace(raw);
+  if (!hasNegative(raw)) delete workspace.negative;
+  return workspace;
+}
+
+/** プリセットを読み込んだ作業状態。ネガティブを持たないプリセットでは current のネガティブを残す。 */
+export function presetToWorkspace(preset: PresetWorkspace, current: Workspace): Workspace {
+  return normalizeWorkspace(structuredClone(preset), current.negative);
 }
 
 export function sortPresets(presets: readonly Preset[]): Preset[] {
@@ -28,7 +43,7 @@ export function normalizePresets(raw: unknown): Preset[] {
         {
           id: typeof p.id === 'string' && p.id ? p.id : newId(),
           name,
-          workspace: normalizeWorkspace(p.workspace),
+          workspace: normalizePresetWorkspace(p.workspace),
           updated_at: typeof p.updated_at === 'string' ? p.updated_at : new Date().toISOString(),
         },
       ];
@@ -64,21 +79,27 @@ export function mergePresets(existing: readonly Preset[], incoming: readonly Pre
   return sortPresets([...byId.values()]);
 }
 
-/** ON/OFF・重み・並び順まで含めて同じか。タグの id は比べない。 */
-export function sameWorkspace(a: Workspace, b: Workspace): boolean {
-  const strip = (ws: Workspace) => {
-    const groups = (g: Workspace['base']) =>
-      CATEGORY_KEYS.map((k) => g[k].map((t) => [t.tag, t.enabled, t.weight]));
+/**
+ * ON/OFF・重み・並び順まで含めて同じか。タグの id は比べない。
+ * ネガティブはどちらも持っているときだけ比べる（古いプリセットは読み込んでもネガティブを変えないため）。
+ */
+export function sameWorkspace(a: PresetWorkspace, b: PresetWorkspace): boolean {
+  const list = (tags: Workspace['negative']) => tags.map((t) => [t.tag, t.enabled, t.weight]);
+  const compareNegative = a.negative !== undefined && b.negative !== undefined;
+  const strip = (ws: PresetWorkspace) => {
+    const groups = (g: Workspace['base']) => PROMPT_CATEGORY_KEYS.map((k) => list(g[k]));
     return JSON.stringify([
       groups(ws.base),
       ws.characters.map((c) => [c.name, c.enabled, groups(c.tags)]),
+      compareNegative ? list(ws.negative!) : null,
     ]);
   };
   return strip(a) === strip(b);
 }
 
-export function isEmptyWorkspace(ws: Workspace): boolean {
-  return ws.characters.length === 0 && CATEGORY_KEYS.every((k) => ws.base[k].length === 0);
+/** ベースとキャラクターが空か。ネガティブは既定値が入っているので見ない。 */
+export function isEmptyWorkspace(ws: PresetWorkspace): boolean {
+  return ws.characters.length === 0 && PROMPT_CATEGORY_KEYS.every((k) => ws.base[k].length === 0);
 }
 
 /** 名前の部分一致で絞り込む（全角/半角・大小文字・カタカナ/ひらがなの違いは無視）。空なら全件。 */

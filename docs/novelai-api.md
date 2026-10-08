@@ -41,7 +41,7 @@ V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在し�
   - `qualityPresetId: "light"` → `input` の末尾に `very aesthetic, amazing quality, no text` が付いている。
   - `ucPresetId: "heavy"` → `negative_prompt` の先頭に heavy の文面（`DEFAULT_NEGATIVE`）が入り、その後ろにユーザーが追加した語が続く。
   - あわせて `tag_hint_qt: 3`、`tag_hint_uc_preset: 2` を送っている（OpenAPI の説明では、モデルにそのまま渡すヒント）。
-  - このツールでは品質タグをタグ編集画面で、ネガティブを設定で持ち、展開済みの文字列を送る。プリセット ID とヒントは送らない。
+  - このツールでは品質タグとネガティブをタグ編集画面（ネガティブは専用タブ）で持ち、展開済みの文字列を送る。プリセット ID とヒントは送らない。
 - **キャラクター**: `characterPrompts[]`（`{ prompt, uc, center: {x:0, y:0}, enabled }`）と
   `v4_prompt.caption.char_captions[]` / `v4_negative_prompt.caption.char_captions[]` の両方に入れる。
   座標を使わないとき（`use_coords: false`）は中心を `{x:0, y:0}` で送る。キャラごとのネガティブの既定値は `lowres, aliasing, `。

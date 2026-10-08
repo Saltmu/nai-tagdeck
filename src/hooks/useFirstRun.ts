@@ -54,7 +54,8 @@ export function useFirstRun({ ready, hasExistingData, dictionary, workspace, dis
       if (choice === 'sample' || choice === 'dictionary') {
         await dictionary.restoreInitial();
         if (choice === 'sample') {
-          dispatch({ type: 'replace', workspace: createSampleWorkspace() });
+          // ネガティブはサンプルに含めず、作業中のものを残す
+          dispatch({ type: 'replace', workspace: { ...createSampleWorkspace(), negative: workspace.negative } });
           presets.setActiveId(null);
         }
         notify(choice === 'sample' ? 'サンプルと初期辞書を読み込みました' : '初期辞書を読み込みました（作業中のタグはそのままです）');

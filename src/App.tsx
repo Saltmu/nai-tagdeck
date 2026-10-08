@@ -21,7 +21,7 @@ import { useFirstRun } from './hooks/useFirstRun';
 import { isEmptyWorkspace } from './lib/presets';
 import { DEFAULT_SETTINGS } from './lib/settings';
 import { DEFAULT_GENERATION } from './lib/generation';
-import { buildCharacterPrompts, buildPrompt } from './lib/prompt';
+import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { sizeOf } from './lib/generation';
 import { copyText } from './lib/browser';
@@ -64,6 +64,10 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     () => buildCharacterPrompts(workspace.characters, settings.weightSyntax),
     [workspace.characters, settings.weightSyntax],
   );
+  const negativePrompt = useMemo(
+    () => buildCategoryPrompt(workspace.negative, settings.weightSyntax),
+    [workspace.negative, settings.weightSyntax],
+  );
 
   const copy = useCallback(
     async (text: string, label: string) => {
@@ -89,7 +93,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   });
   const openSettings = useCallback(() => setTab('settings'), []);
   const { blocker, startGenerate } = useGenerationControls({
-    generator, token: token.token, basePrompt, characterPrompts, settings, generation, show, onOpenSettings: openSettings,
+    generator, token: token.token, basePrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings: openSettings,
   });
   const latest = imageStore.images[0];
   const { unseenId, dismiss } = useLatestImageNotice(latest?.id, tab === 'generate');
@@ -157,6 +161,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onCopy={copy}
               notify={show}
               presets={presets}
+              characterNegative={settings.characterNegativePrompt}
+              onCharacterNegativeChange={(characterNegativePrompt) => updateSettings({ characterNegativePrompt })}
             />
           </div>
           <div className="pane pane-generate">
@@ -166,8 +172,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               syntax={settings.weightSyntax}
               onSyntaxChange={(weightSyntax) => updateSettings({ weightSyntax })}
               onCopy={copy}
-              settings={settings}
-              onSettingsChange={updateSettings}
+              negativePrompt={negativePrompt}
             />
             <Gallery
               images={imageStore.images}
@@ -186,7 +191,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               token={token}
               basePrompt={basePrompt}
               characterPrompts={characterPrompts}
-              settings={settings}
+              negativePrompt={negativePrompt}
               onOpenSettings={openSettings}
               blocker={blocker}
               onGenerate={startGenerate}

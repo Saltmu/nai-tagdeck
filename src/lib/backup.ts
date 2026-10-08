@@ -1,9 +1,9 @@
 import type { DictEntry, Settings, Workspace } from '../types';
 import { fromJSON } from './io';
 import { normalizePresets, type Preset } from './presets';
-import { normalizeSettings } from './settings';
+import { legacyNegativePrompt, normalizeSettings } from './settings';
 import { normalizeGeneration, type GenerationSettings } from './generation';
-import { normalizeWorkspace } from './workspace';
+import { normalizeWorkspace, tagsFromText } from './workspace';
 
 /**
  * 端末間でデータを移すためのバックアップ。辞書・プリセット・作業中のタグ・設定を1つの JSON にまとめる。
@@ -25,6 +25,12 @@ export function toBackupJSON(data: Backup): string {
   );
 }
 
+/** ネガティブ対応前のデータは、設定に文字列で持っていたネガティブをタグにして移す。 */
+export function migrateNegative(rawWorkspace: unknown, rawSettings: unknown): Workspace {
+  const legacy = legacyNegativePrompt(rawSettings);
+  return normalizeWorkspace(rawWorkspace, legacy === null ? undefined : tagsFromText(legacy));
+}
+
 export type ParsedBackup = { ok: true; data: Backup; warnings: string[] } | { ok: false; error: string };
 
 export function parseBackup(text: string): ParsedBackup {
@@ -44,7 +50,7 @@ export function parseBackup(text: string): ParsedBackup {
     data: {
       dictionary: dict.entries,
       presets: normalizePresets(r.presets),
-      workspace: normalizeWorkspace(r.workspace),
+      workspace: migrateNegative(r.workspace, r.settings),
       settings: normalizeSettings(r.settings),
       generation: normalizeGeneration(r.generation),
     },
