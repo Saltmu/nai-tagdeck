@@ -154,7 +154,10 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   return (
     <div className="app">
       <header className="app-header" data-occludes>
-        <h1 className="app-title">nai-tagdeck</h1>
+        <h1 className="app-title" aria-label="nai-tagdeck">
+          <img className="brand-icon" src={`${import.meta.env.BASE_URL}brand/icon.svg`} width="24" height="24" alt="" />
+          <img className="brand-wordmark" src={`${import.meta.env.BASE_URL}brand/wordmark.svg`} width="108" height="24" alt="" />
+        </h1>
         <nav className="tabbar" aria-label="画面切り替え" data-occludes>
           {TABS.map((t) => (
             <button

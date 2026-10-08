@@ -1,0 +1,52 @@
+[
+  {
+    "id": "01-card-deck",
+    "name": "カードデッキ",
+    "description": "既存のアプリアイコンを引き継ぐ、チェック付きカード。"
+  },
+  {
+    "id": "02-tag-check",
+    "name": "チェックタグ",
+    "description": "タグのON/OFFを、ひとつの輪郭に凝縮。"
+  },
+  {
+    "id": "03-fanned-deck",
+    "name": "扇形デッキ",
+    "description": "プリセットからカードを選ぶような軽快さ。"
+  },
+  {
+    "id": "04-td-monogram",
+    "name": "TDモノグラム",
+    "description": "小さな表示でも識別しやすい、TとDの幾何学形。"
+  },
+  {
+    "id": "05-bracket-tag",
+    "name": "プロンプト括弧",
+    "description": "プロンプトの括弧とタグを合わせた技術的な表情。"
+  },
+  {
+    "id": "06-tag-grid",
+    "name": "タググリッド",
+    "description": "カテゴリごとに整理されたタグを4つのタイルで表現。"
+  },
+  {
+    "id": "07-spark-card",
+    "name": "ひらめきカード",
+    "description": "タグから画像が生まれる、生成のひらめき。"
+  },
+  {
+    "id": "08-tag-link",
+    "name": "リンクタグ",
+    "description": "タグをつなぎ、ひとつのプロンプトに組み立てる。"
+  },
+  {
+    "id": "09-toggle-list",
+    "name": "タグスイッチ",
+    "description": "選択・調整というツールの操作感をそのままマークに。"
+  },
+  {
+    "id": "10-outline-deck",
+    "name": "アウトラインデッキ",
+    "description": "余白を生かす、軽い線のミニマルなデッキ。"
+  }
+]
