@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ImportMode, ImportResult } from '../lib/io';
+import { useDialogs } from './Dialogs';
 
 interface Props {
   fileName: string;
@@ -13,12 +14,16 @@ const MAX_ERRORS_SHOWN = 10;
 
 export function ImportPanel({ fileName, result, existingCount, onImport, onCancel }: Props) {
   const [busy, setBusy] = useState(false);
+  const dialogs = useDialogs();
   const { entries, errors } = result;
 
   const run = async (mode: ImportMode) => {
     if (
       mode === 'replace' &&
-      !window.confirm(`今の辞書（${existingCount}件）を消して、読み込んだ ${entries.length}件 に置き換えます。よろしいですか？`)
+      !(await dialogs.confirm(
+        `今の辞書（${existingCount}件）を消して、読み込んだ ${entries.length}件 に置き換えます。よろしいですか？`,
+        { okLabel: '置き換える', danger: true },
+      ))
     ) {
       return;
     }

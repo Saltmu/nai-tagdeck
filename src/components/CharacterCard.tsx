@@ -5,6 +5,7 @@ import { CHARACTER_CATEGORY_KEYS } from '../lib/categories';
 import { buildPrompt } from '../lib/prompt';
 import { MAX_ENABLED_CHARACTERS } from '../lib/characterLimits';
 import { CategorySection } from './CategorySection';
+import { useDialogs } from './Dialogs';
 
 interface Props {
   character: Character;
@@ -36,8 +37,14 @@ export function CharacterCard({
   const prompt = buildPrompt(tags, syntax, CHARACTER_CATEGORY_KEYS);
   const tagCount = CHARACTER_CATEGORY_KEYS.reduce((n, k) => n + tags[k].length, 0);
 
-  const remove = () => {
-    if (tagCount > 0 && !window.confirm(`「${name}」とそのタグ ${tagCount}件を削除しますか？`)) return;
+  const dialogs = useDialogs();
+  const remove = async () => {
+    if (
+      tagCount > 0 &&
+      !(await dialogs.confirm(`「${name}」とそのタグ ${tagCount}件を削除しますか？`, { okLabel: '削除', danger: true }))
+    ) {
+      return;
+    }
     dispatch({ type: 'removeCharacter', id });
   };
 

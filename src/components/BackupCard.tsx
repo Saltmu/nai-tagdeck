@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent } from 'react';
 import { parseBackup, toBackupJSON, type Backup } from '../lib/backup';
 import { dateStamp, downloadText } from '../lib/browser';
+import { useDialogs } from './Dialogs';
 
 interface Props {
   getData: () => Backup;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function BackupCard({ getData, onImport, notify }: Props) {
+  const dialogs = useDialogs();
   const [error, setError] = useState<string | null>(null);
 
   const handleFile = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -22,7 +24,7 @@ export function BackupCard({ getData, onImport, notify }: Props) {
     }
     setError(null);
     const { data, warnings } = parsed;
-    const ok = window.confirm(
+    const ok = await dialogs.confirm(
       [
         `${file.name} を読み込みます。`,
         `・辞書 ${data.dictionary.length}件、プリセット ${data.presets.length}件を追加・上書きします`,
@@ -33,6 +35,7 @@ export function BackupCard({ getData, onImport, notify }: Props) {
       ]
         .filter(Boolean)
         .join('\n'),
+      { okLabel: '読み込む' },
     );
     if (!ok) return;
     try {

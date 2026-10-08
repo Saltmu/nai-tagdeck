@@ -9,6 +9,7 @@ import { dateStamp, downloadText } from '../lib/browser';
 import { newId } from '../lib/id';
 import { EntryForm } from './EntryForm';
 import { ImportPanel } from './ImportPanel';
+import { useDialogs } from './Dialogs';
 
 interface Props {
   dictionary: Dictionary;
@@ -23,6 +24,7 @@ function blankEntry(category: CategoryKey): DictEntry {
 }
 
 export function DictionaryView({ dictionary, notify }: Props) {
+  const dialogs = useDialogs();
   const { entries, loaded, save, saveMany, remove, importEntries, restoreInitial } = dictionary;
   const [query, setQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<CategoryKey | 'all'>('all');
@@ -53,7 +55,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
   };
 
   const handleDelete = async (entry: DictEntry) => {
-    if (!window.confirm(`「${entry.tag}」を辞書から削除しますか？`)) return;
+    if (!(await dialogs.confirm(`「${entry.tag}」を辞書から削除しますか？`, { okLabel: '削除', danger: true }))) return;
     await remove(entry.id);
     notify(`「${entry.tag}」を削除しました`);
   };

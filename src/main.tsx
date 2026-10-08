@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { DialogProvider } from './components/Dialogs';
 import { ResettableApp } from './components/ResettableApp';
 import './styles.css';
 
@@ -14,6 +15,8 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ResettableApp />
+    <DialogProvider>
+      <ResettableApp />
+    </DialogProvider>
   </StrictMode>,
 );

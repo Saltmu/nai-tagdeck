@@ -1217,6 +1217,39 @@ textarea {
   }
 }
 
+/* ---- app dialog ---- */
+.app-dialog {
+  width: min(420px, 100vw - 2rem);
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-pop);
+}
+
+.app-dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+.app-dialog-message {
+  margin: 0 0 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.app-dialog-input {
+  width: 100%;
+  margin-bottom: 0.9rem;
+}
+
+.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 /* ---- viewer ---- */
 .viewer {
   width: min(1200px, 100vw - 1rem);
@@ -1424,7 +1457,7 @@ textarea {
 }
 
 .preset-select {
-  flex: 1;
+  flex: none;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1432,10 +1465,24 @@ textarea {
   font-weight: 700;
 }
 
-.preset-select select {
+.preset-search {
+  position: relative;
   flex: 1;
   min-width: 0;
   font-weight: 400;
+}
+
+.preset-search input {
+  width: 100%;
+}
+
+.preset-suggestions {
+  max-height: 16rem;
+}
+
+.suggestion.is-current .suggestion-tag::after {
+  content: ' ✓';
+  color: var(--accent);
 }
 
 .preset-actions {

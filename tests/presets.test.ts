@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  filterPresets,
   createPreset,
   isEmptyWorkspace,
   mergePresets,
@@ -125,5 +126,21 @@ describe('backup', () => {
       data: { dictionary: [], presets: [], workspace: emptyWorkspace(), settings: DEFAULT_SETTINGS, generation: DEFAULT_GENERATION },
       warnings: [],
     });
+  });
+});
+
+describe('filterPresets', () => {
+  const ws = emptyWorkspace();
+  const list = [createPreset('海辺の少女', ws), createPreset('Night City', ws), createPreset('カフェ', ws)];
+
+  it('returns every preset for an empty query', () => {
+    expect(filterPresets(list, '  ')).toHaveLength(3);
+  });
+
+  it('matches a part of the name, ignoring case, width and kana type', () => {
+    expect(filterPresets(list, '少女').map((p) => p.name)).toEqual(['海辺の少女']);
+    expect(filterPresets(list, 'ｃｉｔｙ').map((p) => p.name)).toEqual(['Night City']);
+    expect(filterPresets(list, 'かふぇ').map((p) => p.name)).toEqual(['カフェ']);
+    expect(filterPresets(list, 'xyz')).toEqual([]);
   });
 });

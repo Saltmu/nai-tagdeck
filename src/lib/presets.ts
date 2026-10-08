@@ -1,6 +1,7 @@
 import type { Workspace } from '../types';
 import { CATEGORY_KEYS } from './categories';
 import { newId } from './id';
+import { normalize } from './suggest';
 import { normalizeWorkspace } from './workspace';
 
 /** 作業中のタグ一式（ベース＋キャラクター）に名前を付けて保存したもの。 */
@@ -78,4 +79,11 @@ export function sameWorkspace(a: Workspace, b: Workspace): boolean {
 
 export function isEmptyWorkspace(ws: Workspace): boolean {
   return ws.characters.length === 0 && CATEGORY_KEYS.every((k) => ws.base[k].length === 0);
+}
+
+/** 名前の部分一致で絞り込む（全角/半角・大小文字・カタカナ/ひらがなの違いは無視）。空なら全件。 */
+export function filterPresets(presets: readonly Preset[], query: string): Preset[] {
+  const q = normalize(query);
+  if (!q) return [...presets];
+  return presets.filter((p) => normalize(p.name).includes(q));
 }

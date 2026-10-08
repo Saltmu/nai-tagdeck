@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
 import { downloadBlob } from '../lib/browser';
 import { ImageViewer, imageFileName } from './ImageViewer';
+import { useDialogs } from './Dialogs';
 
 interface Props {
   images: GeneratedImage[];
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function Gallery({ images, generating, pendingSize, onRemove, onClear, onUseSeed, onDownloaded }: Props) {
+  const dialogs = useDialogs();
   const [openId, setOpenId] = useState<string | null>(null);
   const openIndex = images.findIndex((img) => img.id === openId);
   const downloadImage = (image: GeneratedImage) => {
@@ -32,8 +34,12 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
           type="button"
           className="btn btn-small btn-danger"
           disabled={images.length === 0}
-          onClick={() => {
-            if (window.confirm(`画像 ${images.length}枚をすべて削除しますか？（保存していない画像は戻せません）`)) onClear();
+          onClick={async () => {
+            const ok = await dialogs.confirm(`画像 ${images.length}枚をすべて削除しますか？（保存していない画像は戻せません）`, {
+              okLabel: 'すべて削除',
+              danger: true,
+            });
+            if (ok) onClear();
           }}
         >
           すべて削除
