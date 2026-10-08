@@ -17,6 +17,10 @@ import { usePresets } from './hooks/usePresets';
 import { useBackupTransfer } from './hooks/useBackupTransfer';
 import { useGenerationControls } from './hooks/useGenerationControls';
 import { useLatestImageNotice } from './hooks/useLatestImageNotice';
+import { useFirstRun } from './hooks/useFirstRun';
+import { isEmptyWorkspace } from './lib/presets';
+import { DEFAULT_SETTINGS } from './lib/settings';
+import { DEFAULT_GENERATION } from './lib/generation';
 import { buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { sizeOf } from './lib/generation';
@@ -42,6 +46,15 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
   const { message, show } = useToast();
+  const openEditor = useCallback(() => setTab('editor'), []);
+  const firstRunReady = dictionary.loaded && !dictionary.error &&
+    [persistence, settingsPersistence, generationPersistence, ...presets.persistence].every((state) => state.loaded && !state.error);
+  const firstRun = useFirstRun({
+    ready: firstRunReady,
+    hasExistingData: !isEmptyWorkspace(workspace) || dictionary.entries.length > 0 || presets.presets.length > 0 || !!token.token ||
+      JSON.stringify(settings) !== JSON.stringify(DEFAULT_SETTINGS) || JSON.stringify(generation) !== JSON.stringify(DEFAULT_GENERATION),
+    dictionary, workspace, dispatch, presets, notify: show, onOpenEditor: openEditor,
+  });
 
   const basePrompt = useMemo(
     () => buildPrompt(workspace.base, settings.weightSyntax),
@@ -187,6 +200,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             getBackup={getBackup}
             onImportBackup={importBackup}
             onResetAll={onResetAll}
+            onShowFirstRun={firstRun.showGuide}
+            firstRunDisabled={!firstRunReady || firstRun.busy}
           />
         )}
       </main>

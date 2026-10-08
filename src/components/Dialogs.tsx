@@ -6,7 +6,7 @@ export interface DialogApi {
   prompt: (message: string, defaultValue?: string, options?: { okLabel?: string }) => Promise<string | null>;
   alert: (message: string) => Promise<void>;
   /** ボタンを複数並べて選ばせる。キャンセル（Esc を含む）なら null。 */
-  choose: <V extends string>(message: string, choices: readonly Choice<V>[]) => Promise<V | null>;
+  choose: <V extends string>(message: string, choices: readonly Choice<V>[], options?: { dismissOnBackdrop?: boolean }) => Promise<V | null>;
 }
 
 export interface Choice<V extends string = string> {
@@ -27,7 +27,7 @@ type Request = { id: number } & (
   | { kind: 'confirm'; message: string; okLabel?: string; danger?: boolean; resolve: (v: boolean) => void }
   | { kind: 'prompt'; message: string; defaultValue: string; okLabel?: string; resolve: (v: string | null) => void }
   | { kind: 'alert'; message: string; resolve: () => void }
-  | { kind: 'choose'; message: string; choices: readonly Choice[]; resolve: (v: string | null) => void }
+  | { kind: 'choose'; message: string; choices: readonly Choice[]; dismissOnBackdrop?: boolean; resolve: (v: string | null) => void }
 );
 type NewRequest = Request extends infer R ? (R extends Request ? Omit<R, 'id'> : never) : never;
 
@@ -55,9 +55,9 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       prompt: (message, defaultValue = '', options) =>
         new Promise((resolve) => push({ kind: 'prompt', message, defaultValue, ...options, resolve })),
       alert: (message) => new Promise((resolve) => push({ kind: 'alert', message, resolve })),
-      choose: <V extends string>(message: string, choices: readonly Choice<V>[]) =>
+      choose: <V extends string>(message: string, choices: readonly Choice<V>[], options?: { dismissOnBackdrop?: boolean }) =>
         new Promise<V | null>((resolve) =>
-          push({ kind: 'choose', message, choices, resolve: resolve as (v: string | null) => void }),
+          push({ kind: 'choose', message, choices, ...options, resolve: resolve as (v: string | null) => void }),
         ),
     }),
     [push],
@@ -111,6 +111,11 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
       ref={dialog}
       className="app-dialog"
       aria-labelledby={`${id}-msg`}
+      onClick={(e) => {
+        if (request.kind !== 'choose' || !request.dismissOnBackdrop || e.target !== e.currentTarget) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) settle(false);
+      }}
       // Esc やブラウザの操作で閉じたときはキャンセル扱い
       onClose={() => settle(false)}
     >

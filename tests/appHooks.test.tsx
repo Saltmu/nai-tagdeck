@@ -81,6 +81,16 @@ it('surfaces generation errors', async () => {
   await render();
   expect(args.show).toHaveBeenCalledWith('network failed', 6000);
 });
+it('does not generate via a shortcut while a modal is open', async () => {
+  await render();
+  const dialog = document.createElement('dialog');
+  dialog.open = true;
+  document.body.append(dialog);
+  try {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true }));
+    expect(args.generator.generate).not.toHaveBeenCalled();
+  } finally { dialog.remove(); }
+});
 it('dismisses a notification until a new image arrives', async () => {
   await render('a');
   expect(notice.unseenId).toBe('a');
