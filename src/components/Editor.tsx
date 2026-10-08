@@ -14,6 +14,9 @@ import type { PresetStore } from '../hooks/usePresets';
 
 const SELECTED_KEY = 'nai-tagdeck:editor-tab';
 
+/** ベースの品質でよく使うタグ（公式の Quality Tags と定番）。ボタンで付け外しする。 */
+const QUALITY_PICKS = ['masterpiece', 'best quality', 'amazing quality', 'very aesthetic', 'absurdres', 'no text'] as const;
+
 function loadSelected(): string {
   try {
     return window.localStorage.getItem(SELECTED_KEY) ?? BASE;
@@ -209,6 +212,8 @@ export function Editor({
               isKnown={isKnown}
               onCopy={onCopy}
               onRegister={register}
+              quickPicks={key === 'quality' ? QUALITY_PICKS : undefined}
+              quickPicksMode="many"
             />
           ))}
         </div>

@@ -14,6 +14,7 @@ const SAMPLE: Array<[CategoryKey, string, string, number?]> = [
   ['quality', 'low complexity', '簡素 シンプル かんそ'],
   ['quality', 'ultra complexity', '高密度 こうみつど'],
   ['quality', 'no text', '文字なし もじなし'],
+  ['quality', 'absurdres', '超高解像度 ちょうこうかいぞうど'],
   ['quality', 'best quality', '最高品質 さいこうひんしつ'],
   ['quality', 'detailed', '詳細 精密 しょうさい せいみつ'],
   ['quality', 'highly detailed', 'より詳細 より精密'],

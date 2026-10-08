@@ -22,6 +22,8 @@ interface Props {
   onRegister: (tag: WorkTag, category: CategoryKey) => void;
   /** 先頭に並べる択一ボタン（キャラの girl / boy / other など）。押し直すと外す。 */
   quickPicks?: readonly string[];
+  /** one: 1つだけ選ぶ（先頭に置く）／ many: それぞれ付け外しする。 */
+  quickPicksMode?: 'one' | 'many';
   /** カテゴリ名の代わりに出す見出し（キャラ側の「被写体」など）。 */
   title?: string;
   /** 入力欄にキャラ同士の動作（source# など）のボタンを出す。 */
@@ -42,6 +44,7 @@ export const CategorySection = memo(function CategorySection({
   onCopy,
   onRegister,
   quickPicks,
+  quickPicksMode = 'one',
   title,
   interactions,
   onAdded,
@@ -107,16 +110,26 @@ export const CategorySection = memo(function CategorySection({
 
       <div id={bodyId} hidden={!open}>
         {quickPicks && (
-          <div className="quick-picks" role="group" aria-label={`${fullLabel}の種類`}>
+          <div className="quick-picks" role="group" aria-label={`${fullLabel}のよく使うタグ`}>
             {quickPicks.map((pick) => {
-              const on = tags.some((t) => normalize(t.tag) === normalize(pick));
+              const existing = tags.find((t) => normalize(t.tag) === normalize(pick));
+              const on = !!existing && (quickPicksMode === 'one' || existing.enabled);
               return (
                 <button
                   key={pick}
                   type="button"
                   className={`btn btn-small${on ? ' btn-primary' : ''}`}
                   aria-pressed={on}
-                  onClick={() => dispatch({ type: 'pickOne', target, category, group: quickPicks, tag: on ? null : pick })}
+                  onClick={() => {
+                    if (quickPicksMode === 'one') {
+                      dispatch({ type: 'pickOne', target, category, group: quickPicks, tag: on ? null : pick });
+                    } else if (existing && on) {
+                      dispatch({ type: 'remove', target, category, id: existing.id });
+                    } else {
+                      // 無いなら追加、OFF なら ON に戻す（add は同じタグを重複させず ON にする）
+                      dispatch({ type: 'add', target, category, tag: pick });
+                    }
+                  }}
                 >
                   {pick}
                 </button>
