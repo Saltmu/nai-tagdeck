@@ -36,9 +36,9 @@ export function PresetBar({ store, workspace, dispatch, notify }: Props) {
   const confirmDiscard = async (action: string, okLabel: string) => {
     if (!dirty) return true;
     if (!active) return dialogs.confirm(`今のタグはプリセットに保存されていません。${action}`, { okLabel });
-    const choice = await dialogs.choose(`「${active.name}」への変更は保存されていません。${action}`, [
+    const choice = await dialogs.choose(`プリセット「${active.name}」に変更が反映されていません。${action}`, [
       { value: 'discard', label: okLabel },
-      { value: 'save', label: `変更を保存して${okLabel}`, primary: true },
+      { value: 'save', label: `プリセットに上書きして${okLabel}`, primary: true },
     ]);
     if (choice === 'save') overwrite();
     return choice !== null;
@@ -66,13 +66,13 @@ export function PresetBar({ store, workspace, dispatch, notify }: Props) {
       setPresets(sortPresets([...presets, preset]));
       setActiveId(preset.id);
     }
-    notify(`「${name}」に保存しました`);
+    notify(`プリセット「${name}」に保存しました`);
   };
 
   const overwrite = () => {
     if (!active) return;
     setPresets(overwritePreset(presets, active.id, workspace));
-    notify(`「${active.name}」を上書き保存しました`);
+    notify(`プリセット「${active.name}」に変更を上書きしました`);
   };
 
   const rename = async () => {
@@ -106,6 +106,7 @@ export function PresetBar({ store, workspace, dispatch, notify }: Props) {
 
   return (
     <section className="card preset-bar" aria-label="プリセット">
+      <p className="hint">作業内容はこのブラウザに自動保存されます。</p>
       <div className="preset-row">
         <label className="preset-select" htmlFor={`${id}-search`}>
           プリセット
@@ -115,10 +116,10 @@ export function PresetBar({ store, workspace, dispatch, notify }: Props) {
       </div>
       <div className="preset-actions">
         <button type="button" className="btn btn-small" disabled={!active || !dirty} onClick={overwrite}>
-          上書き保存
+          変更を上書き
         </button>
         <button type="button" className="btn btn-small" disabled={isEmptyWorkspace(workspace)} onClick={saveAs}>
-          名前を付けて保存
+          新しいプリセットとして保存
         </button>
         <button type="button" className="btn btn-small" disabled={!active} onClick={rename}>
           名前変更

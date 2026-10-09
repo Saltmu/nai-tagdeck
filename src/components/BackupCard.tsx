@@ -63,10 +63,10 @@ export function BackupCard({ getData, onImport, notify }: Props) {
             downloadText(`nai-tagdeck-backup-${dateStamp()}.json`, toBackupJSON(getData()), 'application/json')
           }
         >
-          書き出し
+          バックアップを書き出す
         </button>
         <label className="btn file-btn">
-          読み込み
+          バックアップを読み込む
           <input type="file" className="visually-hidden" accept=".json,application/json" onChange={handleFile} />
         </label>
       </div>

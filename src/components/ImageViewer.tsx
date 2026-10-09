@@ -259,7 +259,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
               <NextIcon />
             </button>
             <span className="viewer-toolbar-gap" />
-            <button type="button" className="icon-btn" onClick={onDownload} aria-label="保存" title="保存">
+            <button type="button" className="icon-btn" onClick={onDownload} aria-label="PNGをダウンロード" title="PNGをダウンロード">
               <DownloadIcon />
             </button>
             <button type="button" className="icon-btn icon-btn-danger" onClick={onRemove} aria-label="削除" title="削除">

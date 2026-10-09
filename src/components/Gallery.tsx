@@ -35,7 +35,7 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
           className="btn btn-small btn-danger"
           disabled={images.length === 0}
           onClick={async () => {
-            const ok = await dialogs.confirm(`画像 ${images.length}枚をすべて削除しますか？（保存していない画像は戻せません）`, {
+            const ok = await dialogs.confirm(`画像 ${images.length}枚をすべて削除しますか？（ダウンロードしていない画像は戻せません）`, {
               okLabel: 'すべて削除',
               danger: true,
             });
@@ -45,7 +45,7 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
           すべて削除
         </button>
       </div>
-      <p className="hint">画像はこのタブのメモリにだけあり、タブを閉じると消えます。残したい画像は保存してください。</p>
+      <p className="hint">画像はこのタブのメモリにだけあり、タブを閉じると消えます。残したい画像はダウンロードしてください。</p>
 
       {images.length === 0 && !generating ? null : (
         <ul className="thumbs">
@@ -63,8 +63,8 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
               <button
                 type="button"
                 className={`btn thumb-download${img.downloaded ? ' is-downloaded' : ''}`}
-                aria-label={`生成画像 ${images.length - i}を${img.downloaded ? '再ダウンロード（ダウンロード済み）' : 'ダウンロード'}`}
-                title={img.downloaded ? 'ダウンロード済み（再ダウンロード）' : 'ダウンロード'}
+                aria-label={`生成画像 ${images.length - i}のPNGを${img.downloaded ? '再ダウンロード（ダウンロード済み）' : 'ダウンロード'}`}
+                title={img.downloaded ? 'PNGを再ダウンロード（ダウンロード済み）' : 'PNGをダウンロード'}
                 onClick={() => downloadImage(img)}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
