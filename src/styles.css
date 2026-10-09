@@ -1597,6 +1597,64 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.app-dialog-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+/* 説明付きの選択肢。ラベルの下に説明を添えたボタンを縦に並べる */
+.app-dialog-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.app-dialog-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-dialog-choice:hover {
+  border-color: var(--accent);
+}
+
+.app-dialog-choice.is-primary {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.app-dialog-choice-label {
+  font-weight: 700;
+}
+
+.app-dialog-choice.is-primary .app-dialog-choice-label {
+  color: var(--accent);
+}
+
+.app-dialog-choice-desc {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.app-dialog-note {
+  margin: 0 0 0.9rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 .app-dialog-input {
   width: 100%;
   margin-bottom: 0.9rem;

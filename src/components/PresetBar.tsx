@@ -106,7 +106,6 @@ export function PresetBar({ store, workspace, dispatch, notify }: Props) {
 
   return (
     <section className="card preset-bar" aria-label="プリセット">
-      <p className="hint">作業内容はこのブラウザに自動保存されます。</p>
       <div className="preset-row">
         <label className="preset-select" htmlFor={`${id}-search`}>
           プリセット

@@ -36,29 +36,47 @@ export function useFirstRun({ ready, hasExistingData, dictionary, workspace, dis
     running.current = true;
     setBusy(true);
     try {
+      // 説明 → 問い → 選択肢の順に読めるようにし、各選択肢で何が起きるかはボタンの中で説明する
       const choice = await dialogs.choose(
-        'サンプルから始めますか？\nベースには人数・画風・背景、キャラにはそれぞれの外見・衣装・ポーズを指定します。\n編集用のタグサンプルと、日本語で検索できる初期辞書を読み込めます。タグは自由に変更できます。画像生成は「生成」を押すまで行われません。\n\nアプリの読み込み・更新を除き、外部通信は画像生成時のNovelAIのみです。本ツールは非公式で、動作・生成結果を保証しません。詳しくは設定の「使い方」「免責事項」をご確認ください。',
+        'タグを組み合わせて NovelAI のプロンプトを作り、画像を生成するツールです。\nベースには人数・画風・背景を、キャラにはそれぞれの外見・衣装・ポーズを指定します。作業内容はこのブラウザに自動保存されます。\n\nどの状態から始めますか？',
         [
-          { value: 'sample', label: 'サンプルと辞書を読み込む', primary: true },
-          { value: 'dictionary', label: '辞書だけ読み込む' },
-          { value: 'empty', label: hasExistingData ? '読み込まずに戻る' : '空の状態で始める' },
+          {
+            value: 'sample',
+            label: 'タグの例と辞書を読み込む',
+            description: 'ベースとキャラ1人分に例のタグが入った状態で始めます。日本語で検索できるタグ辞書も読み込みます。タグは自由に変更・削除できます。',
+            primary: true,
+          },
+          {
+            value: 'dictionary',
+            label: 'タグ辞書だけ読み込む',
+            description: hasExistingData
+              ? '日本語で検索できるタグ辞書を読み込みます。作業中のタグはそのままです。'
+              : 'タグは空のまま、日本語で検索できるタグ辞書だけを読み込みます。',
+          },
+          hasExistingData
+            ? { value: 'empty', label: '何も読み込まずに戻る', description: '今の状態のまま使い続けます。' }
+            : { value: 'empty', label: '何も読み込まずに始める', description: 'タグも辞書も空の状態から始めます。' },
         ],
-        { dismissOnBackdrop: true },
+        {
+          title: hasExistingData ? '初回案内' : 'nai-tagdeck へようこそ',
+          note: '画像は「生成」を押したときだけ生成されます。外部との通信は、アプリの読み込み・更新と、画像生成時の NovelAI だけです。本ツールは非公式で、動作・生成結果を保証しません。詳しくは設定の「使い方」「免責事項」をご覧ください。',
+          dismissOnBackdrop: true,
+        },
       );
       if (choice === 'sample') {
         if (!isEmptyWorkspace(workspace) && !(await dialogs.confirm(
-          '作業中のタグとキャラクターをサンプルで置き換えますか？辞書と保存済みプリセットは残ります。',
-          { okLabel: 'サンプルで置き換える' },
+          '作業中のタグとキャラクターをタグの例で置き換えますか？辞書と保存済みプリセットは残ります。',
+          { okLabel: 'タグの例で置き換える' },
         ))) return;
       }
       if (choice === 'sample' || choice === 'dictionary') {
         await dictionary.restoreInitial();
         if (choice === 'sample') {
-          // ネガティブはサンプルに含めず、作業中のものを残す
+          // ネガティブはタグの例に含めず、作業中のものを残す
           dispatch({ type: 'replace', workspace: { ...createSampleWorkspace(), negative: workspace.negative } });
           presets.setActiveId(null);
         }
-        notify(choice === 'sample' ? 'サンプルと初期辞書を読み込みました' : '初期辞書を読み込みました（作業中のタグはそのままです）');
+        notify(choice === 'sample' ? 'タグの例と辞書を読み込みました' : 'タグ辞書を読み込みました（作業中のタグはそのままです）');
         onOpenEditor();
       }
       // 空の状態・キャンセル・範囲外タップでは既存データを変更しない。

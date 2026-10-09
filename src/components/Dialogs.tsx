@@ -6,7 +6,15 @@ export interface DialogApi {
   prompt: (message: string, defaultValue?: string, options?: { okLabel?: string }) => Promise<string | null>;
   alert: (message: string) => Promise<void>;
   /** ボタンを複数並べて選ばせる。キャンセル（Esc を含む）なら null。 */
-  choose: <V extends string>(message: string, choices: readonly Choice<V>[], options?: { dismissOnBackdrop?: boolean }) => Promise<V | null>;
+  choose: <V extends string>(message: string, choices: readonly Choice<V>[], options?: ChooseOptions) => Promise<V | null>;
+}
+
+export interface ChooseOptions {
+  dismissOnBackdrop?: boolean;
+  /** メッセージの上に出す見出し。 */
+  title?: string;
+  /** 選択肢の下に小さく出す補足。 */
+  note?: string;
 }
 
 export interface Choice<V extends string = string> {
@@ -15,6 +23,8 @@ export interface Choice<V extends string = string> {
   /** Enter で選ばれる主ボタンにする（1つだけ）。 */
   primary?: boolean;
   danger?: boolean;
+  /** ボタンの中にラベルと並べて出す説明。1つでもあれば選択肢を縦に並べる。 */
+  description?: string;
 }
 
 export interface ConfirmOptions {
@@ -27,7 +37,7 @@ type Request = { id: number } & (
   | { kind: 'confirm'; message: string; okLabel?: string; danger?: boolean; resolve: (v: boolean) => void }
   | { kind: 'prompt'; message: string; defaultValue: string; okLabel?: string; resolve: (v: string | null) => void }
   | { kind: 'alert'; message: string; resolve: () => void }
-  | { kind: 'choose'; message: string; choices: readonly Choice[]; dismissOnBackdrop?: boolean; resolve: (v: string | null) => void }
+  | ({ kind: 'choose'; message: string; choices: readonly Choice[]; resolve: (v: string | null) => void } & ChooseOptions)
 );
 type NewRequest = Request extends infer R ? (R extends Request ? Omit<R, 'id'> : never) : never;
 
@@ -55,7 +65,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       prompt: (message, defaultValue = '', options) =>
         new Promise((resolve) => push({ kind: 'prompt', message, defaultValue, ...options, resolve })),
       alert: (message) => new Promise((resolve) => push({ kind: 'alert', message, resolve })),
-      choose: <V extends string>(message: string, choices: readonly Choice<V>[], options?: { dismissOnBackdrop?: boolean }) =>
+      choose: <V extends string>(message: string, choices: readonly Choice<V>[], options?: ChooseOptions) =>
         new Promise<V | null>((resolve) =>
           push({ kind: 'choose', message, choices, ...options, resolve: resolve as (v: string | null) => void }),
         ),
@@ -105,12 +115,15 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
 
   const okLabel = request.kind === 'confirm' || request.kind === 'prompt' ? (request.okLabel ?? 'OK') : 'OK';
   const danger = request.kind === 'confirm' && request.danger;
+  // 説明付きの選択肢は縦に並べ、下の行にはキャンセルだけを残す
+  const stacked = request.kind === 'choose' && request.choices.some((c) => c.description);
 
   return (
     <dialog
       ref={dialog}
       className="app-dialog"
-      aria-labelledby={`${id}-msg`}
+      aria-labelledby={request.kind === 'choose' && request.title ? `${id}-title` : `${id}-msg`}
+      aria-describedby={request.kind === 'choose' && request.title ? `${id}-msg` : undefined}
       onClick={(e) => {
         if (request.kind !== 'choose' || !request.dismissOnBackdrop || e.target !== e.currentTarget) return;
         const rect = e.currentTarget.getBoundingClientRect();
@@ -126,6 +139,11 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
           settle(true);
         }}
       >
+        {request.kind === 'choose' && request.title && (
+          <h2 id={`${id}-title`} className="app-dialog-title">
+            {request.title}
+          </h2>
+        )}
         <p id={`${id}-msg`} className="app-dialog-message">
           {request.message}
         </p>
@@ -140,13 +158,33 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
             onChange={(e) => setValue(e.target.value)}
           />
         )}
+        {stacked && request.kind === 'choose' && (
+          <div className="app-dialog-choices">
+            {request.choices.map((c) => (
+              <button
+                key={c.value}
+                type={c.primary ? 'submit' : 'button'}
+                className={`app-dialog-choice${c.primary ? ' is-primary' : ''}`}
+                ref={c.primary ? primary : undefined}
+                onClick={(e) => {
+                  e.preventDefault();
+                  settle(true, c.value);
+                }}
+              >
+                <span className="app-dialog-choice-label">{c.label}</span>
+                {c.description && <span className="app-dialog-choice-desc">{c.description}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+        {request.kind === 'choose' && request.note && <p className="hint app-dialog-note">{request.note}</p>}
         <div className="app-dialog-actions">
           {request.kind !== 'alert' && (
             <button type="button" className="btn" onClick={() => settle(false)}>
               キャンセル
             </button>
           )}
-          {request.kind === 'choose' ? (
+          {stacked ? null : request.kind === 'choose' ? (
             request.choices.map((c) => (
               <button
                 key={c.value}

@@ -23,7 +23,7 @@ export function SettingsView({ token, notify, getBackup, onImportBackup, onReset
           <details className="accordion">
             <summary>初回案内をもう一度表示</summary>
             <div className="accordion-body">
-              <p className="hint">サンプルと初期辞書の読み込みを選び直せます。辞書と保存済みプリセットは残ります。作業中のタグをサンプルで置き換える前には確認します。</p>
+              <p className="hint">タグの例とタグ辞書の読み込みを選び直せます。辞書と保存済みプリセットは残ります。作業中のタグをタグの例で置き換える前には確認します。</p>
               <button type="button" className="btn" disabled={firstRunDisabled} onClick={onShowFirstRun}>
                 初回案内をもう一度表示
               </button>
