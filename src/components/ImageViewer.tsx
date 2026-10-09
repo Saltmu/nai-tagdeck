@@ -42,8 +42,23 @@ const clampView = (v: View, w: number, h: number): View => {
 };
 
 // 固定サイズの枠の中で画像をピンチ・ホイール・ダブルタップで拡大縮小し、ドラッグで動かす
-function ZoomStage({ src, alt }: { src: string; alt: string }) {
+const EDGE_ZONE = 0.15; // 左右端のこの割合をタップすると前後の画像へ
+const SWIPE_MIN = 50;
+
+interface StageProps {
+  src: string;
+  alt: string;
+  hasPrev: boolean;
+  hasNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+  onClose: () => void;
+}
+
+function ZoomStage({ src, alt, hasPrev, hasNext, onPrev, onNext, onClose }: StageProps) {
   const stage = useRef<HTMLDivElement>(null);
+  const start = useRef({ x: 0, y: 0 });
+  const multi = useRef(false);
   const [view, setView] = useState<View>(FIT);
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -87,7 +102,11 @@ function ZoomStage({ src, alt }: { src: string; alt: string }) {
       // 既に離されたポインタなどは無視
     }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    moved.current = false;
+    if (pointers.current.size === 1) {
+      moved.current = false;
+      multi.current = false;
+      start.current = { x: e.clientX, y: e.clientY };
+    } else multi.current = true;
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -115,8 +134,35 @@ function ZoomStage({ src, alt }: { src: string; alt: string }) {
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    pointers.current.delete(e.pointerId);
-    if (pointers.current.size > 0 || moved.current) return;
+    if (!pointers.current.delete(e.pointerId)) return;
+    if (pointers.current.size > 0) return;
+    const zoomed = viewRef.current.s > 1.01;
+    if (moved.current) {
+      // 等倍表示での横スワイプ = 前後の画像へ
+      const dx = e.clientX - start.current.x;
+      const dy = e.clientY - start.current.y;
+      if (e.type === 'pointerup' && !zoomed && !multi.current && Math.abs(dx) >= SWIPE_MIN && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        if (dx < 0 && hasNext) onNext();
+        else if (dx > 0 && hasPrev) onPrev();
+      }
+      return;
+    }
+    if (e.type !== 'pointerup') return;
+    // 等倍表示で左右の端をタップ = 前後の画像へ
+    if (!zoomed) {
+      const r = e.currentTarget.getBoundingClientRect();
+      const rel = (e.clientX - r.left) / r.width;
+      if (rel < EDGE_ZONE) {
+        lastTap.current = 0;
+        if (hasPrev) onPrev();
+        return;
+      }
+      if (rel > 1 - EDGE_ZONE) {
+        lastTap.current = 0;
+        if (hasNext) onNext();
+        return;
+      }
+    }
     // 動かさずに離した = タップ。素早く2回でズーム切り替え
     const now = Date.now();
     if (now - lastTap.current < 300) {
@@ -145,6 +191,17 @@ function ZoomStage({ src, alt }: { src: string; alt: string }) {
         draggable={false}
         style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})` }}
       />
+      <button
+        type="button"
+        className="viewer-close"
+        aria-label="閉じる"
+        title="閉じる"
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerUp={(e) => e.stopPropagation()}
+        onClick={onClose}
+      >
+        <CloseIcon />
+      </button>
       {view.s > 1.01 && (
         <button
           type="button"
@@ -162,7 +219,6 @@ function ZoomStage({ src, alt }: { src: string; alt: string }) {
 export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [seedCopied, setSeedCopied] = useState(false);
-
   useEffect(() => setSeedCopied(false), [image]);
   useEffect(() => {
     if (!seedCopied) return;
@@ -210,8 +266,34 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
       }}
     >
       <div className="viewer-body">
-        <ZoomStage src={image.url} alt={`生成画像（シード ${image.seed}）`} />
+        <ZoomStage
+          src={image.url}
+          alt={`生成画像（シード ${image.seed}）`}
+          hasPrev={hasPrev}
+          hasNext={hasNext}
+          onPrev={onPrev}
+          onNext={onNext}
+          onClose={() => dialog.current?.close()}
+        />
         <div className="viewer-side">
+          <div className="viewer-toolbar">
+            <button type="button" className="icon-btn" disabled={!hasPrev} onClick={onPrev} aria-label="新しい画像へ" title="新しい画像へ">
+              <PrevIcon />
+            </button>
+            <button type="button" className="icon-btn" disabled={!hasNext} onClick={onNext} aria-label="古い画像へ" title="古い画像へ">
+              <NextIcon />
+            </button>
+            <span className="viewer-toolbar-gap" />
+            <button type="button" className="icon-btn" onClick={onDownload} aria-label="PNGをダウンロード" title="PNGをダウンロード">
+              <DownloadIcon />
+            </button>
+            <button type="button" className="icon-btn icon-btn-danger" onClick={onRemove} aria-label="削除" title="削除">
+              <TrashIcon />
+            </button>
+            <button type="button" className="icon-btn" onClick={() => dialog.current?.close()} aria-label="閉じる" title="閉じる">
+              <CloseIcon />
+            </button>
+          </div>
           <dl className="viewer-meta">
             <div>
               <dt>シード</dt>
@@ -251,24 +333,6 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
               </p>
             ))}
           </details>
-          <div className="viewer-toolbar">
-            <button type="button" className="icon-btn" disabled={!hasPrev} onClick={onPrev} aria-label="新しい画像へ" title="新しい画像へ">
-              <PrevIcon />
-            </button>
-            <button type="button" className="icon-btn" disabled={!hasNext} onClick={onNext} aria-label="古い画像へ" title="古い画像へ">
-              <NextIcon />
-            </button>
-            <span className="viewer-toolbar-gap" />
-            <button type="button" className="icon-btn" onClick={onDownload} aria-label="PNGをダウンロード" title="PNGをダウンロード">
-              <DownloadIcon />
-            </button>
-            <button type="button" className="icon-btn icon-btn-danger" onClick={onRemove} aria-label="削除" title="削除">
-              <TrashIcon />
-            </button>
-            <button type="button" className="icon-btn" onClick={() => dialog.current?.close()} aria-label="閉じる" title="閉じる">
-              <CloseIcon />
-            </button>
-          </div>
         </div>
       </div>
     </dialog>

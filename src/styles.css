@@ -1658,6 +1658,40 @@ textarea {
   gap: 0.25rem;
 }
 
+/* ボタンを標準より10%大きく */
+.viewer-toolbar .icon-btn {
+  width: 40px;
+  height: 40px;
+}
+
+.viewer-toolbar .icon {
+  margin: auto;
+  width: 22px;
+  height: 22px;
+}
+
+.viewer-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.45);
+  color: #fff;
+  opacity: 0.7;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.viewer-close:hover {
+  opacity: 1;
+}
+
 .viewer-toolbar-gap {
   flex: 1;
 }
