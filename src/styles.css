@@ -685,6 +685,63 @@ input[type='checkbox'] {
   color: var(--danger);
 }
 
+/* 確認状態になると左から赤く塗られていき、塗り終わるまでは押せない */
+.viewer-remove-confirm {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  height: 36px;
+  padding: 0 0.8rem;
+  border: 0;
+  border-radius: 8px;
+  background: rgb(192 38 45 / 0.35);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: not-allowed;
+}
+
+.viewer-remove-confirm::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #c0262d;
+  transform-origin: left;
+  animation: remove-arm var(--arm-ms, 1000ms) linear both;
+}
+
+.viewer-remove-confirm span {
+  position: relative;
+}
+
+.viewer-remove-confirm.is-ready {
+  cursor: pointer;
+}
+
+.viewer-remove-confirm.is-ready:hover::before {
+  background: #a51f25;
+}
+
+@keyframes remove-arm {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-remove-confirm::before {
+    animation: none;
+    opacity: 0;
+  }
+
+  .viewer-remove-confirm.is-ready::before {
+    opacity: 1;
+  }
+}
+
 .character .icon-btn:hover:not(:disabled) {
   background: var(--surface);
 }

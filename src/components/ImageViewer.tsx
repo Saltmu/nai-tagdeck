@@ -19,6 +19,8 @@ const VIEWER_STATE = 'naiTagdeckViewer';
 const isViewerState = (state: unknown) =>
   typeof state === 'object' && state !== null && (state as Record<string, unknown>)[VIEWER_STATE] === true;
 
+const REMOVE_ARM_MS = 1000;
+
 const EXT: Record<string, string> = { 'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg' };
 
 export function imageFileName(image: GeneratedImage): string {
@@ -219,7 +221,25 @@ function ZoomStage({ src, alt, hasPrev, hasNext, onPrev, onNext, onClose }: Stag
 export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [seedCopied, setSeedCopied] = useState(false);
-  useEffect(() => setSeedCopied(false), [image]);
+  // 削除は1回目で確認状態にし、2回目で実行する。連打で消えないよう、確認状態になってから
+  // REMOVE_ARM_MS の間は押せない。押せるようになってからしばらく押さなければ元に戻す
+  const [removeArmed, setRemoveArmed] = useState(false);
+  const [removeReady, setRemoveReady] = useState(false);
+
+  useEffect(() => {
+    setSeedCopied(false);
+    setRemoveArmed(false);
+  }, [image]);
+  useEffect(() => {
+    setRemoveReady(false);
+    if (!removeArmed) return;
+    const ready = setTimeout(() => setRemoveReady(true), REMOVE_ARM_MS);
+    const reset = setTimeout(() => setRemoveArmed(false), REMOVE_ARM_MS + 3000);
+    return () => {
+      clearTimeout(ready);
+      clearTimeout(reset);
+    };
+  }, [removeArmed]);
   useEffect(() => {
     if (!seedCopied) return;
     const t = setTimeout(() => setSeedCopied(false), 1500);
@@ -287,9 +307,34 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
             <button type="button" className="icon-btn" onClick={onDownload} aria-label="PNGをダウンロード" title="PNGをダウンロード">
               <DownloadIcon />
             </button>
-            <button type="button" className="icon-btn icon-btn-danger" onClick={onRemove} aria-label="削除" title="削除">
-              <TrashIcon />
-            </button>
+            {removeArmed ? (
+              <button
+                type="button"
+                className={`viewer-remove-confirm${removeReady ? ' is-ready' : ''}`}
+                // disabled にするとフォーカスが外れて確認状態が解けるため、aria-disabled で押下だけ無視する
+                aria-disabled={!removeReady}
+                onClick={() => {
+                  if (removeReady) onRemove();
+                }}
+                onBlur={() => setRemoveArmed(false)}
+                autoFocus
+                aria-label="もう一度押すと削除"
+                title="もう一度押すと削除"
+                style={{ '--arm-ms': `${REMOVE_ARM_MS}ms` } as React.CSSProperties}
+              >
+                <span>削除</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="icon-btn icon-btn-danger"
+                onClick={() => setRemoveArmed(true)}
+                aria-label="削除"
+                title="削除"
+              >
+                <TrashIcon />
+              </button>
+            )}
             <button type="button" className="icon-btn" onClick={() => dialog.current?.close()} aria-label="閉じる" title="閉じる">
               <CloseIcon />
             </button>
