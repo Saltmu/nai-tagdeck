@@ -1,10 +1,11 @@
-import { type ReactNode, useCallback, useMemo, useState } from 'react';
+import { type MouseEvent, type ReactNode, useCallback, useMemo, useState } from 'react';
 import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
 import { SettingsView } from './components/SettingsView';
 import { GeneratePanel } from './components/GeneratePanel';
 import { PromptPreview } from './components/PromptPreview';
 import { Gallery } from './components/Gallery';
+import { GenerateDock } from './components/GenerateDock';
 import { QuickGenerate } from './components/QuickGenerate';
 import { LatestPreview } from './components/LatestPreview';
 import { useDictionary } from './hooks/useDictionary';
@@ -47,6 +48,12 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const imageStore = useImages();
   const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
+  // 広い画面では、画像エリアをクリックしたらドックを閉じる（バーは初期表示と同じ形で残る）
+  const [dockCollapse, setDockCollapse] = useState(0);
+  const hideDockOnImageClick = (e: MouseEvent<HTMLDivElement>) => {
+    if ((e.target as Element).closest('.dock')) return;
+    if (window.matchMedia?.('(min-width: 1100px)').matches) setDockCollapse((n) => n + 1);
+  };
   const { message, show } = useToast();
   const tagUndo = useTagUndo(workspace, rawDispatch, show);
   const dispatch = tagUndo.dispatch;
@@ -169,15 +176,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onCharacterNegativeChange={(characterNegativePrompt) => updateSettings({ characterNegativePrompt })}
             />
           </div>
-          <div className="pane pane-generate">
-            <PromptPreview
-              basePrompt={basePrompt}
-              characterPrompts={characterPrompts}
-              syntax={settings.weightSyntax}
-              onSyntaxChange={(weightSyntax) => updateSettings({ weightSyntax })}
-              onCopy={copy}
-              negativePrompt={negativePrompt}
-            />
+          <div className="pane pane-generate" onClick={hideDockOnImageClick}>
             <Gallery
               images={imageStore.images}
               generating={generator.generating}
@@ -187,18 +186,33 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onUseSeed={applySeed}
               onDownloaded={imageStore.markDownloaded}
             />
-            {/* 詳細設定は下端に寄せ、プロンプトと画像を先に見せる */}
-            <GeneratePanel
-              generation={generation}
-              onGenerationChange={updateGeneration}
-              generator={generator}
-              token={token}
-              basePrompt={basePrompt}
-              characterPrompts={characterPrompts}
-              negativePrompt={negativePrompt}
-              onOpenSettings={openSettings}
-              blocker={blocker}
-              onGenerate={startGenerate}
+            {/* プロンプトと生成設定は下部のドックにまとめ、画像を広く見せる */}
+            <GenerateDock
+              collapseSignal={dockCollapse}
+              generating={generator.generating}
+              error={generator.error}
+              onDismissError={generator.dismissError}
+              promptPanel={
+                <PromptPreview
+                  basePrompt={basePrompt}
+                  characterPrompts={characterPrompts}
+                  syntax={settings.weightSyntax}
+                  onSyntaxChange={(weightSyntax) => updateSettings({ weightSyntax })}
+                  onCopy={copy}
+                  negativePrompt={negativePrompt}
+                />
+              }
+              generatePanel={
+                <GeneratePanel
+                  generation={generation}
+                  onGenerationChange={updateGeneration}
+                  generator={generator}
+                  token={token}
+                  onOpenSettings={openSettings}
+                  blocker={blocker}
+                  onGenerate={startGenerate}
+                />
+              }
             />
           </div>
         </div>
@@ -222,7 +236,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
 
       <UndoBar removed={tagUndo.removed} onUndo={tagUndo.undo} onDismiss={tagUndo.dismiss} />
 
-      <div className={`toast${tagUndo.removed.length > 0 ? ' toast-raised' : ''}`} role="status" aria-live="polite">
+      <div className={`toast${tagUndo.removed.length > 0 ? ' toast-raised' : ''}${tab === 'generate' ? ' toast-above-dock' : ''}`} role="status" aria-live="polite">
         {message}
       </div>
     </div>

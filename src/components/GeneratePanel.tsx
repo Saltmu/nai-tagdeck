@@ -1,5 +1,4 @@
-import { useId, useState } from 'react';
-import type { CharacterPrompt } from '../lib/prompt';
+import { useId } from 'react';
 import type { Generator } from '../hooks/useGenerator';
 import type { TokenState } from '../hooks/useToken';
 import {
@@ -22,9 +21,6 @@ interface Props {
   onGenerationChange: (patch: Partial<GenerationSettings>) => void;
   generator: Generator;
   token: TokenState;
-  basePrompt: string;
-  characterPrompts: CharacterPrompt[];
-  negativePrompt: string;
   onOpenSettings: () => void;
   /** 生成できない理由（なければ null）。 */
   blocker: string | null;
@@ -36,40 +32,15 @@ export function GeneratePanel({
   onGenerationChange,
   generator,
   token,
-  basePrompt,
-  characterPrompts,
-  negativePrompt,
   onOpenSettings,
   blocker,
   onGenerate,
 }: Props) {
   const id = useId();
-  const [open, setOpen] = useState(false);
-  const { generating, error } = generator;
+  const { generating } = generator;
 
   return (
-    <section className={`card generate${open ? '' : ' is-collapsed'}`} aria-labelledby={`${id}-title`}>
-      <div className="card-head">
-        <h2 id={`${id}-title`} className="card-title">
-          <button
-            type="button"
-            className="disclosure generate-disclosure"
-            aria-expanded={open}
-            aria-controls={`${id}-body`}
-            onClick={() => setOpen((value) => !value)}
-          >
-            <span className="disclosure-icon" aria-hidden="true" />
-            生成
-            {generating && <span className="spinner spinner-small" aria-label="生成中" />}
-          </button>
-        </h2>
-        <p className="gen-summary">
-          ベース {basePrompt ? `${basePrompt.split(', ').length}タグ` : 'なし'}
-          {' ／ '}キャラ {characterPrompts.length}人{' ／ '}ネガティブ {negativePrompt ? `${negativePrompt.split(', ').length}タグ` : 'なし'}
-        </p>
-      </div>
-
-      <div id={`${id}-body`} className="generate-body" hidden={!open}>
+    <div className="generate">
       <span className="chip" title={`${FREE_LIMITS.maxSteps} steps 以下・1024×1024 相当以下・1枚`}>
         V5 / Anlas 消費なしの範囲
       </span>
@@ -201,17 +172,6 @@ export function GeneratePanel({
         </button>
       </div>
       {blocker && token.token && <p className="hint gen-blocker">{blocker}</p>}
-      </div>
-
-      {/* 閉じていてもエラーは見えるようにする */}
-      {error && (
-        <div className="gen-error" role="alert">
-          <p>{error}</p>
-          <button type="button" className="icon-btn" aria-label="エラーを閉じる" onClick={generator.dismissError}>
-            ✕
-          </button>
-        </div>
-      )}
-    </section>
+    </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { type CSSProperties, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
 import { downloadBlob } from '../lib/browser';
 import { ImageViewer, imageFileName } from './ImageViewer';
@@ -13,6 +13,11 @@ interface Props {
   onClear: () => void;
   onUseSeed: (seed: number) => void;
   onDownloaded: (id: string) => void;
+}
+
+/** 先頭（最新）の1枚は全幅で大きく見せる。その幅の上限を縦横比から決めるため --ar を渡す。 */
+function thumbStyle(width: number, height: number): CSSProperties {
+  return { aspectRatio: `${width} / ${height}`, '--ar': width / height } as CSSProperties;
 }
 
 export function Gallery({ images, generating, pendingSize, onRemove, onClear, onUseSeed, onDownloaded }: Props) {
@@ -50,13 +55,13 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
       {images.length === 0 && !generating ? null : (
         <ul className="thumbs">
           {generating && (
-            <li className="thumb is-pending" style={{ aspectRatio: `${pendingSize.width} / ${pendingSize.height}` }}>
+            <li className="thumb is-pending" style={thumbStyle(pendingSize.width, pendingSize.height)}>
               <span className="spinner" aria-hidden="true" />
               <span className="visually-hidden">生成中</span>
             </li>
           )}
           {images.map((img, i) => (
-            <li key={img.id} className="thumb" style={{ aspectRatio: `${img.width} / ${img.height}` }}>
+            <li key={img.id} className="thumb" style={thumbStyle(img.width, img.height)}>
               <button type="button" className="thumb-btn" onClick={() => setOpenId(img.id)}>
                 <img src={img.url} alt={`生成画像 ${images.length - i}（シード ${img.seed}）`} loading="lazy" />
               </button>

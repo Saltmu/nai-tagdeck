@@ -1,4 +1,3 @@
-import { useId, useState } from 'react';
 import type { WeightSyntax } from '../types';
 import type { CharacterPrompt } from '../lib/prompt';
 
@@ -13,25 +12,9 @@ interface Props {
 }
 
 export function PromptPreview({ basePrompt, characterPrompts, syntax, onSyntaxChange, onCopy, negativePrompt }: Props) {
-  const [open, setOpen] = useState(true);
-  const id = useId();
   return (
-    <section className="card preview" aria-labelledby={`${id}-heading`}>
-      <div className="card-head">
-        <h2 id={`${id}-heading`} className="card-title">
-          <button
-            type="button"
-            className="disclosure"
-            aria-expanded={open}
-            aria-controls={`${id}-body`}
-            onClick={() => setOpen((value) => !value)}
-          >
-            <span className="disclosure-icon" aria-hidden="true" />
-            プロンプト
-          </button>
-        </h2>
-      </div>
-      <div id={`${id}-body`} hidden={!open}>
+    <div className="preview">
+      <div>
         <label className="inline-field">
           <span>強調の記法</span>
           <select value={syntax} onChange={(e) => onSyntaxChange(e.target.value as WeightSyntax)}>
@@ -92,6 +75,6 @@ export function PromptPreview({ basePrompt, characterPrompts, syntax, onSyntaxCh
           <p className="hint">マイナスや 0 の重みは括弧で表せないため、そのタグだけ数値の記法で出力します。</p>
         )}
       </div>
-    </section>
+    </div>
   );
 }
