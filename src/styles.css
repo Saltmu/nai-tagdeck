@@ -548,11 +548,22 @@ input[type='checkbox'] {
 .editor-tabs {
   display: flex;
   gap: 0.35rem;
-  margin-top: 1rem;
-  padding-bottom: 0.25rem;
+  margin-top: 0.65rem;
+  padding: 0.35rem 0 0.25rem;
   overflow-x: auto;
   border-bottom: 1px solid var(--border);
   scrollbar-width: thin;
+  /* スクロールしてもヘッダーの直下に残す（top はヘッダーの高さに合わせて JS で設定） */
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  background: var(--bg);
+}
+
+/* ヘッダーの直下に張り付いている間は影を付けて下の内容と区切る。
+   高さが変わると下の内容がずれるので、余白は張り付く前と同じにする */
+.editor-tabs.is-stuck {
+  box-shadow: 0 6px 10px -6px rgb(15 20 30 / 0.25);
 }
 
 .editor-tab {
