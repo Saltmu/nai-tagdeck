@@ -1,7 +1,7 @@
-# ドメイン直下（https://www.shishio.x0.to/robots.txt）に配置する。
+# ドメイン直下（https://shishio.x0.to/robots.txt）に配置する。
 # 既存の robots.txt がある場合は上書きせず、現在のルールと統合する。
 # 非公開ページのアクセス制御は認証で行い、robots.txt だけに依存しない。
 User-agent: *
 Allow: /nai-tagdeck/
 
-Sitemap: https://www.shishio.x0.to/nai-tagdeck/sitemap.xml
+Sitemap: https://shishio.x0.to/nai-tagdeck/sitemap.xml
