@@ -18,6 +18,16 @@
   --shadow: 0 1px 2px rgb(15 20 30 / 0.06), 0 1px 1px rgb(15 20 30 / 0.04);
   --shadow-pop: 0 8px 24px rgb(15 20 30 / 0.14);
   color-scheme: light;
+
+  /* 重なり順。間に挟めるよう 10 刻みにし、下にあるものほど手前に出る */
+  --z-editor-tabs: 10; /* ヘッダー直下に張り付く編集タブ */
+  --z-preset-search: 20; /* 候補を開いているプリセット検索欄 */
+  --z-dock: 30; /* 狭い画面で下端に固定する生成ドック */
+  --z-suggesting: 40; /* 候補を出しているカテゴリ（周りを薄く覆う） */
+  --z-header: 50;
+  --z-latest-preview: 60;
+  --z-toast: 70;
+  --z-undo-bar: 80;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -206,7 +216,7 @@ input[type='checkbox'] {
 .app-header {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: var(--z-header);
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -556,7 +566,7 @@ input[type='checkbox'] {
   /* スクロールしてもヘッダーの直下に残す（top はヘッダーの高さに合わせて JS で設定） */
   position: sticky;
   top: 0;
-  z-index: 12;
+  z-index: var(--z-editor-tabs);
   background: var(--bg);
 }
 
@@ -603,7 +613,7 @@ input[type='checkbox'] {
   position: absolute;
   top: 50%;
   left: 0.6rem;
-  z-index: 1;
+  z-index: 10; /* 編集タブの中での重なり順（--z-* とは別） */
   margin: 0;
   transform: translateY(-50%);
 }
@@ -826,7 +836,7 @@ input[type='checkbox'] {
 
 .category.is-suggesting {
   position: relative;
-  z-index: 19;
+  z-index: var(--z-suggesting);
   /* 候補を出している間、このカテゴリ以外を薄いグレーで覆って強調する */
   box-shadow: 0 0 0 100vmax rgba(128, 128, 128, 0.3);
 }
@@ -840,7 +850,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   position: absolute;
   left: 0;
   right: 0;
-  z-index: 10;
+  z-index: 10; /* 候補を出しているカテゴリ・プリセット検索欄の中での重なり順（--z-* とは別） */
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1076,7 +1086,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   position: fixed;
   left: 50%;
   bottom: calc(env(safe-area-inset-bottom) + 12px);
-  z-index: 30;
+  z-index: var(--z-toast);
   max-width: calc(100vw - 2rem);
   padding: 0.55rem 1rem;
   border-radius: 999px;
@@ -1097,7 +1107,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   position: fixed;
   left: 50%;
   bottom: calc(env(safe-area-inset-bottom) + 12px);
-  z-index: 31;
+  z-index: var(--z-undo-bar);
   width: max-content;
   max-width: calc(100vw - 1.5rem);
   transform: translateX(-50%);
@@ -1328,7 +1338,7 @@ textarea {
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 15;
+    z-index: var(--z-dock);
     padding-bottom: env(safe-area-inset-bottom);
     border-bottom: 0;
     border-radius: 16px 16px 0 0;
@@ -1927,6 +1937,12 @@ textarea {
   width: 100%;
 }
 
+/* 候補を出している間だけ、ヘッダー直下に張り付く編集タブより手前に出す。
+   常に手前にすると、スクロールでタブの下に入ったプリセット欄がタブに重なってしまう */
+.preset-search:has(> .suggest-popup:not([hidden])) {
+  z-index: var(--z-preset-search);
+}
+
 .preset-suggestions {
   max-height: 16rem;
 }
@@ -2085,7 +2101,7 @@ textarea {
   position: fixed;
   right: max(0.75rem, env(safe-area-inset-right));
   bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
-  z-index: 25;
+  z-index: var(--z-latest-preview);
   display: flex;
   align-items: flex-start;
   gap: 0.25rem;
