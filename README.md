@@ -44,6 +44,11 @@ npm run build      # 型チェック + dist/ に出力
 `npm run build` で出来た `dist/` の中身を、レンタルサーバーの任意のディレクトリにアップロードする
 （相対パスで出力しているのでサブディレクトリでも動く）。必要なファイルはすべて `dist/` に入っている。HTTPSリダイレクトはサーバー側で設定する。
 
+- `npm run deploy` でテスト・ビルドしてから WinSCP でアップロードする（Windows のみ）。接続には WinSCP に保存済みの
+  セッションを使い、セッション名と公開ディレクトリは `deploy/config.local.json`（Git 管理外。例は
+  [`deploy/config.example.json`](deploy/config.example.json)）に書く。公開ディレクトリは `dist/` と同じ状態に揃え、
+  `dist/` に無いファイルは消す（`keep` に書いた `.htaccess` などは残す）。`npm run deploy -- --dry` で送る・消すファイルを
+  確認だけできる。
 - PWA（ホーム画面に追加・オフライン）は HTTPS のときだけ有効になる。Service Worker（`sw.js`）は更新が
   すぐ反映されるよう、ページ本体は毎回サーバーから取り、取れないときだけキャッシュを使う。
 - アイコンを作り直すときは `node scripts/make-icons.mjs`（`public/icons/` に出力）。

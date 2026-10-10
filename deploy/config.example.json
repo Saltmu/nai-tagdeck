@@ -1,0 +1,5 @@
+{
+  "session": "user@example.sakura.ne.jp",
+  "remoteDir": "/home/user/www/nai-tagdeck",
+  "keep": [".htaccess"]
+}
