@@ -22,6 +22,8 @@ type TagAction =
   /** 消したタグを元の位置に戻す。同じタグが今あれば重複させず、現在のタグを優先する。 */
   | { type: 'restore'; tag: WorkTag; index: number }
   | { type: 'move'; id: string; delta: -1 | 1 }
+  /** ドラッグで id のタグを index 番目へ動かす。 */
+  | { type: 'moveTo'; id: string; index: number }
   | { type: 'setAll'; enabled: boolean }
   /** group のタグのうち tag だけを先頭に置き、ほかは外す。tag が null なら group のタグをすべて外す。 */
   | { type: 'pickOne'; group: readonly string[]; tag: string | null };
@@ -170,6 +172,14 @@ function reduceTags(tags: WorkTag[], action: TagAction): WorkTag[] {
     }
     case 'move':
       return moveItem(tags, action.id, action.delta);
+    case 'moveTo': {
+      const from = tags.findIndex((t) => t.id === action.id);
+      const to = Math.min(Math.max(action.index, 0), tags.length - 1);
+      if (from < 0 || from === to) return tags;
+      const next = [...tags];
+      next.splice(to, 0, next.splice(from, 1)[0]!);
+      return next;
+    }
     case 'setAll':
       return tags.map((t) => ({ ...t, enabled: action.enabled }));
     case 'pickOne': {

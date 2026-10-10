@@ -1,4 +1,4 @@
-import { memo, useId, useState, type Dispatch } from 'react';
+import { memo, useId, useRef, useState, type Dispatch } from 'react';
 import type { CategoryKey, DictEntry, TargetId, WeightSyntax, WorkTag } from '../types';
 import type { WorkspaceAction } from '../lib/workspace';
 import { categoryLabel } from '../lib/categories';
@@ -53,6 +53,7 @@ export const CategorySection = memo(function CategorySection({
   const [sorting, setSorting] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const canSort = tags.length > 1;
+  const listRef = useRef<HTMLUListElement>(null);
   const bodyId = useId();
   const label = title ?? categoryLabel(category);
   const fullLabel = scopeLabel ? `${scopeLabel} / ${label}` : label;
@@ -138,7 +139,7 @@ export const CategorySection = memo(function CategorySection({
           </div>
         )}
         {tags.length > 0 && (
-          <ul className="tag-list">
+          <ul className="tag-list" ref={listRef}>
             {tags.map((t, i) => (
               <TagRow
                 key={t.id}
@@ -151,6 +152,14 @@ export const CategorySection = memo(function CategorySection({
                           i < tags.length - 1
                             ? () => dispatch({ type: 'move', target, category, id: t.id, delta: 1 })
                             : null,
+                        onDrag: (clientY) => {
+                          const rows = Array.from(listRef.current?.children ?? []);
+                          const to = rows.findIndex((row) => {
+                            const r = row.getBoundingClientRect();
+                            return clientY >= r.top && clientY < r.bottom;
+                          });
+                          if (to >= 0 && to !== i) dispatch({ type: 'moveTo', target, category, id: t.id, index: to });
+                        },
                       }
                     : undefined
                 }

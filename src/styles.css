@@ -2008,6 +2008,28 @@ textarea {
   cursor: not-allowed;
 }
 
+.drag-handle {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--muted, inherit);
+}
+
+.drag-area {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.drag-area.is-dragging {
+  cursor: grabbing;
+  background: var(--accent-soft);
+}
+
 .sort-control {
   display: flex;
   gap: 0.25rem;

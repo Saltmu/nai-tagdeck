@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { WorkTag } from '../types';
 import { WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP, clampWeight } from '../lib/prompt';
 import { WeightInput } from './WeightInput';
@@ -12,14 +12,39 @@ interface Props {
   /** 辞書にないタグのときだけ渡す。 */
   onRegister?: () => void;
   /** 並べ替えモードのときだけ渡す（null は端で動かせない）。 */
-  sorting?: { onUp: (() => void) | null; onDown: (() => void) | null };
+  sorting?: {
+    onUp: (() => void) | null;
+    onDown: (() => void) | null;
+    /** 「||」をつかんで動かしている間、ポインターの縦位置を渡す。 */
+    onDrag: (clientY: number) => void;
+  };
 }
 
 export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, sorting }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(tag.tag);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const errorId = useId();
+  // ドラッグ中は行の DOM が動いてポインターのキャプチャが外れる（上へ動かすとき）ので、window で追う。
+  // 並びが変わるたびに onDrag の中身（自分の位置）が変わるため、最新のものを ref 経由で呼ぶ
+  const onDragRef = useRef(sorting?.onDrag);
+  onDragRef.current = sorting?.onDrag;
+  const startDrag = (e: ReactPointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    setDragging(true);
+    const move = (ev: PointerEvent) => onDragRef.current?.(ev.clientY);
+    const end = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  };
   const step = (delta: number) => onWeight(clampWeight(tag.weight + delta));
   const commit = () => {
     const result = onEdit(draft);
@@ -52,6 +77,14 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
           <button type="button" className="btn btn-small" onClick={() => setEditing(false)}>キャンセル</button>
           {error && <span id={errorId} className="tag-edit-error" role="alert">{error}</span>}
         </div>
+      ) : sorting ? (
+        <span
+          className={`tag-check drag-area${dragging ? ' is-dragging' : ''}`}
+          onPointerDown={startDrag}
+        >
+          <span className="drag-handle" aria-hidden="true">||</span>
+          <span className="tag-name">{tag.tag}</span>
+        </span>
       ) : (
         <label className="tag-check">
           <input type="checkbox" checked={tag.enabled} onChange={onToggle} />
