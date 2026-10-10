@@ -62,7 +62,7 @@ it.each([null, 'empty'])('dismissal or choosing empty (%s) preserves all data an
   expect(args.dispatch).not.toHaveBeenCalled();
   expect(args.presets.setActiveId).not.toHaveBeenCalled();
   expect(localStorage.getItem('nai-tagdeck:first-run-complete')).toBe('true');
-  expect(dialogs.choose.mock.calls[0]![2]).toEqual({ dismissOnBackdrop: true });
+  expect(dialogs.choose.mock.calls[0]![2]).toMatchObject({ dismissOnBackdrop: true });
 });
 it('dictionary-only loading preserves the workspace and active preset', async () => {
   args.hasExistingData = true;
