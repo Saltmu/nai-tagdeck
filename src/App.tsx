@@ -174,6 +174,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               presets={presets}
               characterNegative={settings.characterNegativePrompt}
               onCharacterNegativeChange={(characterNegativePrompt) => updateSettings({ characterNegativePrompt })}
+              shown={tab === 'editor'}
             />
           </div>
           <div className="pane pane-generate" onClick={hideDockOnImageClick}>

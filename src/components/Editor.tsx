@@ -21,6 +21,7 @@ import { useDialogs } from './Dialogs';
 import type { PresetStore } from '../hooks/usePresets';
 
 import { useEditorSelection } from '../hooks/useEditorSelection';
+import { useScrollMemory } from '../hooks/useScrollMemory';
 
 /** ベースの品質でよく使うタグ（公式の Quality Tags と定番）。ボタンで付け外しする。 */
 const QUALITY_PICKS = ['masterpiece', 'best quality', 'amazing quality', 'very aesthetic', 'absurdres', 'no text'] as const;
@@ -37,6 +38,8 @@ interface Props {
   /** キャラクタープロンプトに付けるネガティブ（全キャラ共通の文面）。 */
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
+  /** 編集画面を開いている（false の間は他の画面を表示している）。 */
+  shown: boolean;
 }
 
 export function Editor({
@@ -50,6 +53,7 @@ export function Editor({
   presets,
   characterNegative,
   onCharacterNegativeChange,
+  shown,
 }: Props) {
   const knownTags = useMemo(
     () => new Set(dictionary.entries.map((e) => normalize(e.tag))),
@@ -128,6 +132,9 @@ export function Editor({
       ro.disconnect();
     };
   }, []);
+
+  // ベース・ネガティブ・各キャラごとにスクロール位置を覚え、タブを切り替えたときや他の画面から戻ったときに戻す
+  useScrollMemory(selected, shown, tabsRef);
 
   return (
     <div className="editor" aria-busy={!loaded}>
