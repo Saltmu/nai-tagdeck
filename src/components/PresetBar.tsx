@@ -37,8 +37,9 @@ export function PresetBar({ store, workspace, dispatch, notify }: Props) {
     if (!dirty) return true;
     if (!active) return dialogs.confirm(`今のタグはプリセットに保存されていません。${action}`, { okLabel });
     const choice = await dialogs.choose(`プリセット「${active.name}」に変更が反映されていません。${action}`, [
-      { value: 'discard', label: okLabel },
-      { value: 'save', label: `プリセットに上書きして${okLabel}`, primary: true },
+      // メッセージの「反映されていません」と同じ言葉で、今のプリセットに反映してから進むかどうかを示す
+      { value: 'discard', label: `反映せずに${okLabel}` },
+      { value: 'save', label: `変更を反映してから${okLabel}`, primary: true },
     ]);
     if (choice === 'save') overwrite();
     return choice !== null;
