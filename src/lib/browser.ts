@@ -61,3 +61,17 @@ export function visibleBounds(): { top: number; bottom: number } {
   }
   return { top, bottom };
 }
+
+/**
+ * option がリスト内で見えるように、リスト自身だけをスクロールする。
+ * scrollIntoView はページ側までスクロールするため、スマホでキーボード表示中に
+ * 固定ヘッダーやタブが画面外へ押し出されてしまう。
+ */
+export function scrollOptionIntoList(list: HTMLElement, option: HTMLElement): void {
+  const listRect = list.getBoundingClientRect();
+  const optRect = option.getBoundingClientRect();
+  const top = optRect.top - listRect.top - list.clientTop;
+  const bottom = top + optRect.height;
+  if (top < 0) list.scrollTop += top;
+  else if (bottom > list.clientHeight) list.scrollTop += bottom - list.clientHeight;
+}

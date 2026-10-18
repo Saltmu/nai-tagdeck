@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { visibleBounds } from '../lib/browser';
+import { scrollOptionIntoList, visibleBounds } from '../lib/browser';
 import { choosePlacement, type Placement } from '../lib/placement';
 
 const POPUP_MAX = 288;
@@ -19,8 +19,9 @@ export function useSuggestionPopup(expanded: boolean, suggestions: readonly unkn
 
   useEffect(() => {
     if (!expanded) return;
-    const option = listRef.current?.children[active];
-    if (option instanceof HTMLElement) option.scrollIntoView({ block: 'nearest' });
+    const list = listRef.current;
+    const option = list?.children[active];
+    if (list && option instanceof HTMLElement) scrollOptionIntoList(list, option);
   }, [active, suggestions, expanded]);
   // 候補を出している間は、入力欄の上下どちらに広く空きがあるかを見て出す向きと高さを決め直す
   useLayoutEffect(() => {

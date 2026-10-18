@@ -13,6 +13,7 @@ import {
   type Preset,
 } from '../lib/presets';
 import { emptyWorkspace, type WorkspaceAction } from '../lib/workspace';
+import { scrollOptionIntoList } from '../lib/browser';
 import { useDialogs } from './Dialogs';
 
 interface Props {
@@ -156,8 +157,9 @@ function PresetSearch({ inputId, presets, active, onPick }: SearchProps) {
 
   useEffect(() => {
     if (!open) return;
-    const option = listRef.current?.children[cursor];
-    if (option instanceof HTMLElement) option.scrollIntoView({ block: 'nearest' });
+    const list = listRef.current;
+    const option = list?.children[cursor];
+    if (list && option instanceof HTMLElement) scrollOptionIntoList(list, option);
   }, [open, cursor, matches]);
 
   const close = () => {
