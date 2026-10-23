@@ -49,13 +49,40 @@ it('closes with Escape and can reopen', async () => {
   await key('ArrowDown');
   expect(input.getAttribute('aria-expanded')).toBe('true');
 });
-it('closes on an outside pointer and swallows the following click', async () => {
+it('closes on an outside pointer and swallows the rest of that press', async () => {
   await focus();
-  const click = new MouseEvent('click', { bubbles: true, cancelable: true });
-  await act(async () => document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
+  const other = document.createElement('input');
+  document.body.append(other);
+  const reached = vi.fn();
+  for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click']) other.addEventListener(type, reached);
+  const down = new PointerEvent('pointerdown', { bubbles: true, cancelable: true });
+  await act(async () => other.dispatchEvent(down));
   expect(input.getAttribute('aria-expanded')).toBe('false');
-  document.body.dispatchEvent(click);
+  expect(document.activeElement).not.toBe(input);
+  expect(down.defaultPrevented).toBe(true);
+  // mousedown を止めるので、下にある別の入力欄へフォーカスが移らない
+  const mousedown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+  other.dispatchEvent(mousedown);
+  other.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+  const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+  other.dispatchEvent(click);
+  expect(mousedown.defaultPrevented).toBe(true);
   expect(click.defaultPrevented).toBe(true);
+  expect(reached).not.toHaveBeenCalled();
+  // 次の押下は普通に届く
+  other.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  other.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  expect(reached).toHaveBeenCalledTimes(2);
+  other.remove();
+});
+it('keeps presses inside the suggestion area working', async () => {
+  await focus();
+  const option = container.querySelector('[role="option"]')!;
+  await act(async () => {
+    option.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    option.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+  expect(onAdd).toHaveBeenCalled();
 });
 it('deduplicates prefixed suggestions and applies the selected interaction', async () => {
   await focus();
@@ -69,4 +96,26 @@ it('ignores IME confirmation Enter', async () => {
   await focus();
   await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, isComposing: true })));
   expect(onAdd).not.toHaveBeenCalled();
+});
+it('does not reopen suggestions when focus returns with the window', async () => {
+  await focus();
+  await key('Escape');
+  // 別アプリへ切り替え → 戻る（入力欄のフォーカスが復帰する）
+  await act(async () => {
+    window.dispatchEvent(new FocusEvent('blur'));
+    input.blur();
+  });
+  await act(async () => {
+    window.dispatchEvent(new FocusEvent('focus'));
+    input.focus();
+  });
+  expect(input.getAttribute('aria-expanded')).toBe('false');
+  await act(async () => { vi.runOnlyPendingTimers(); });
+  // 押せば普通に開く
+  await act(async () => input.click());
+  expect(input.getAttribute('aria-expanded')).toBe('true');
+  // 印は残らないので、次のフォーカスでは開く
+  await act(async () => input.blur());
+  await focus();
+  expect(input.getAttribute('aria-expanded')).toBe('true');
 });

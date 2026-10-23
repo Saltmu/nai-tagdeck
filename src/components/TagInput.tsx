@@ -23,6 +23,8 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
   const [active, setActive] = useState(0);
   const [picked, setPicked] = useState<Interaction | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // ウィンドウごとフォーカスを失った（別アプリに切り替えた）ときに立てる
+  const leftWindow = useRef(false);
   const listId = useId();
   // 打ち込んだ "source#…" も読み取り、# より後ろで候補を探す
   const typed = interactions ? splitInteraction(text) : { interaction: null, body: text };
@@ -43,6 +45,28 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
   }, [open, entries, query, category, interaction]);
   const expanded = suggestions.length > 0;
   const { areaRef, rowRef, popupRef, listRef, layout } = useSuggestionPopup(expanded, suggestions, active, setOpen);
+
+  // 別アプリから戻ると入力欄にフォーカスが復帰するので、その focus では候補を開かないよう印を付けておく
+  useEffect(() => {
+    let timer = 0;
+    const onWindowBlur = () => {
+      if (document.activeElement === inputRef.current) leftWindow.current = true;
+    };
+    // 復帰時の focus が済んだら印を消す（戻ったあと別の場所を押した場合に残さない）
+    const onWindowFocus = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        leftWindow.current = false;
+      });
+    };
+    window.addEventListener('blur', onWindowBlur);
+    window.addEventListener('focus', onWindowFocus);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('blur', onWindowBlur);
+      window.removeEventListener('focus', onWindowFocus);
+    };
+  }, []);
 
   useEffect(() => {
     onExpandedChange?.(expanded);
@@ -121,6 +145,11 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
           }}
           onFocus={(e) => {
             setActive(0);
+            // ウィンドウに戻ってきてフォーカスが復帰しただけなら候補は開かない
+            if (leftWindow.current) {
+              leftWindow.current = false;
+              return;
+            }
             // ダイアログ（相手キャラへの追加など）を閉じてフォーカスが戻ってきただけなら候補は開かない
             if (e.relatedTarget instanceof Element && e.relatedTarget.closest('dialog')) return;
             setOpen(true);
