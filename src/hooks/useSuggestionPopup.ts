@@ -62,21 +62,46 @@ export function useSuggestionPopup(expanded: boolean, suggestions: readonly unkn
   }, [expanded, suggestions]);
 
 
+  // 候補の外（薄いグレーの覆い）を押したときは候補を閉じるだけにし、下にある要素は反応させない
   useEffect(() => {
     if (!expanded) return;
     const onPointerDown = (e: PointerEvent) => {
       if (e.target instanceof Node && areaRef.current?.contains(e.target)) return;
+      swallowGesture(e);
       setOpen(false);
-      const swallow = (ev: Event) => {
-        ev.stopPropagation();
-        ev.preventDefault();
-      };
-      window.addEventListener('click', swallow, true);
-      window.setTimeout(() => window.removeEventListener('click', swallow, true), 500);
+      // 入力欄からフォーカスを外す（スマホではキーボードも閉じる）
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && areaRef.current?.contains(focused)) focused.blur();
     };
     document.addEventListener('pointerdown', onPointerDown, true);
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [expanded, setOpen]);
 
   return { areaRef, rowRef, popupRef, listRef, layout };
+}
+
+/**
+ * 1回の押下で起きる後続イベント（mousedown によるフォーカス移動、タッチ後の擬似マウスイベント、click）を握りつぶす。
+ * タッチでは指を離したときに当たり判定をやり直すので、覆いが消えたあとの入力欄などに届かないよう止める。
+ */
+function swallowGesture(down: PointerEvent) {
+  down.stopPropagation();
+  down.preventDefault();
+  const swallow = (ev: Event) => {
+    ev.stopPropagation();
+    if (ev.cancelable) ev.preventDefault();
+    if (ev.type === 'click') cleanup();
+  };
+  const types = ['pointerup', 'mousedown', 'mouseup', 'touchend', 'click'] as const;
+  const options = { capture: true, passive: false };
+  let timer = 0;
+  const cleanup = () => {
+    window.clearTimeout(timer);
+    for (const type of types) window.removeEventListener(type, swallow, options);
+    window.removeEventListener('pointerdown', cleanup, true);
+  };
+  for (const type of types) window.addEventListener(type, swallow, options);
+  // スクロールなどで click が来なかったときは、次の押下か時間切れで元に戻す
+  window.addEventListener('pointerdown', cleanup, true);
+  timer = window.setTimeout(cleanup, 1000);
 }
