@@ -28,6 +28,7 @@
   --z-latest-preview: 60;
   --z-toast: 70;
   --z-undo-bar: 80;
+  --z-gesture-shield: 90; /* 候補の外を押したあと、その押下が下の要素に届かないよう一時的に覆う透明な板 */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -844,6 +845,12 @@ input[type='checkbox'] {
 /* 候補表示中は、そのカテゴリ以外のボタン等にホバー・フォーカス風の反応を起こさせない */
 body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label, summary):not(.is-suggesting *) {
   pointer-events: none;
+}
+
+.gesture-shield {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-gesture-shield);
 }
 
 .suggest-popup {

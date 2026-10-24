@@ -82,26 +82,44 @@ export function useSuggestionPopup(expanded: boolean, suggestions: readonly unkn
 
 /**
  * 1回の押下で起きる後続イベント（mousedown によるフォーカス移動、タッチ後の擬似マウスイベント、click）を握りつぶす。
- * タッチでは指を離したときに当たり判定をやり直すので、覆いが消えたあとの入力欄などに届かないよう止める。
+ * タッチでは指を離したときに当たり判定をやり直し、touchend も止められないことがあるので、
+ * 押下が終わるまで透明な板で画面を覆い、覆いが消えたあとの入力欄などに届かないようにする。
  */
 function swallowGesture(down: PointerEvent) {
   down.stopPropagation();
   down.preventDefault();
+  const shield = document.createElement('div');
+  shield.className = 'gesture-shield';
+  shield.setAttribute('aria-hidden', 'true');
+  document.body.append(shield);
   const swallow = (ev: Event) => {
     ev.stopPropagation();
     if (ev.cancelable) ev.preventDefault();
-    if (ev.type === 'click') cleanup();
+    // click の既定動作（フォーカス移動など）が済むまで板を残す
+    if (ev.type === 'click') window.setTimeout(cleanup);
   };
   const types = ['pointerup', 'mousedown', 'mouseup', 'touchend', 'click'] as const;
   const options = { capture: true, passive: false };
   let timer = 0;
+  let done = false;
   const cleanup = () => {
+    if (done) return;
+    done = true;
     window.clearTimeout(timer);
+    shield.remove();
     for (const type of types) window.removeEventListener(type, swallow, options);
     window.removeEventListener('pointerdown', cleanup, true);
+    window.removeEventListener('pointerup', release, true);
+    window.removeEventListener('pointercancel', release, true);
+  };
+  // スクロールなどで click が来なかったときは、指を離して少ししてから・次の押下・時間切れのどれかで元に戻す
+  const release = () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(cleanup, 600);
   };
   for (const type of types) window.addEventListener(type, swallow, options);
-  // スクロールなどで click が来なかったときは、次の押下か時間切れで元に戻す
   window.addEventListener('pointerdown', cleanup, true);
-  timer = window.setTimeout(cleanup, 1000);
+  window.addEventListener('pointerup', release, true);
+  window.addEventListener('pointercancel', release, true);
+  timer = window.setTimeout(cleanup, 5000);
 }

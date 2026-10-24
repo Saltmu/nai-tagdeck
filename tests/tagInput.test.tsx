@@ -60,6 +60,8 @@ it('closes on an outside pointer and swallows the rest of that press', async () 
   expect(input.getAttribute('aria-expanded')).toBe('false');
   expect(document.activeElement).not.toBe(input);
   expect(down.defaultPrevented).toBe(true);
+  // タッチで指を離したあとの当たり判定が下の入力欄に当たらないよう、透明な板で覆っている
+  expect(document.querySelector('.gesture-shield')).not.toBeNull();
   // mousedown を止めるので、下にある別の入力欄へフォーカスが移らない
   const mousedown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
   other.dispatchEvent(mousedown);
@@ -69,6 +71,8 @@ it('closes on an outside pointer and swallows the rest of that press', async () 
   expect(mousedown.defaultPrevented).toBe(true);
   expect(click.defaultPrevented).toBe(true);
   expect(reached).not.toHaveBeenCalled();
+  await act(async () => { vi.runOnlyPendingTimers(); });
+  expect(document.querySelector('.gesture-shield')).toBeNull();
   // 次の押下は普通に届く
   other.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
   other.dispatchEvent(new MouseEvent('click', { bubbles: true }));
