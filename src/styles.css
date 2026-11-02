@@ -487,6 +487,11 @@ input[type='checkbox'] {
   overflow-wrap: anywhere;
 }
 
+/* タグ行のピクトは横幅を詰める（高さはタップしやすさのため維持）。 */
+.tag-row > .icon-btn {
+  width: 28px;
+}
+
 .tag-edit {
   display: flex;
   flex: 1;
