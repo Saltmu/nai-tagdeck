@@ -58,6 +58,16 @@ export function BookIcon() {
   );
 }
 
+/** 辞書に登録（本とプラス）。 */
+export function BookPlusIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M9 5.5C7.8 4.5 6.1 4.1 3.8 4.1v10.8c2.3 0 4 .4 5.2 1.4M9 5.5C10.2 4.5 11.9 4.1 14.2 4.1V8M9 5.5v10.8" {...stroke} />
+      <path d="M15 11v5M12.5 13.5h5" {...stroke} />
+    </svg>
+  );
+}
+
 /** 設定（スライダー）。 */
 export function SettingsIcon() {
   return (

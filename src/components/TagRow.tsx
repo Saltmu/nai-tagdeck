@@ -2,6 +2,7 @@ import { useId, useRef, useState, type PointerEvent as ReactPointerEvent } from 
 import type { WorkTag } from '../types';
 import { WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP, clampWeight } from '../lib/prompt';
 import { WeightInput } from './WeightInput';
+import { BookPlusIcon, EditIcon } from './icons';
 
 interface Props {
   tag: WorkTag;
@@ -116,19 +117,20 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
       ) : (
         <>
           {!editing && (
-            <button type="button" className="btn btn-small" aria-label={`${tag.tag} を編集`}
+            <button type="button" className="icon-btn" aria-label={`${tag.tag} を編集`} title="このタグを編集"
               onClick={() => { setDraft(tag.tag); setError(null); setEditing(true); }}>
-              編集
+              <EditIcon />
             </button>
           )}
           {onRegister && !editing && (
             <button
               type="button"
-              className="btn btn-small btn-ghost"
+              className="icon-btn"
+              aria-label={`${tag.tag} を辞書に登録`}
               title="このタグを辞書に登録"
               onClick={onRegister}
             >
-              ＋辞書
+              <BookPlusIcon />
             </button>
           )}
           <div className="weight-control">
