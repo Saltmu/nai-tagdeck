@@ -2,7 +2,7 @@ import { useId, useRef, useState, type PointerEvent as ReactPointerEvent } from 
 import type { WorkTag } from '../types';
 import { WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP, clampWeight } from '../lib/prompt';
 import { WeightInput } from './WeightInput';
-import { BookPlusIcon, EditIcon } from './icons';
+import { BookPlusIcon, CheckIcon, CloseIcon, EditIcon } from './icons';
 
 interface Props {
   tag: WorkTag;
@@ -74,8 +74,12 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
               if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
             }}
           />
-          <button type="button" className="btn btn-small" onClick={commit}>保存</button>
-          <button type="button" className="btn btn-small" onClick={() => setEditing(false)}>キャンセル</button>
+          <button type="button" className="icon-btn" aria-label="保存" title="保存" onClick={commit}>
+            <CheckIcon />
+          </button>
+          <button type="button" className="icon-btn" aria-label="キャンセル" title="キャンセル" onClick={() => setEditing(false)}>
+            <CloseIcon />
+          </button>
           {error && <span id={errorId} className="tag-edit-error" role="alert">{error}</span>}
         </div>
       ) : sorting ? (
@@ -133,6 +137,7 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
               <BookPlusIcon />
             </button>
           )}
+          {!editing && (
           <div className="weight-control">
             <button
               type="button"
@@ -154,6 +159,7 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
               ＋
             </button>
           </div>
+          )}
           <button
             type="button"
             className="icon-btn icon-btn-danger"

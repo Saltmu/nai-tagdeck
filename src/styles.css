@@ -488,7 +488,8 @@ input[type='checkbox'] {
 }
 
 /* タグ行のピクトは横幅を詰める（高さはタップしやすさのため維持）。 */
-.tag-row > .icon-btn {
+.tag-row > .icon-btn,
+.tag-edit > .icon-btn {
   width: 28px;
 }
 
