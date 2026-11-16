@@ -19,13 +19,15 @@ export const CATEGORIES = [
 export type CategoryKey = (typeof CATEGORIES)[number]['key'];
 
 /** プロンプト（ベース・キャラクター）を組み立てるカテゴリ。 */
-export type PromptCategoryKey = Exclude<CategoryKey, 'negative'>;
+export type PromptCategoryKey = Exclude<CategoryKey, 'negative'> | 'unclassified';
+export type WorkspaceCategoryKey = PromptCategoryKey | 'negative';
 
 export const CATEGORY_KEYS: readonly CategoryKey[] = CATEGORIES.map((c) => c.key);
 
-export const PROMPT_CATEGORY_KEYS: readonly PromptCategoryKey[] = CATEGORY_KEYS.filter(
-  (k): k is PromptCategoryKey => k !== 'negative',
-);
+export const PROMPT_CATEGORY_KEYS: readonly PromptCategoryKey[] = [
+  ...CATEGORY_KEYS.filter((k) => k !== 'negative'),
+  'unclassified',
+];
 
 /** キャラクタープロンプトで編集するカテゴリ（品質・画風・エフェクト・構図・背景・天候はベース側で扱う）。 */
 export const CHARACTER_CATEGORY_KEYS: readonly PromptCategoryKey[] = [
@@ -33,13 +35,15 @@ export const CHARACTER_CATEGORY_KEYS: readonly PromptCategoryKey[] = [
   'appearance',
   'outfit',
   'pose',
+  'unclassified',
 ];
 
 export function isCategoryKey(value: unknown): value is CategoryKey {
   return typeof value === 'string' && (CATEGORY_KEYS as readonly string[]).includes(value);
 }
 
-export function categoryLabel(key: CategoryKey): string {
+export function categoryLabel(key: WorkspaceCategoryKey): string {
+  if (key === 'unclassified') return '未分類';
   return CATEGORIES.find((c) => c.key === key)?.label ?? key;
 }
 

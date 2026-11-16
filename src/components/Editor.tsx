@@ -35,6 +35,7 @@ interface Props {
   onCopy: (text: string, label: string) => void;
   notify: (message: string) => void;
   presets: PresetStore;
+  onPickPng?: () => void;
   /** キャラクタープロンプトに付けるネガティブ（全キャラ共通の文面）。 */
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
@@ -51,6 +52,7 @@ export function Editor({
   onCopy,
   notify,
   presets,
+  onPickPng,
   characterNegative,
   onCharacterNegativeChange,
   shown,
@@ -138,7 +140,7 @@ export function Editor({
 
   return (
     <div className="editor" aria-busy={!loaded}>
-      <PresetBar store={presets} workspace={workspace} dispatch={dispatch} notify={notify} />
+      <PresetBar store={presets} workspace={workspace} dispatch={dispatch} notify={notify} onPickPng={onPickPng} />
 
       <div
         ref={tabsRef}

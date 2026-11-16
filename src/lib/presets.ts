@@ -87,7 +87,7 @@ export function sameWorkspace(a: PresetWorkspace, b: PresetWorkspace): boolean {
   const list = (tags: Workspace['negative']) => tags.map((t) => [t.tag, t.enabled, t.weight]);
   const compareNegative = a.negative !== undefined && b.negative !== undefined;
   const strip = (ws: PresetWorkspace) => {
-    const groups = (g: Workspace['base']) => PROMPT_CATEGORY_KEYS.map((k) => list(g[k]));
+    const groups = (g: Workspace['base']) => PROMPT_CATEGORY_KEYS.map((k) => list(g[k] ?? []));
     return JSON.stringify([
       groups(ws.base),
       ws.characters.map((c) => [c.name, c.enabled, groups(c.tags)]),
@@ -99,7 +99,7 @@ export function sameWorkspace(a: PresetWorkspace, b: PresetWorkspace): boolean {
 
 /** ベースとキャラクターが空か。ネガティブは既定値が入っているので見ない。 */
 export function isEmptyWorkspace(ws: PresetWorkspace): boolean {
-  return ws.characters.length === 0 && PROMPT_CATEGORY_KEYS.every((k) => ws.base[k].length === 0);
+  return ws.characters.length === 0 && PROMPT_CATEGORY_KEYS.every((k) => !ws.base[k]?.length);
 }
 
 /** 名前の部分一致で絞り込む（全角/半角・大小文字・カタカナ/ひらがなの違いは無視）。空なら全件。 */

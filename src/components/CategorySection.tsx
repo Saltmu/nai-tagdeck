@@ -1,7 +1,7 @@
 import { memo, useId, useRef, useState, type Dispatch } from 'react';
-import type { CategoryKey, DictEntry, TargetId, WeightSyntax, WorkTag } from '../types';
-import type { WorkspaceAction } from '../lib/workspace';
-import { categoryLabel } from '../lib/categories';
+import type { CategoryKey, DictEntry, TargetId, WeightSyntax, WorkTag, WorkspaceCategoryKey } from '../types';
+import { BASE, type WorkspaceAction } from '../lib/workspace';
+import { categoryLabel, CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { buildCategoryPrompt } from '../lib/prompt';
 import { useCategoryOpen } from '../hooks/useCategoryOpen';
 import { normalize } from '../lib/suggest';
@@ -12,7 +12,7 @@ interface Props {
   target: TargetId;
   /** コピー時のトーストや入力欄のラベルに使う（例: 「キャラ1 / 外見」）。 */
   scopeLabel?: string;
-  category: CategoryKey;
+  category: WorkspaceCategoryKey;
   tags: WorkTag[];
   dispatch: Dispatch<WorkspaceAction>;
   entries: DictEntry[];
@@ -63,6 +63,9 @@ export const CategorySection = memo(function CategorySection({
   const remainingCount = enabledCount - summaryTags.length;
   const allOn = tags.length > 0 && enabledCount === tags.length;
   const text = buildCategoryPrompt(tags, syntax);
+  const destinations = category === 'unclassified'
+    ? (target === BASE ? PROMPT_CATEGORY_KEYS : CHARACTER_CATEGORY_KEYS).filter((key) => key !== 'unclassified')
+    : [];
 
   return (
     <section className={`card category${suggesting ? ' is-suggesting' : ''}`}>
@@ -186,14 +189,28 @@ export const CategorySection = memo(function CategorySection({
                   return null;
                 }}
                 onRemove={() => dispatch({ type: 'remove', target, category, id: t.id, undo: true })}
-                onRegister={isKnown(t.tag) ? undefined : () => onRegister(t, category)}
+                onRegister={category !== 'unclassified' && !isKnown(t.tag) ? () => onRegister(t, category) : undefined}
+                categoryMove={category === 'unclassified' ? (
+                  <select
+                    className="tag-category-move"
+                    aria-label={`${t.tag} の移動先カテゴリ`}
+                    value=""
+                    onChange={(e) => {
+                      const to = destinations.find((key) => key === e.target.value);
+                      if (to) dispatch({ type: 'moveFromUnclassified', target, id: t.id, to });
+                    }}
+                  >
+                    <option value="" disabled>移動先</option>
+                    {destinations.map((key) => <option key={key} value={key}>{categoryLabel(key)}</option>)}
+                  </select>
+                ) : undefined}
               />
             ))}
           </ul>
         )}
         {!sorting && (
           <TagInput
-            category={category}
+            category={category === 'unclassified' ? undefined : category}
             label={fullLabel}
             entries={entries}
             onExpandedChange={setSuggesting}

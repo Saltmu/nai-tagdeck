@@ -13,6 +13,7 @@ interface Props {
   onRemove: () => void;
   onUseSeed: (seed: number) => void;
   onDownload: () => void;
+  onImportPrompt?: () => void;
 }
 
 const VIEWER_STATE = 'naiTagdeckViewer';
@@ -218,7 +219,7 @@ function ZoomStage({ src, alt, hasPrev, hasNext, onPrev, onNext, onClose }: Stag
   );
 }
 
-export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload }: Props) {
+export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload, onImportPrompt }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [seedCopied, setSeedCopied] = useState(false);
   // 削除は1回目で確認状態にし、2回目で実行する。連打で消えないよう、確認状態になってから
@@ -369,6 +370,9 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
               <dd>{new Date(image.createdAt).toLocaleTimeString()}</dd>
             </div>
           </dl>
+          {onImportPrompt && (
+            <button type="button" className="btn btn-small" onClick={onImportPrompt}>プロンプトを読み込む</button>
+          )}
           <details className="viewer-prompt">
             <summary>プロンプト</summary>
             <p>{image.prompt}</p>

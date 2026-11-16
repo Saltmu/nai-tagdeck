@@ -1,6 +1,6 @@
 import type { CategoryKey, PromptCategoryKey } from './lib/categories';
 
-export type { CategoryKey, PromptCategoryKey };
+export type { CategoryKey, PromptCategoryKey, WorkspaceCategoryKey } from './lib/categories';
 
 /** 辞書の1エントリ。 */
 export interface DictEntry {

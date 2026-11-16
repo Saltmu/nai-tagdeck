@@ -21,9 +21,10 @@ interface Props {
   workspace: Workspace;
   dispatch: Dispatch<WorkspaceAction>;
   notify: (message: string) => void;
+  onPickPng?: () => void;
 }
 
-export function PresetBar({ store, workspace, dispatch, notify }: Props) {
+export function PresetBar({ store, workspace, dispatch, notify, onPickPng }: Props) {
   const id = useId();
   const dialogs = useDialogs();
   const { presets, setPresets, activeId, setActiveId } = store;
@@ -129,6 +130,9 @@ export function PresetBar({ store, workspace, dispatch, notify }: Props) {
           削除
         </button>
         <span className="spacer" />
+        <button type="button" className="btn btn-small" disabled={!onPickPng} onClick={onPickPng}>
+          PNGから読み込む
+        </button>
         <button type="button" className="btn btn-small" onClick={startNew}>
           新規
         </button>

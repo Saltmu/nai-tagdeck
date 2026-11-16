@@ -1,11 +1,11 @@
 import { useCallback, useRef, useState, type Dispatch } from 'react';
-import type { CategoryKey, TargetId, WorkTag, Workspace } from '../types';
+import type { TargetId, WorkTag, Workspace, WorkspaceCategoryKey } from '../types';
 import { tagsOf, type WorkspaceAction } from '../lib/workspace';
 
 /** 削除したタグと、元の所属・位置。 */
 export interface RemovedTag {
   target: TargetId;
-  category: CategoryKey;
+  category: WorkspaceCategoryKey;
   tag: WorkTag;
   index: number;
 }
