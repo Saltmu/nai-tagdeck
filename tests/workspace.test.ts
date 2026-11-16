@@ -1,3 +1,4 @@
+import { openDB } from 'idb';
 import { describe, expect, it } from 'vitest';
 import {
   BASE,
@@ -178,6 +179,20 @@ describe('workspaceReducer: キャラクター', () => {
 });
 
 describe('normalizeWorkspace', () => {
+  it('着衣状態を衣装の後ろに統合し、ベースとキャラのタグ設定を引き継ぐ', () => {
+    const jacket = { id: 'jacket', tag: 'jacket', enabled: true, weight: 1 };
+    const open = { id: 'open', tag: 'open jacket', enabled: true, weight: 1.2 };
+    const rolled = { id: 'rolled', tag: 'sleeves rolled up', enabled: false, weight: 0.9 };
+    const groups = { outfit: [jacket], dress_state: [open, rolled] };
+    const ws = normalizeWorkspace({ base: groups, characters: [{ tags: groups }] });
+
+    expect(ws.base.outfit).toEqual([jacket, open, rolled]);
+    expect(ws.characters[0]?.tags.outfit).toEqual(ws.base.outfit);
+    expect(ws.base).not.toHaveProperty('dress_state');
+    expect(buildPrompt(ws.base, 'numeric')).toBe('jacket, 1.2::open jacket::');
+    expect(normalizeWorkspace(ws)).toEqual(ws);
+  });
+
   it('読み込み・置き換えでも15人を保持してチェックは先頭の6人までにする', () => {
     const raw = {
       base: {},
@@ -249,6 +264,22 @@ describe('normalizeWorkspace', () => {
 });
 
 describe('db (IndexedDB)', () => {
+  it('以前に保存された辞書の着衣状態を衣装として読み出す', async () => {
+    await replaceAllEntries([]);
+    const entry = {
+      id: 'legacy', tag: 'open jacket', category: 'dress_state',
+      alias: '前開き', default_weight: 1.2, sort_order: 4, updated_at: '2026-01-01',
+    };
+    const db = await openDB('nai-tagdeck', 1);
+    try {
+      await db.put('dictionary', entry);
+      expect(await listEntries()).toEqual([{ ...entry, category: 'outfit' }]);
+    } finally {
+      db.close();
+      await replaceAllEntries([]);
+    }
+  });
+
   it('辞書と KV を保存・置き換えできる', async () => {
     const base = { category: 'quality' as const, alias: '', default_weight: 1, sort_order: 0, updated_at: '' };
     await putEntry({ id: '1', tag: 'a', ...base });

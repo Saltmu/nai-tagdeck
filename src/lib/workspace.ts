@@ -1,5 +1,5 @@
 import type { Character, CategoryKey, PromptCategoryKey, TagGroups, TargetId, WorkTag, Workspace } from '../types';
-import { PROMPT_CATEGORY_KEYS } from './categories';
+import { LEGACY_DRESS_STATE_CATEGORY, PROMPT_CATEGORY_KEYS } from './categories';
 import { newId } from './id';
 import { clampWeight, parseTagList } from './prompt';
 import { DEFAULT_NEGATIVE } from './novelai';
@@ -93,6 +93,9 @@ function normalizeGroups(raw: unknown): TagGroups {
     const list = obj[key];
     if (Array.isArray(list)) groups[key] = normalizeTags(list);
   }
+  // 統合前のプロンプトと同じ順序になるよう、衣装の後ろに着衣状態をつなぐ。
+  const dressState = obj[LEGACY_DRESS_STATE_CATEGORY];
+  if (Array.isArray(dressState)) groups.outfit.push(...normalizeTags(dressState));
   return groups;
 }
 

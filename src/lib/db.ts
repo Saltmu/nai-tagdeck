@@ -1,8 +1,13 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { DictEntry } from '../types';
+import { LEGACY_DRESS_STATE_CATEGORY } from './categories';
+
+type StoredDictEntry = Omit<DictEntry, 'category'> & {
+  category: DictEntry['category'] | typeof LEGACY_DRESS_STATE_CATEGORY;
+};
 
 interface TagDeckDB extends DBSchema {
-  dictionary: { key: string; value: DictEntry };
+  dictionary: { key: string; value: StoredDictEntry };
   kv: { key: string; value: unknown };
 }
 
@@ -20,7 +25,11 @@ function getDB(): Promise<IDBPDatabase<TagDeckDB>> {
 }
 
 export async function listEntries(): Promise<DictEntry[]> {
-  return (await getDB()).getAll('dictionary');
+  const entries = await (await getDB()).getAll('dictionary');
+  return entries.map(({ category, ...entry }) => ({
+    ...entry,
+    category: category === LEGACY_DRESS_STATE_CATEGORY ? 'outfit' : category,
+  }));
 }
 
 export async function putEntry(entry: DictEntry): Promise<void> {
