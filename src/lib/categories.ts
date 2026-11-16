@@ -1,10 +1,11 @@
+export const LEGACY_DRESS_STATE_CATEGORY = 'dress_state';
+
 export const CATEGORIES = [
   { key: 'quality', label: '品質' },
   { key: 'style', label: '画風' },
   { key: 'subject', label: '被写体・人数・関係性' },
   { key: 'appearance', label: '外見' },
   { key: 'outfit', label: '衣装' },
-  { key: 'dress_state', label: '着衣状態' },
   { key: 'pose', label: 'ポーズ' },
   { key: 'effect', label: 'エフェクト' },
   { key: 'composition', label: '構図' },
@@ -31,7 +32,6 @@ export const CHARACTER_CATEGORY_KEYS: readonly PromptCategoryKey[] = [
   'subject',
   'appearance',
   'outfit',
-  'dress_state',
   'pose',
 ];
 
@@ -50,6 +50,7 @@ export function categoryIndex(key: CategoryKey): number {
 /** キー（quality）と表示名（品質）のどちらでも受け付ける。 */
 export function parseCategory(value: string): CategoryKey | null {
   const v = value.trim();
+  if (v === LEGACY_DRESS_STATE_CATEGORY || v === '着衣状態') return 'outfit';
   if (isCategoryKey(v)) return v;
   return CATEGORIES.find((c) => c.label === v)?.key ?? null;
 }

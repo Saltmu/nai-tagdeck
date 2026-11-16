@@ -22,6 +22,14 @@ const e = (id: string, tag: string, extra: Partial<DictEntry> = {}): DictEntry =
 });
 
 describe('JSON', () => {
+  it('旧カテゴリのキーと表示名を衣装として読み込む', () => {
+    const entries = [e('open', 'open jacket', { category: 'outfit', alias: '前開き' })];
+    const json = toJSON(entries).replace('"category": "outfit"', '"category": "dress_state"');
+    const csv = toCSV(entries).replace(',outfit,', ',着衣状態,');
+    expect(fromJSON(json)).toEqual({ entries, errors: [] });
+    expect(fromCSV(csv)).toEqual({ entries, errors: [] });
+  });
+
   it('背景・場所と時間・天候をJSON/CSVで読み戻せる', () => {
     const entries = [e('bg', 'forest', { category: 'background' }), e('time', 'night', { category: 'weather' })];
     expect(fromJSON(toJSON(entries))).toEqual({ entries, errors: [] });
