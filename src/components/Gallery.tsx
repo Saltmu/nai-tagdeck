@@ -1,8 +1,9 @@
-import { type CSSProperties, useState } from 'react';
+import { type CSSProperties, type DragEvent, useRef, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
 import { downloadBlob } from '../lib/browser';
 import { ImageViewer, imageFileName } from './ImageViewer';
 import { useDialogs } from './Dialogs';
+import type { PromptSource } from './PromptImportDialog';
 
 interface Props {
   images: GeneratedImage[];
@@ -13,6 +14,8 @@ interface Props {
   onClear: () => void;
   onUseSeed: (seed: number) => void;
   onDownloaded: (id: string) => void;
+  onPickPng?: () => void;
+  onReadPng: (source: PromptSource) => void;
 }
 
 /** 先頭（最新）の1枚は全幅で大きく見せる。その幅の上限を縦横比から決めるため --ar を渡す。 */
@@ -20,14 +23,23 @@ function thumbStyle(width: number, height: number): CSSProperties {
   return { aspectRatio: `${width} / ${height}`, '--ar': width / height } as CSSProperties;
 }
 
-export function Gallery({ images, generating, pendingSize, onRemove, onClear, onUseSeed, onDownloaded }: Props) {
+export function Gallery({ images, generating, pendingSize, onRemove, onClear, onUseSeed, onDownloaded, onPickPng, onReadPng }: Props) {
   const dialogs = useDialogs();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [fileError, setFileError] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const dragDepth = useRef(0);
   const openIndex = images.findIndex((img) => img.id === openId);
   const downloadImage = (image: GeneratedImage) => {
     downloadBlob(imageFileName(image), image.blob);
     onDownloaded(image.id);
   };
+  const openImport = (blob: Blob, name: string) => {
+    setFileError('');
+    setOpenId(null);
+    onReadPng({ blob, name });
+  };
+  const isFileDrag = (e: DragEvent) => e.dataTransfer.types.includes('Files');
 
   return (
     <section className="card gallery" aria-label="生成した画像">
@@ -51,6 +63,45 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
         </button>
       </div>
       <p className="hint">画像はこのタブのメモリにだけあり、タブを閉じると消えます。残したい画像はダウンロードしてください。</p>
+      <div
+        className={`png-drop-zone${dragging ? ' is-dragging' : ''}`}
+        onDragEnter={(e) => {
+          if (!isFileDrag(e)) return;
+          e.preventDefault();
+          if (onPickPng) {
+            dragDepth.current++;
+            setDragging(true);
+          }
+        }}
+        onDragOver={(e) => {
+          if (!isFileDrag(e)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = onPickPng ? 'copy' : 'none';
+        }}
+        onDragLeave={() => {
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (dragDepth.current === 0) setDragging(false);
+        }}
+        onDrop={(e) => {
+          if (!isFileDrag(e)) return;
+          e.preventDefault();
+          dragDepth.current = 0;
+          setDragging(false);
+          if (!onPickPng) return;
+          const files = e.dataTransfer.files;
+          if (files.length > 1) setFileError('PNG を1枚ずつドロップしてください');
+          else if (files[0]) openImport(files[0], files[0].name);
+        }}
+      >
+        <button type="button" className="btn btn-small" disabled={!onPickPng} onClick={() => {
+          setFileError('');
+          onPickPng?.();
+        }}>
+          PNGから読み込む
+        </button>
+        <span className="hint">または NovelAI の PNG をここにドロップ</span>
+      </div>
+      {fileError && <p className="error-banner" role="alert">{fileError}</p>}
 
       {images.length === 0 && !generating ? null : (
         <ul className="thumbs">
@@ -96,6 +147,10 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
           }}
           onUseSeed={onUseSeed}
           onDownload={() => downloadImage(images[openIndex]!)}
+          onImportPrompt={onPickPng ? () => {
+            const image = images[openIndex]!;
+            openImport(image.blob, imageFileName(image));
+          } : undefined}
         />
       )}
     </section>

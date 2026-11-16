@@ -7,7 +7,7 @@ import { useSuggestionPopup } from '../hooks/useSuggestionPopup';
 import { INTERACTIONS, splitInteraction, withInteraction, type Interaction } from '../lib/interaction';
 
 interface Props {
-  category: CategoryKey;
+  category?: CategoryKey;
   label: string;
   entries: DictEntry[];
   onAdd: (tag: string, weight: number) => void;

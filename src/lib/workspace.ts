@@ -1,5 +1,5 @@
-import type { Character, CategoryKey, PromptCategoryKey, TagGroups, TargetId, WorkTag, Workspace } from '../types';
-import { LEGACY_DRESS_STATE_CATEGORY, PROMPT_CATEGORY_KEYS } from './categories';
+import type { Character, PromptCategoryKey, TagGroups, TargetId, WorkTag, Workspace, WorkspaceCategoryKey } from '../types';
+import { CHARACTER_CATEGORY_KEYS, LEGACY_DRESS_STATE_CATEGORY, PROMPT_CATEGORY_KEYS } from './categories';
 import { newId } from './id';
 import { clampWeight, parseTagList } from './prompt';
 import { DEFAULT_NEGATIVE } from './novelai';
@@ -30,7 +30,8 @@ type TagAction =
 
 export type WorkspaceAction =
   /** category が 'negative' のときは target によらずネガティブを操作する。 */
-  | (TagAction & { target: TargetId; category: CategoryKey })
+  | (TagAction & { target: TargetId; category: WorkspaceCategoryKey })
+  | { type: 'moveFromUnclassified'; target: TargetId; id: string; to: PromptCategoryKey }
   | { type: 'addCharacter' }
   | { type: 'removeCharacter'; id: string }
   | { type: 'renameCharacter'; id: string; name: string }
@@ -207,7 +208,7 @@ function moveItem<T extends { id: string }>(items: T[], id: string, delta: -1 | 
 }
 
 /** target / category が指すタグの並び。キャラクターがいなければ undefined。 */
-export function tagsOf(state: Workspace, target: TargetId, category: CategoryKey): WorkTag[] | undefined {
+export function tagsOf(state: Workspace, target: TargetId, category: WorkspaceCategoryKey): WorkTag[] | undefined {
   if (category === 'negative') return state.negative;
   if (target === BASE) return state.base[category];
   return state.characters.find((c) => c.id === target)?.tags[category];
@@ -220,8 +221,14 @@ function updateGroups(groups: TagGroups, category: PromptCategoryKey, action: Ta
 }
 
 function updateCharacter(state: Workspace, id: string, fn: (c: Character) => Character): Workspace {
-  if (!state.characters.some((c) => c.id === id)) return state;
-  return { ...state, characters: state.characters.map((c) => (c.id === id ? fn(c) : c)) };
+  const index = state.characters.findIndex((c) => c.id === id);
+  if (index < 0) return state;
+  const before = state.characters[index]!;
+  const after = fn(before);
+  if (before === after) return state;
+  const characters = [...state.characters];
+  characters[index] = after;
+  return { ...state, characters };
 }
 
 export function workspaceReducer(state: Workspace, action: WorkspaceAction): Workspace {
@@ -243,6 +250,27 @@ export function workspaceReducer(state: Workspace, action: WorkspaceAction): Wor
       return { ...state, characters: moveItem(state.characters, action.id, action.delta) };
     case 'replace':
       return normalizeWorkspace(action.workspace);
+    case 'moveFromUnclassified': {
+      const keys = action.target === BASE ? PROMPT_CATEGORY_KEYS : CHARACTER_CATEGORY_KEYS;
+      if (action.to === 'unclassified' || !keys.includes(action.to)) return state;
+      const move = (groups: TagGroups): TagGroups => {
+        const tag = groups.unclassified.find((t) => t.id === action.id);
+        if (!tag) return groups;
+        return {
+          ...groups,
+          unclassified: groups.unclassified.filter((t) => t.id !== tag.id),
+          [action.to]: [...groups[action.to], tag],
+        };
+      };
+      if (action.target === BASE) {
+        const base = move(state.base);
+        return base === state.base ? state : { ...state, base };
+      }
+      return updateCharacter(state, action.target, (character) => {
+        const tags = move(character.tags);
+        return tags === character.tags ? character : { ...character, tags };
+      });
+    }
     default: {
       const { target, category } = action;
       if (category === 'negative') {

@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useCallback, useMemo, useState } from 'react';
+import { type MouseEvent, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
 import { SettingsView } from './components/SettingsView';
@@ -8,6 +8,7 @@ import { Gallery } from './components/Gallery';
 import { GenerateDock } from './components/GenerateDock';
 import { QuickGenerate } from './components/QuickGenerate';
 import { LatestPreview } from './components/LatestPreview';
+import { PromptImportDialog, type PromptSource } from './components/PromptImportDialog';
 import { useDictionary } from './hooks/useDictionary';
 import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWorkspace';
 import { useToast } from './hooks/useToast';
@@ -28,6 +29,7 @@ import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/p
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { sizeOf } from './lib/generation';
 import { copyText } from './lib/browser';
+import type { PromptImport } from './lib/promptImport';
 
 type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
 
@@ -48,6 +50,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const imageStore = useImages();
   const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
+  const [promptSource, setPromptSource] = useState<PromptSource | null>(null);
+  const pngInput = useRef<HTMLInputElement>(null);
   // 広い画面では、画像エリアをクリックしたらドックを閉じる（バーは初期表示と同じ形で残る）
   const [dockCollapse, setDockCollapse] = useState(0);
   const hideDockOnImageClick = (e: MouseEvent<HTMLDivElement>) => {
@@ -108,6 +112,23 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   });
   const latest = imageStore.images[0];
   const { unseenId, dismiss } = useLatestImageNotice(latest?.id, tab === 'generate');
+  const pickPng = firstRunReady ? () => pngInput.current?.click() : undefined;
+  const openPromptImport = (source: PromptSource) => {
+    if (firstRunReady) setPromptSource(source);
+  };
+  const applyPrompt = (result: PromptImport, applyGeneration: boolean) => {
+    setPromptSource(null);
+    dispatch({ type: 'replace', workspace: {
+      base: result.base,
+      characters: result.characters,
+      negative: result.negative ?? workspace.negative,
+    } });
+    presets.setActiveId(null);
+    if (result.characterNegative !== undefined) updateSettings({ characterNegativePrompt: result.characterNegative });
+    if (applyGeneration) updateGeneration(result.generation.values);
+    openEditor();
+    show('画像のプロンプトを読み込みました');
+  };
 
   const showWorkbench = tab === 'editor' || tab === 'generate';
 
@@ -172,6 +193,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onCopy={copy}
               notify={show}
               presets={presets}
+              onPickPng={pickPng}
               characterNegative={settings.characterNegativePrompt}
               onCharacterNegativeChange={(characterNegativePrompt) => updateSettings({ characterNegativePrompt })}
               shown={tab === 'editor'}
@@ -186,6 +208,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onClear={imageStore.clear}
               onUseSeed={applySeed}
               onDownloaded={imageStore.markDownloaded}
+              onPickPng={pickPng}
+              onReadPng={openPromptImport}
             />
             {/* プロンプトと生成設定は下部のドックにまとめ、画像を広く見せる */}
             <GenerateDock
@@ -230,6 +254,26 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
           />
         )}
       </main>
+
+      <input
+        ref={pngInput}
+        type="file"
+        accept="image/png,.png"
+        hidden
+        onChange={(e) => {
+          const file = e.currentTarget.files?.[0];
+          e.currentTarget.value = '';
+          if (file) openPromptImport({ blob: file, name: file.name });
+        }}
+      />
+      {promptSource && firstRunReady && (
+        <PromptImportDialog
+          source={promptSource}
+          entries={dictionary.entries}
+          onCancel={() => setPromptSource(null)}
+          onApply={applyPrompt}
+        />
+      )}
 
       {tab === 'editor' && latest && unseenId === latest.id && (
         <LatestPreview image={latest} onOpen={() => setTab('generate')} onDismiss={dismiss} />

@@ -83,7 +83,7 @@ export interface ParsedTag {
  * カンマ・改行区切りのプロンプトをタグに分解する。公式UIから貼り付けたときのため、
  * `1.2::a, b::` のような重みのグループと `{a}` / `[[b]]` の括弧も読み取る。
  */
-export function parseTagList(text: string): ParsedTag[] {
+export function parseTagList(text: string, onWeightAdjusted?: (tag: string, weight: number, adjusted: number) => void): ParsedTag[] {
   const out: ParsedTag[] = [];
   let groupWeight: number | null = null;
   let braceDepth = 0;
@@ -118,7 +118,11 @@ export function parseTagList(text: string): ParsedTag[] {
     const weight = base * Math.pow(BRACE_RATIO, braceDepth);
     braceDepth += closing;
     if (closesGroup) groupWeight = null;
-    if (s) out.push({ tag: s, weight: clampWeight(weight) });
+    if (s) {
+      const adjusted = clampWeight(weight);
+      if (Math.abs(weight - adjusted) > 1e-9) onWeightAdjusted?.(s, weight, adjusted);
+      out.push({ tag: s, weight: adjusted });
+    }
   }
   return out;
 }

@@ -535,6 +535,18 @@ input[type='checkbox'] {
   flex-basis: 100%;
 }
 
+.tag-row:has(.tag-category-move) {
+  flex-wrap: wrap;
+}
+
+.tag-row:has(.tag-category-move) .tag-check {
+  min-width: min(8rem, 100%);
+}
+
+.tag-category-move {
+  max-width: 7rem;
+}
+
 .tag-edit input {
   flex: 1;
   min-width: 8rem;
@@ -1712,6 +1724,66 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.png-drop-zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.75rem 0;
+  padding: 0.65rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.png-drop-zone .hint {
+  margin: 0;
+}
+
+.png-drop-zone.is-dragging {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.prompt-import-dialog {
+  width: min(540px, 100vw - 2rem);
+  max-height: calc(100dvh - 2rem);
+}
+
+.prompt-import-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.prompt-import-filename,
+.prompt-import-summary {
+  overflow-wrap: anywhere;
+}
+
+.prompt-import-summary {
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin-bottom: 0.75rem;
+}
+
+.prompt-import-summary ul {
+  padding-inline-start: 1.4rem;
+}
+
+.prompt-import-categories {
+  display: block;
+  margin: 0 0 0.25rem;
+}
+
+.prompt-import-summary p:first-child {
+  margin-top: 0;
+}
+
+.prompt-import-settings {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
 }
 

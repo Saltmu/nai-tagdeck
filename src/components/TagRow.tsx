@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { WorkTag } from '../types';
 import { WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP, clampWeight } from '../lib/prompt';
 import { WeightInput } from './WeightInput';
@@ -12,6 +12,7 @@ interface Props {
   onRemove: () => void;
   /** 辞書にないタグのときだけ渡す。 */
   onRegister?: () => void;
+  categoryMove?: ReactNode;
   /** 並べ替えモードのときだけ渡す（null は端で動かせない）。 */
   sorting?: {
     onUp: (() => void) | null;
@@ -21,7 +22,7 @@ interface Props {
   };
 }
 
-export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, sorting }: Props) {
+export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, categoryMove, sorting }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(tag.tag);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +121,7 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
         </div>
       ) : (
         <>
+          {!editing && categoryMove}
           {!editing && (
             <button type="button" className="icon-btn" aria-label={`${tag.tag} を編集`} title="このタグを編集"
               onClick={() => { setDraft(tag.tag); setError(null); setEditing(true); }}>
