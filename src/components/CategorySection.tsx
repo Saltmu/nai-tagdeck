@@ -58,6 +58,9 @@ export const CategorySection = memo(function CategorySection({
   const label = title ?? categoryLabel(category);
   const fullLabel = scopeLabel ? `${scopeLabel} / ${label}` : label;
   const enabledCount = tags.filter((t) => t.enabled).length;
+  const enabledTags = tags.filter((t) => t.enabled);
+  const summaryTags = enabledTags.slice(0, 2).map((t) => t.tag);
+  const remainingCount = enabledCount - summaryTags.length;
   const allOn = tags.length > 0 && enabledCount === tags.length;
   const text = buildCategoryPrompt(tags, syntax);
 
@@ -70,16 +73,25 @@ export const CategorySection = memo(function CategorySection({
             className="disclosure"
             aria-expanded={open}
             aria-controls={bodyId}
-            onClick={toggleOpen}
+            onClick={() => {
+              if (open) setSorting(false);
+              toggleOpen();
+            }}
           >
             <span className="disclosure-icon" aria-hidden="true" />
-            {label}
-            <span className="count">
-              {enabledCount}/{tags.length}
-            </span>
+            <span className="disclosure-label">{label}</span>
+            {open ? (
+              <span className="count">{enabledCount}/{tags.length}</span>
+            ) : (
+              <span className="collapsed-summary">
+                <span className="count">{enabledCount}件ON</span>
+                {summaryTags.length > 0 && <span className="summary-tags"> · {summaryTags.join(', ')}</span>}
+                {remainingCount > 0 && <span className="summary-more"> ほか{remainingCount}件</span>}
+              </span>
+            )}
           </button>
         </h3>
-        <div className="head-actions">
+        {open && <div className="head-actions">
           {(canSort || sorting) && (
             <button
               type="button"
@@ -106,7 +118,7 @@ export const CategorySection = memo(function CategorySection({
           >
             コピー
           </button>
-        </div>
+        </div>}
       </div>
 
       <div id={bodyId} hidden={!open}>

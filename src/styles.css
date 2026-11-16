@@ -422,9 +422,11 @@ input[type='checkbox'] {
 }
 
 .disclosure {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 0.5rem minmax(0, auto) minmax(0, 1fr);
   align-items: center;
   gap: 0.5rem;
+  width: 100%;
   min-height: 36px;
   padding: 0;
   border: 0;
@@ -441,6 +443,29 @@ input[type='checkbox'] {
   border-bottom: 2px solid currentColor;
   transform: rotate(-45deg);
   transition: transform 0.15s;
+}
+
+.disclosure-label {
+  min-width: 0;
+}
+
+.collapsed-summary {
+  grid-column: 2 / -1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.summary-tags {
+  color: var(--text);
+}
+
+.summary-more {
+  white-space: nowrap;
 }
 
 .disclosure[aria-expanded='true'] .disclosure-icon {
