@@ -7,6 +7,7 @@ import { useCategoryOpen } from '../hooks/useCategoryOpen';
 import { normalize } from '../lib/suggest';
 import { TagRow } from './TagRow';
 import { TagInput } from './TagInput';
+import { CheckIcon, CopyIcon, SortIcon, ToggleAllIcon } from './icons';
 
 interface Props {
   target: TargetId;
@@ -62,6 +63,8 @@ export const CategorySection = memo(function CategorySection({
   const summaryTags = enabledTags.slice(0, 2).map((t) => t.tag);
   const remainingCount = enabledCount - summaryTags.length;
   const allOn = tags.length > 0 && enabledCount === tags.length;
+  const sortLabel = sorting ? '完了' : '並べ替え';
+  const toggleAllLabel = allOn ? '全OFF' : '全ON';
   const text = buildCategoryPrompt(tags, syntax);
   const destinations = category === 'unclassified'
     ? (target === BASE ? PROMPT_CATEGORY_KEYS : CHARACTER_CATEGORY_KEYS).filter((key) => key !== 'unclassified')
@@ -98,28 +101,34 @@ export const CategorySection = memo(function CategorySection({
           {(canSort || sorting) && (
             <button
               type="button"
-              className={`btn btn-small${sorting ? ' btn-primary' : ''}`}
+              className="icon-btn"
+              aria-label={sortLabel}
+              title={sortLabel}
               aria-pressed={sorting}
               onClick={() => setSorting((v) => !v)}
             >
-              {sorting ? '完了' : '並べ替え'}
+              {sorting ? <CheckIcon /> : <SortIcon />}
             </button>
           )}
           <button
             type="button"
-            className="btn btn-small"
+            className="icon-btn"
+            aria-label={toggleAllLabel}
+            title={toggleAllLabel}
             disabled={tags.length === 0}
             onClick={() => dispatch({ type: 'setAll', target, category, enabled: !allOn })}
           >
-            {allOn ? '全OFF' : '全ON'}
+            <ToggleAllIcon enable={!allOn} />
           </button>
           <button
             type="button"
-            className="btn btn-small"
+            className="icon-btn"
+            aria-label="コピー"
+            title="コピー"
             disabled={!text}
             onClick={() => onCopy(text, fullLabel)}
           >
-            コピー
+            <CopyIcon />
           </button>
         </div>}
       </div>
