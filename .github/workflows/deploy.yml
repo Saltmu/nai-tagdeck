@@ -1,0 +1,72 @@
+name: Deploy nai-tagdeck
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Preview files without uploading
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nai-tagdeck-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Sync the build to the web server
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          : "${DEPLOY_SSH_KEY:?Set the production DEPLOY_SSH_KEY secret}"
+          : "${DEPLOY_KNOWN_HOSTS:?Set the production DEPLOY_KNOWN_HOSTS secret}"
+          if [[ ! "$DEPLOY_HOST" =~ ^[[:alnum:]][[:alnum:].-]*$ ||
+                ! "$DEPLOY_USER" =~ ^[[:alnum:]_][[:alnum:]_-]*$ ||
+                ! "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ||
+                ! "$DEPLOY_DIR" =~ ^(/[[:alnum:]_.-]+)+/?$ ||
+                "$DEPLOY_DIR" =~ /\.\.?(/|$) ]]; then
+            echo '::error::Check the production host, username, port, and absolute deployment directory.'
+            exit 1
+          fi
+
+          ssh_dir=$(mktemp -d)
+          trap 'rm -rf -- "$ssh_dir"' EXIT
+          umask 077
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          unset DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS
+
+          export RSYNC_RSH="ssh -p $DEPLOY_PORT -i $ssh_dir/key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o ConnectTimeout=15"
+          destination="$DEPLOY_USER@$DEPLOY_HOST:${DEPLOY_DIR%/}"
+          options=(-r --checksum --itemize-changes)
+          if [[ "$DRY_RUN" == true ]]; then
+            options+=(--dry-run)
+          fi
+
+          # Upload fingerprinted assets before publishing pages that reference them.
+          rsync "${options[@]}" dist/assets/ "$destination/assets/"
+          rsync "${options[@]}" --delay-updates --exclude='/assets/' --exclude='/.htaccess' dist/ "$destination/"
