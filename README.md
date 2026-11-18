@@ -84,16 +84,16 @@ npm run dev
 <details>
 <summary>GitHub Actions から SSH でアップロード</summary>
 
-公開サーバーで SSH 公開鍵認証と `rsync` が利用できる場合に使えます。GitHub の **Settings → Environments** で `production` を作成し、Variables と Secrets を登録します。
+公開サーバーで SSH パスワード認証と `rsync` が利用できる場合に使えます。GitHub の **Settings → Environments** で `production` を作成し、Variables と Secrets を登録します。
 
 | 種別 | 名前 | 設定値 |
 | --- | --- | --- |
 | Variable | `DEPLOY_HOST` | WinSCP と同じ接続先ホスト名 |
 | Variable | `DEPLOY_PORT` | SSH ポート（省略時は 22） |
-| Variable | `DEPLOY_USER` | SSH ユーザー名 |
+| Secret | `DEPLOY_USER` | SSH ユーザー名 |
 | Variable | `DEPLOY_DIR` | `/home/user/www/nai-tagdeck` のような、既存の公開ディレクトリの絶対パス |
-| Secret | `DEPLOY_SSH_KEY` | デプロイ専用のパスフレーズなし SSH 秘密鍵。対応する公開鍵をサーバーに登録します |
-| Secret | `DEPLOY_KNOWN_HOSTS` | 既存の信頼できる SSH 接続やホスティング事業者で確認したホスト公開鍵を含む known_hosts の行。22 以外のポートではホスト欄を `[ホスト名]:ポート` にします |
+| Secret | `DEPLOY_PASSWORD` | SSH ユーザーのパスワード |
+| Variable | `DEPLOY_KNOWN_HOSTS` | 既存の信頼できる SSH 接続やホスティング事業者で確認したホスト公開鍵を含む known_hosts の行。22 以外のポートではホスト欄を `[ホスト名]:ポート` にします |
 
 **Actions → Deploy nai-tagdeck → Run workflow** で `main` を選び、まず **Preview files without uploading** をオンにしたまま実行します。接続と転送予定を確認したら、チェックを外して再実行します。毎回テストとビルドを実行し、ハッシュ付きアセットを先にアップロードします。公開先のファイルは削除しないため、以前のアセットもサーバーに残ります。
 

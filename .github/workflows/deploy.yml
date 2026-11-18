@@ -32,18 +32,21 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Install deployment tools
+        run: sudo apt-get update && sudo apt-get install -y rsync sshpass
       - name: Sync the build to the web server
         env:
           DRY_RUN: ${{ inputs.dry_run }}
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          SSHPASS: ${{ secrets.DEPLOY_PASSWORD }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
         run: |
-          : "${DEPLOY_SSH_KEY:?Set the production DEPLOY_SSH_KEY secret}"
-          : "${DEPLOY_KNOWN_HOSTS:?Set the production DEPLOY_KNOWN_HOSTS secret}"
+          : "${DEPLOY_USER:?Set the production DEPLOY_USER secret}"
+          : "${SSHPASS:?Set the production DEPLOY_PASSWORD secret}"
+          : "${DEPLOY_KNOWN_HOSTS:?Set the production DEPLOY_KNOWN_HOSTS variable}"
           if [[ ! "$DEPLOY_HOST" =~ ^[[:alnum:]][[:alnum:].-]*$ ||
                 ! "$DEPLOY_USER" =~ ^[[:alnum:]_][[:alnum:]_-]*$ ||
                 ! "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ||
@@ -56,11 +59,9 @@ jobs:
           ssh_dir=$(mktemp -d)
           trap 'rm -rf -- "$ssh_dir"' EXIT
           umask 077
-          printf '%s\n' "$DEPLOY_SSH_KEY" > "$ssh_dir/key"
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
-          unset DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS
 
-          export RSYNC_RSH="ssh -p $DEPLOY_PORT -i $ssh_dir/key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o ConnectTimeout=15"
+          export RSYNC_RSH="sshpass -e ssh -p $DEPLOY_PORT -o BatchMode=no -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o ConnectTimeout=15"
           destination="$DEPLOY_USER@$DEPLOY_HOST:${DEPLOY_DIR%/}"
           options=(-r --checksum --itemize-changes)
           if [[ "$DRY_RUN" == true ]]; then
