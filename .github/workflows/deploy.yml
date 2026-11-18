@@ -33,19 +33,19 @@ jobs:
       - run: npm test
       - run: npm run build
       - name: Install deployment tools
-        run: sudo apt-get update && sudo apt-get install -y rsync sshpass
-      - name: Sync the build to the web server
+        run: sudo apt-get update && sudo apt-get install -y lftp
+      - name: Upload the build over SFTP
         env:
           DRY_RUN: ${{ inputs.dry_run }}
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
-          SSHPASS: ${{ secrets.DEPLOY_PASSWORD }}
+          LFTP_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
           DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
         run: |
           : "${DEPLOY_USER:?Set the production DEPLOY_USER secret}"
-          : "${SSHPASS:?Set the production DEPLOY_PASSWORD secret}"
+          : "${LFTP_PASSWORD:?Set the production DEPLOY_PASSWORD secret}"
           : "${DEPLOY_KNOWN_HOSTS:?Set the production DEPLOY_KNOWN_HOSTS variable}"
           if [[ ! "$DEPLOY_HOST" =~ ^[[:alnum:]][[:alnum:].-]*$ ||
                 ! "$DEPLOY_USER" =~ ^[[:alnum:]_][[:alnum:]_-]*$ ||
@@ -61,13 +61,22 @@ jobs:
           umask 077
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
 
-          export RSYNC_RSH="sshpass -e ssh -p $DEPLOY_PORT -o BatchMode=no -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o ConnectTimeout=15"
-          destination="$DEPLOY_USER@$DEPLOY_HOST:${DEPLOY_DIR%/}"
-          options=(-r --checksum --itemize-changes)
+          preview=
           if [[ "$DRY_RUN" == true ]]; then
-            options+=(--dry-run)
+            preview=--dry-run
           fi
 
           # Upload fingerprinted assets before publishing pages that reference them.
-          rsync "${options[@]}" dist/assets/ "$destination/assets/"
-          rsync "${options[@]}" --delay-updates --exclude='/assets/' --exclude='/.htaccess' dist/ "$destination/"
+          lftp --norc -f /dev/stdin <<EOF
+          set cmd:fail-exit yes
+          set net:timeout 20
+          set net:max-retries 2
+          set sftp:auto-confirm no
+          set sftp:connect-program "ssh -a -x -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o ConnectTimeout=15"
+          set xfer:use-temp-file yes
+          open --env-password -u "$DEPLOY_USER" "sftp://$DEPLOY_HOST:$DEPLOY_PORT"
+          cd "${DEPLOY_DIR%/}"
+          mirror --reverse --no-perms --transfer-all --verbose $preview dist/assets assets
+          mirror --reverse --no-perms --transfer-all --verbose --exclude-glob=assets/ --exclude-glob=.htaccess $preview dist .
+          bye
+          EOF
