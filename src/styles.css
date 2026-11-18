@@ -484,6 +484,21 @@ input[type='checkbox'] {
   gap: 0.4rem;
 }
 
+.category .head-actions .icon-btn {
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.category .head-actions .icon-btn[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.category .head-actions .icon-btn[aria-pressed='true']:hover {
+  background: var(--accent-hover);
+}
+
 .tag-list {
   list-style: none;
   margin: 0.5rem 0 0;

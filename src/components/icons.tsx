@@ -132,3 +132,23 @@ export function CheckIcon() {
     </svg>
   );
 }
+
+/** 並べ替え（上下の矢印）。 */
+export function SortIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M6 15.5v-11m-3 3 3-3 3 3m5-3v11m-3-3 3 3 3-3" {...stroke} />
+    </svg>
+  );
+}
+
+/** 一括 ON/OFF（重なったチェックボックス）。 */
+export function ToggleAllIcon({ enable }: { enable: boolean }) {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M4 13V5.5C4 4.7 4.7 4 5.5 4H13" {...stroke} />
+      <rect x="7" y="7" width="9" height="9" rx="1.5" {...stroke} />
+      {enable && <path d="m9.2 11.5 1.5 1.5 2.9-3" {...stroke} />}
+    </svg>
+  );
+}
