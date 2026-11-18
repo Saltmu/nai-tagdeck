@@ -18,6 +18,7 @@ interface Props {
   syntax: WeightSyntax;
   isKnown: (tag: string) => boolean;
   onCopy: (text: string, label: string) => void;
+  notify: (message: string) => void;
   onRegister: (tag: WorkTag, category: CategoryKey) => void;
   /** ポーズにタグを追加したとき（キャラ同士の動作なら相手にも付けるか尋ねる）。 */
   onPoseAdded?: (tag: string) => void;
@@ -32,6 +33,7 @@ export function CharacterCard({
   syntax,
   isKnown,
   onCopy,
+  notify,
   onRegister,
   onPoseAdded,
 }: Props) {
@@ -102,6 +104,7 @@ export function CharacterCard({
             syntax={syntax}
             isKnown={isKnown}
             onCopy={onCopy}
+            notify={notify}
             onRegister={onRegister}
             quickPicks={key === 'subject' ? CHARACTER_KINDS : undefined}
             title={key === 'subject' ? '被写体' : undefined}
