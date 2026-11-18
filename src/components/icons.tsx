@@ -142,13 +142,22 @@ export function SortIcon() {
   );
 }
 
-/** 一括 ON/OFF（重なったチェックボックス）。 */
+/** 一括 ON/OFF（チェック／マイナス）。 */
 export function ToggleAllIcon({ enable }: { enable: boolean }) {
   return (
     <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
-      <path d="M4 13V5.5C4 4.7 4.7 4 5.5 4H13" {...stroke} />
-      <rect x="7" y="7" width="9" height="9" rx="1.5" {...stroke} />
-      {enable && <path d="m9.2 11.5 1.5 1.5 2.9-3" {...stroke} />}
+      <rect x="3.5" y="3.5" width="13" height="13" rx="2" {...stroke} />
+      <path d={enable ? 'm6.8 10 2.2 2.2 4.2-4.4' : 'M7 10h6'} {...stroke} />
+    </svg>
+  );
+}
+
+/** 貼り付け（クリップボード）。 */
+export function PasteIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M7.5 4.5h-2a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-11a1 1 0 0 0-1-1h-2M7.5 10h5m-5 3h5" {...stroke} />
+      <rect x="7.5" y="2.5" width="5" height="4" rx="1" {...stroke} />
     </svg>
   );
 }

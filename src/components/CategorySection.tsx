@@ -2,12 +2,12 @@ import { memo, useId, useRef, useState, type Dispatch } from 'react';
 import type { CategoryKey, DictEntry, TargetId, WeightSyntax, WorkTag, WorkspaceCategoryKey } from '../types';
 import { BASE, type WorkspaceAction } from '../lib/workspace';
 import { categoryLabel, CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
-import { buildCategoryPrompt } from '../lib/prompt';
+import { buildCategoryPrompt, parseTagList } from '../lib/prompt';
 import { useCategoryOpen } from '../hooks/useCategoryOpen';
 import { normalize } from '../lib/suggest';
 import { TagRow } from './TagRow';
 import { TagInput } from './TagInput';
-import { CheckIcon, CopyIcon, SortIcon, ToggleAllIcon } from './icons';
+import { CheckIcon, CopyIcon, PasteIcon, SortIcon, ToggleAllIcon } from './icons';
 
 interface Props {
   target: TargetId;
@@ -20,6 +20,7 @@ interface Props {
   syntax: WeightSyntax;
   isKnown: (tag: string) => boolean;
   onCopy: (text: string, label: string) => void;
+  notify: (message: string) => void;
   onRegister: (tag: WorkTag, category: CategoryKey) => void;
   /** 先頭に並べる択一ボタン（キャラの girl / boy / other など）。押し直すと外す。 */
   quickPicks?: readonly string[];
@@ -43,6 +44,7 @@ export const CategorySection = memo(function CategorySection({
   syntax,
   isKnown,
   onCopy,
+  notify,
   onRegister,
   quickPicks,
   quickPicksMode = 'one',
@@ -69,6 +71,26 @@ export const CategorySection = memo(function CategorySection({
   const destinations = category === 'unclassified'
     ? (target === BASE ? PROMPT_CATEGORY_KEYS : CHARACTER_CATEGORY_KEYS).filter((key) => key !== 'unclassified')
     : [];
+
+  const pasteTags = async () => {
+    let clipboardText: string;
+    try {
+      clipboardText = await navigator.clipboard.readText();
+    } catch {
+      notify('クリップボードを読み取れませんでした。タグ入力欄に直接貼り付けてください');
+      return;
+    }
+
+    const parsed = parseTagList(clipboardText);
+    if (parsed.length === 0) {
+      notify('クリップボードに貼り付けられるタグがありません');
+      return;
+    }
+
+    for (const { tag, weight } of parsed) {
+      dispatch({ type: 'add', target, category, tag, weight });
+    }
+  };
 
   return (
     <section className={`card category${suggesting ? ' is-suggesting' : ''}`}>
@@ -129,6 +151,15 @@ export const CategorySection = memo(function CategorySection({
             onClick={() => onCopy(text, fullLabel)}
           >
             <CopyIcon />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="貼り付け"
+            title="貼り付け"
+            onClick={pasteTags}
+          >
+            <PasteIcon />
           </button>
         </div>}
       </div>

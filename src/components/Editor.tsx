@@ -217,6 +217,7 @@ export function Editor({
           syntax={syntax}
           isKnown={isKnown}
           onCopy={onCopy}
+          notify={notify}
           onRegister={register}
           characterNegative={characterNegative}
           onCharacterNegativeChange={onCharacterNegativeChange}
@@ -232,6 +233,7 @@ export function Editor({
           syntax={syntax}
           isKnown={isKnown}
           onCopy={onCopy}
+          notify={notify}
           onRegister={register}
           onPoseAdded={(tag) => void offerPair(active.id, tag)}
         />
@@ -248,6 +250,7 @@ export function Editor({
               syntax={syntax}
               isKnown={isKnown}
               onCopy={onCopy}
+              notify={notify}
               onRegister={register}
               quickPicks={key === 'quality' ? QUALITY_PICKS : undefined}
               quickPicksMode="many"
@@ -277,6 +280,7 @@ interface NegativePaneProps {
   syntax: WeightSyntax;
   isKnown: (tag: string) => boolean;
   onCopy: (text: string, label: string) => void;
+  notify: (message: string) => void;
   onRegister: (tag: WorkTag, category: CategoryKey) => void;
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
@@ -290,6 +294,7 @@ function NegativePane({
   syntax,
   isKnown,
   onCopy,
+  notify,
   onRegister,
   characterNegative,
   onCharacterNegativeChange,
@@ -315,6 +320,7 @@ function NegativePane({
         syntax={syntax}
         isKnown={isKnown}
         onCopy={onCopy}
+        notify={notify}
         onRegister={onRegister}
       />
       <div className="negative-actions">
