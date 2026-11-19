@@ -61,6 +61,15 @@ jobs:
           umask 077
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
 
+          host_lookup="$DEPLOY_HOST"
+          if [[ "$DEPLOY_PORT" != 22 ]]; then
+            host_lookup="[$DEPLOY_HOST]:$DEPLOY_PORT"
+          fi
+          if ! ssh-keygen -l -F "$host_lookup" -f "$ssh_dir/known_hosts" >/dev/null 2>&1; then
+            echo '::error::DEPLOY_KNOWN_HOSTS must contain a valid OpenSSH known_hosts entry for DEPLOY_HOST and DEPLOY_PORT (host, key type, and public key). See the README deployment instructions.'
+            exit 1
+          fi
+
           preview=
           if [[ "$DRY_RUN" == true ]]; then
             preview=--dry-run

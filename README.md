@@ -95,6 +95,15 @@ npm run dev
 | Secret | `DEPLOY_PASSWORD` | SFTP ユーザーのパスワード |
 | Variable | `DEPLOY_KNOWN_HOSTS` | 既存の信頼できる SSH 接続やホスティング事業者で確認したホスト公開鍵を含む known_hosts の行。22 以外のポートではホスト欄を `[ホスト名]:ポート` にします |
 
+`DEPLOY_KNOWN_HOSTS` には、ホスト名・鍵種別・公開鍵を含む OpenSSH 形式の行を登録します。既に確認済みの WinSCP 接続がある場合は、**タブ → サーバー／プロトコル情報**でホスト鍵の SHA-256 指紋を確認し、PowerShell で取得した公開鍵と照合できます。
+
+```powershell
+ssh-keyscan -p 22 example.sakura.ne.jp | Set-Content -Encoding ascii known_hosts.deploy
+ssh-keygen -E sha256 -lf known_hosts.deploy
+```
+
+例のホスト名とポートは `DEPLOY_HOST` と `DEPLOY_PORT` の設定値に置き換えます。WinSCP またはホスティング事業者で確認した指紋と一致した鍵の行だけを `known_hosts.deploy` からコピーして変数に登録します。
+
 **Actions → Deploy nai-tagdeck → Run workflow** で `main` を選び、まず **Preview files without uploading** をオンにしたまま実行します。接続と転送予定を確認したら、チェックを外して再実行します。毎回テストとビルドを実行し、ハッシュ付きアセットを先にアップロードします。公開先のファイルは削除しないため、以前のアセットもサーバーに残ります。
 
 </details>
