@@ -30,13 +30,32 @@ const render = async () => {
 it('moves the negative prompt saved in settings into the workspace', async () => {
   stored({ workspace: { base: { quality: [{ tag: 'masterpiece' }] } }, settings: { negativePrompt: 'lowres, {bad hands}' } });
   await render();
+  expect(current.loaded).toBe(true);
   expect(current.workspace.base.quality.map((t) => t.tag)).toEqual(['masterpiece']);
   expect(current.workspace.negative.map((t) => [t.tag, t.weight])).toEqual([['lowres', 1], ['bad hands', 1.05]]);
+  expect(setKV).toHaveBeenCalledWith('workspace', expect.objectContaining({
+    negative: expect.arrayContaining([expect.objectContaining({ tag: 'lowres' })]),
+  }));
+});
+
+it('keeps loaded false until async legacy negative migration completes', async () => {
+  let resolveSettings!: (value: unknown) => void;
+  vi.mocked(getKV).mockImplementation((key: string) => {
+    if (key === 'workspace') return Promise.resolve({ base: { quality: [{ tag: 'masterpiece' }] } } as never);
+    return new Promise((r) => { resolveSettings = r; }) as never;
+  });
+  await act(async () => root.render(<Harness />));
+  expect(current.loaded).toBe(false);
+  await act(async () => resolveSettings({ negativePrompt: 'lowres' }));
+  expect(current.loaded).toBe(true);
+  expect(current.workspace.negative.map((t) => t.tag)).toEqual(['lowres']);
 });
 
 it('keeps a negative already saved in the workspace without reading settings', async () => {
   stored({ workspace: { base: {}, negative: [{ tag: 'blurry' }] }, settings: { negativePrompt: 'lowres' } });
   await render();
+  expect(current.loaded).toBe(true);
   expect(current.workspace.negative.map((t) => t.tag)).toEqual(['blurry']);
   expect(getKV).not.toHaveBeenCalledWith('settings');
+  expect(setKV).not.toHaveBeenCalled();
 });
