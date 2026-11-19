@@ -93,7 +93,9 @@ npm run dev
 | Secret | `DEPLOY_USER` | SFTP ユーザー名 |
 | Variable | `DEPLOY_DIR` | `/home/user/www/nai-tagdeck` のような、SFTP で見える既存の公開ディレクトリの絶対パス |
 | Secret | `DEPLOY_PASSWORD` | SFTP ユーザーのパスワード |
-| Variable | `DEPLOY_KNOWN_HOSTS` | 既存の信頼できる SSH 接続やホスティング事業者で確認したホスト公開鍵を含む known_hosts の行。22 以外のポートではホスト欄を `[ホスト名]:ポート` にします |
+| Variable | `DEPLOY_HOST_FINGERPRINT` | WinSCP の「タブ → サーバー／プロトコル情報」またはホスティング事業者で確認済みの SFTP サーバーの SHA-256 指紋（`SHA256:…`） |
+
+実行時に公開サーバーのホスト鍵を取得し、登録済みの指紋に一致する鍵で SFTP 接続を検証します。以前の `DEPLOY_KNOWN_HOSTS` 変数は削除できます。
 
 **Actions → Deploy nai-tagdeck → Run workflow** で `main` を選び、まず **Preview files without uploading** をオンにしたまま実行します。接続と転送予定を確認したら、チェックを外して再実行します。毎回テストとビルドを実行し、ハッシュ付きアセットを先にアップロードします。公開先のファイルは削除しないため、以前のアセットもサーバーに残ります。
 
