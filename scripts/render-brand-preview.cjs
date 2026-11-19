@@ -1,7 +1,7 @@
 // Optional PNG comparison sheet. Pass the path to an installed sharp module.
 const fs = require('node:fs');
 const sharp = require(process.argv[2] || 'sharp');
-const root = 'public/brand-concepts';
+const root = 'docs/brand-concepts';
 const concepts = JSON.parse(fs.readFileSync(`${root}/manifest.json`, 'utf8'));
 const colors = {
   light: { accent: '#4f46e5', soft: '#e9e8ff', text: '#1c2029', surface: '#ffffff', on: '#ffffff', muted: '#5d6878' },

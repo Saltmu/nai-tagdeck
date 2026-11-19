@@ -27,7 +27,7 @@ function svg(concept, mode, type) {
   const body = type === 'icon' ? mark : type === 'wordmark' ? wordmark : `${mark}<g transform="translate(60 0)">${wordmark}</g>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="48" viewBox="0 0 ${width} 48" role="img" aria-label="nai-tagdeck"><title>nai-tagdeck — ${id}</title><style>${styles}</style>${body}</svg>\n`;
 }
-const output = 'public/brand-concepts';
+const output = 'docs/brand-concepts';
 // Match the application's menu pictograms in both compact and expanded layouts.
 const menuPaths = [
   ['編集', '<path d="M3.5 16.5l.8-3.6L13.6 3.6a1.6 1.6 0 012.3 0l.5.5a1.6 1.6 0 010 2.3l-9.3 9.3zM12 5.2l2.8 2.8"/>'],

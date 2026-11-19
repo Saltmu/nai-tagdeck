@@ -1,0 +1,293 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import vm from 'node:vm';
+import { describe, expect, it, vi } from 'vitest';
+import { buildSwAsset, type SwBuildInput } from '../vite.config';
+
+const template = readFileSync(resolve('src/sw-template.js'), 'utf-8');
+
+function baseInput(): SwBuildInput {
+  return {
+    bundle: {
+      'index.html': { type: 'asset', source: '<!doctype html><title>v1</title>' },
+      'assets/index-aaaa1111.js': { type: 'chunk', code: 'console.log(1);' },
+      'assets/index-bbbb2222.css': { type: 'asset', source: 'body{color:#000}' },
+    },
+    publicFiles: {
+      'manifest.webmanifest': '{"name":"nai-tagdeck"}',
+      'icons/favicon-32.png': new Uint8Array([1, 2, 3, 4]),
+      'icons/apple-touch-icon.png': new Uint8Array([5, 6, 7, 8]),
+      'icons/icon-192.png': new Uint8Array([9, 10, 11, 12]),
+      'icons/icon-512.png': new Uint8Array([13, 14, 15, 16]),
+      'brand/icon.svg': '<svg/>',
+      'sitemap.xml': '<urlset/>',
+      'robots.txt': 'User-agent: *',
+    },
+    template,
+  };
+}
+
+describe('buildSwAsset', () => {
+  it('excludes sitemap.xml and robots.txt from precache and keeps relative ./ paths', () => {
+    const { precache } = buildSwAsset(baseInput());
+    expect(precache).toEqual([
+      './',
+      './assets/index-aaaa1111.js',
+      './assets/index-bbbb2222.css',
+      './brand/icon.svg',
+      './icons/apple-touch-icon.png',
+      './icons/favicon-32.png',
+      './icons/icon-192.png',
+      './icons/icon-512.png',
+      './manifest.webmanifest',
+    ]);
+    expect(precache.some((entry) => entry.includes('sitemap.xml') || entry.includes('robots.txt'))).toBe(false);
+    expect(precache.some((entry) => entry.includes('index.html'))).toBe(false);
+  });
+
+  it('produces the same version regardless of object key order', () => {
+    const a = buildSwAsset(baseInput());
+    const b = buildSwAsset({
+      bundle: {
+        'assets/index-bbbb2222.css': { type: 'asset', source: 'body{color:#000}' },
+        'assets/index-aaaa1111.js': { type: 'chunk', code: 'console.log(1);' },
+        'index.html': { type: 'asset', source: '<!doctype html><title>v1</title>' },
+      },
+      publicFiles: {
+        'sitemap.xml': '<urlset/>',
+        'manifest.webmanifest': '{"name":"nai-tagdeck"}',
+        'brand/icon.svg': '<svg/>',
+        'icons/icon-512.png': new Uint8Array([13, 14, 15, 16]),
+        'icons/icon-192.png': new Uint8Array([9, 10, 11, 12]),
+        'icons/apple-touch-icon.png': new Uint8Array([5, 6, 7, 8]),
+        'icons/favicon-32.png': new Uint8Array([1, 2, 3, 4]),
+        'robots.txt': 'User-agent: *',
+      },
+      template,
+    });
+    expect(a.version).toBe(b.version);
+    expect(a.precache).toEqual(b.precache);
+  });
+
+  it('updates version when index.html, bundle assets, public files, or sw-template change without renaming', () => {
+    const base = buildSwAsset(baseInput());
+
+    const htmlChanged = baseInput();
+    htmlChanged.bundle['index.html'] = { type: 'asset', source: '<!doctype html><title>v2</title>' };
+    expect(buildSwAsset(htmlChanged).version).not.toBe(base.version);
+
+    const chunkChanged = baseInput();
+    chunkChanged.bundle['assets/index-aaaa1111.js'] = { type: 'chunk', code: 'console.log(2);' };
+    expect(buildSwAsset(chunkChanged).version).not.toBe(base.version);
+
+    const manifestChanged = baseInput();
+    manifestChanged.publicFiles['manifest.webmanifest'] = '{"name":"nai-tagdeck-v2"}';
+    expect(buildSwAsset(manifestChanged).version).not.toBe(base.version);
+
+    const iconChanged = baseInput();
+    iconChanged.publicFiles['icons/favicon-32.png'] = new Uint8Array([1, 2, 3, 99]);
+    expect(buildSwAsset(iconChanged).version).not.toBe(base.version);
+
+    const templateChanged = baseInput();
+    templateChanged.template = `${template}\n// updated`;
+    expect(buildSwAsset(templateChanged).version).not.toBe(base.version);
+
+    const sitemapChanged = baseInput();
+    sitemapChanged.publicFiles['sitemap.xml'] = '<urlset><url/></urlset>';
+    expect(buildSwAsset(sitemapChanged).version).toBe(base.version);
+  });
+
+  it('does not keep development brand-concepts under public/', () => {
+    expect(existsSync(resolve('public/brand-concepts'))).toBe(false);
+    expect(existsSync(resolve('docs/brand-concepts/index.html'))).toBe(true);
+  });
+});
+
+interface MockRequest {
+  url: string;
+  method: string;
+  mode: string;
+}
+
+function createSwHarness(swSource: string, baseUrl: string) {
+  const listeners = new Map<string, (event: unknown) => void>();
+  const store = new Map<string, Map<string, Response>>();
+
+  const resolveKey = (input: string | MockRequest) =>
+    new URL(typeof input === 'string' ? input : input.url, baseUrl).href;
+
+  const stripSearch = (href: string) => {
+    const u = new URL(href);
+    u.search = '';
+    return u.href;
+  };
+
+  const matchInCache = (cache: Map<string, Response>, input: string | MockRequest, ignoreSearch = false) => {
+    const target = resolveKey(input);
+    const exact = cache.get(target);
+    if (exact) return exact.clone();
+    if (!ignoreSearch) return undefined;
+    const strippedTarget = stripSearch(target);
+    for (const [key, res] of cache.entries()) {
+      if (stripSearch(key) === strippedTarget) return res.clone();
+    }
+    return undefined;
+  };
+
+  const fetchMock = vi.fn(async (input: string | MockRequest) => {
+    const href = resolveKey(input);
+    return new Response(`body:${href}`, { status: 200 });
+  });
+
+  const cachesMock = {
+    async open(name: string) {
+      let bucket = store.get(name);
+      if (!bucket) {
+        bucket = new Map();
+        store.set(name, bucket);
+      }
+      const cache = bucket;
+      return {
+        async addAll(urls: string[]) {
+          for (const u of urls) {
+            const href = resolveKey(u);
+            const res = await fetchMock(href);
+            cache.set(href, res);
+          }
+        },
+        async put(req: string | MockRequest, res: Response) {
+          cache.set(resolveKey(req), res);
+        },
+      };
+    },
+    async keys() {
+      return [...store.keys()];
+    },
+    async delete(name: string) {
+      return store.delete(name);
+    },
+    async match(req: string | MockRequest, options?: { cacheName?: string; ignoreSearch?: boolean }) {
+      const ignoreSearch = Boolean(options?.ignoreSearch);
+      if (options?.cacheName) {
+        const bucket = store.get(options.cacheName);
+        return bucket ? matchInCache(bucket, req, ignoreSearch) : undefined;
+      }
+      for (const bucket of store.values()) {
+        const hit = matchInCache(bucket, req, ignoreSearch);
+        if (hit) return hit;
+      }
+      return undefined;
+    },
+  };
+
+  const skipWaiting = vi.fn(async () => {});
+  const claim = vi.fn(async () => {});
+
+  const selfObj = {
+    location: new URL(`${baseUrl}sw.js`),
+    addEventListener(type: string, fn: (event: unknown) => void) {
+      listeners.set(type, fn);
+    },
+    skipWaiting,
+    clients: { claim },
+  };
+
+  const context = vm.createContext({
+    self: selfObj,
+    caches: cachesMock,
+    fetch: fetchMock,
+    URL,
+    Response,
+  });
+  vm.runInContext(swSource, context);
+
+  return {
+    store,
+    fetchMock,
+    skipWaiting,
+    claim,
+    async dispatchLifecycle(type: 'install' | 'activate') {
+      const fn = listeners.get(type);
+      if (!fn) throw new Error(`missing ${type} listener`);
+      let pending: Promise<unknown> = Promise.resolve();
+      fn({
+        waitUntil(p: Promise<unknown>) {
+          pending = p;
+        },
+      });
+      await pending;
+    },
+    async dispatchFetch(req: MockRequest): Promise<Response | undefined> {
+      const fn = listeners.get('fetch');
+      if (!fn) throw new Error('missing fetch listener');
+      let responded: Promise<Response> | undefined;
+      fn({
+        request: req,
+        respondWith(p: Promise<Response>) {
+          responded = p;
+        },
+      });
+      return responded ? await responded : undefined;
+    },
+  };
+}
+
+describe('Service Worker runtime under subdirectory deployment', () => {
+  const baseUrl = 'https://shishio.x0.to/nai-tagdeck/';
+
+  it('precaches subdirectory assets, matches ?v=tag-check icons from cache, and serves offline navigation', async () => {
+    const { source, version } = buildSwAsset(baseInput());
+    const sw = createSwHarness(source, baseUrl);
+    sw.store.set('nai-tagdeck-old000000000', new Map());
+    sw.store.set('other-app-cache', new Map());
+
+    await sw.dispatchLifecycle('install');
+    expect(sw.skipWaiting).toHaveBeenCalledTimes(1);
+    const activeCache = sw.store.get(`nai-tagdeck-${version}`);
+    expect(activeCache?.has(`${baseUrl}`)).toBe(true);
+    expect(activeCache?.has(`${baseUrl}icons/favicon-32.png`)).toBe(true);
+
+    await sw.dispatchLifecycle('activate');
+    expect(sw.claim).toHaveBeenCalledTimes(1);
+    expect(sw.store.has('nai-tagdeck-old000000000')).toBe(false);
+    expect(sw.store.has('other-app-cache')).toBe(true);
+    expect(sw.store.has(`nai-tagdeck-${version}`)).toBe(true);
+
+    sw.fetchMock.mockClear();
+
+    // Query-versioned icons hit precache without network fetch
+    for (const iconPath of [
+      'icons/favicon-32.png?v=tag-check',
+      'icons/apple-touch-icon.png?v=tag-check',
+      'icons/icon-192.png?v=tag-check',
+      'icons/icon-512.png?v=tag-check',
+    ]) {
+      const res = await sw.dispatchFetch({
+        url: `${baseUrl}${iconPath}`,
+        method: 'GET',
+        mode: 'no-cors',
+      });
+      expect(res?.ok).toBe(true);
+      expect(await res?.text()).toBe(`body:${baseUrl}${iconPath.split('?')[0]}`);
+    }
+    expect(sw.fetchMock).not.toHaveBeenCalled();
+
+    // Cross-origin NovelAI request is not intercepted
+    const crossOrigin = await sw.dispatchFetch({
+      url: 'https://image.novelai.net/ai/generate-image',
+      method: 'GET',
+      mode: 'cors',
+    });
+    expect(crossOrigin).toBeUndefined();
+
+    // Offline navigation falls back to cached subdirectory root ('./')
+    sw.fetchMock.mockRejectedValueOnce(new Error('offline'));
+    const offlineNav = await sw.dispatchFetch({
+      url: `${baseUrl}`,
+      method: 'GET',
+      mode: 'navigate',
+    });
+    expect(offlineNav?.ok).toBe(true);
+    expect(await offlineNav?.text()).toBe(`body:${baseUrl}`);
+  });
+});

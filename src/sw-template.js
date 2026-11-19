@@ -1,7 +1,7 @@
 // Service Worker のひな形。ビルド時に vite.config.ts の swPlugin が、版とキャッシュするファイルの一覧を埋めて dist/sw.js にする。
 // - 自サイトのファイルだけをキャッシュする。NovelAI への通信（別オリジン）には一切触れない。
 // - ページ本体（index.html）は通信を優先し、オフラインのときだけキャッシュを使う。更新がすぐ反映されるように。
-// - ハッシュ付きの js/css・アイコンはキャッシュを優先する。
+// - ハッシュ付きの js/css・アイコンはキャッシュを優先し、?v=... 付きのアイコン参照もクエリ無視で照合する。
 const CACHE = 'nai-tagdeck-__VERSION__';
 const PRECACHE = __PRECACHE__;
 
@@ -37,13 +37,13 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         })
-        .catch(() => caches.match('./').then((res) => res || Response.error())),
+        .catch(() => caches.match('./', { cacheName: CACHE }).then((res) => res || Response.error())),
     );
     return;
   }
 
   event.respondWith(
-    caches.match(req).then(
+    caches.match(req, { cacheName: CACHE, ignoreSearch: true }).then(
       (cached) =>
         cached ||
         fetch(req).then((res) => {

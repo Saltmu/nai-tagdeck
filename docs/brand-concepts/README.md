@@ -1,7 +1,7 @@
 # nai-tagdeck ヘッダロゴ10案
 
 `index.html` は、全10案のライト・ダーク比較と幅変更プレビューです。
-開発サーバーでは `/brand-concepts/`、ファイル単体でも開けます。
+`docs/brand-concepts/index.html` をブラウザで直接開けます。
 `overview.png` は全案の一覧画像です。
 
 各案には透過SVGを用意しています。
