@@ -97,6 +97,8 @@ npm run dev
 
 実行時に公開サーバーのホスト鍵を取得し、登録済みの指紋に一致する鍵で SFTP 接続を検証します。以前の `DEPLOY_KNOWN_HOSTS` 変数は削除できます。
 
+`DEPLOY_HOST_FINGERPRINT` が未設定の状態で dry-run を実行すると、ランナーから観測した指紋の候補だけをログに表示します。この実行では SFTP ログインや配付のプレビューは行いません。WinSCP またはホスティング事業者で照合した指紋を登録してから、再度 dry-run を実行します。
+
 **Actions → Deploy nai-tagdeck → Run workflow** で `main` を選び、まず **Preview files without uploading** をオンにしたまま実行します。接続と転送予定を確認したら、チェックを外して再実行します。毎回テストとビルドを実行し、ハッシュ付きアセットを先にアップロードします。公開先のファイルは削除しないため、以前のアセットもサーバーに残ります。
 
 </details>

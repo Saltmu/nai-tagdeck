@@ -44,14 +44,9 @@ jobs:
           LFTP_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
           DEPLOY_HOST_FINGERPRINT: ${{ vars.DEPLOY_HOST_FINGERPRINT }}
         run: |
-          : "${DEPLOY_USER:?Set the production DEPLOY_USER secret}"
-          : "${LFTP_PASSWORD:?Set the production DEPLOY_PASSWORD secret}"
           if [[ ! "$DEPLOY_HOST" =~ ^[[:alnum:]][[:alnum:].-]*$ ||
-                ! "$DEPLOY_USER" =~ ^[[:alnum:]_][[:alnum:]_-]*$ ||
-                ! "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ||
-                ! "$DEPLOY_DIR" =~ ^(/[[:alnum:]_.-]+)+/?$ ||
-                "$DEPLOY_DIR" =~ /\.\.?(/|$) ]]; then
-            echo '::error::Check the production host, username, port, and absolute deployment directory.'
+                ! "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]]; then
+            echo '::error::Check DEPLOY_HOST and DEPLOY_PORT.'
             exit 1
           fi
 
@@ -59,14 +54,24 @@ jobs:
           trap 'rm -rf -- "$ssh_dir"' EXIT
           umask 077
           expected_fingerprint="${DEPLOY_HOST_FINGERPRINT%=}"
-          if [[ ! "$expected_fingerprint" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
+          discover_fingerprint=false
+          if [[ "$DRY_RUN" == true && -z "$DEPLOY_HOST_FINGERPRINT" ]]; then
+            discover_fingerprint=true
+          elif [[ ! "$expected_fingerprint" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
             echo '::error::Set DEPLOY_HOST_FINGERPRINT to the verified SHA256 fingerprint of the SFTP server.'
             exit 1
           fi
 
-          if ! ssh-keyscan -T 10 -p "$DEPLOY_PORT" "$DEPLOY_HOST" > "$ssh_dir/scanned_keys" 2>/dev/null; then
+          if ! env -u LFTP_PASSWORD ssh-keyscan -T 10 -p "$DEPLOY_PORT" "$DEPLOY_HOST" > "$ssh_dir/scanned_keys" 2>/dev/null; then
             echo '::error::Could not retrieve a host key from the SFTP server.'
             exit 1
+          fi
+
+          if [[ "$discover_fingerprint" == true ]]; then
+            echo 'Observed host fingerprints (unverified):'
+            ssh-keygen -E sha256 -lf "$ssh_dir/scanned_keys" | awk '{print $2, $NF}'
+            echo '::notice::Fingerprint discovery only. SFTP login and deployment preview were skipped. Verify one fingerprint independently before setting DEPLOY_HOST_FINGERPRINT.'
+            exit 0
           fi
 
           while IFS= read -r entry; do
@@ -81,6 +86,15 @@ jobs:
 
           if [[ ! -s "$ssh_dir/known_hosts" ]]; then
             echo '::error::No SFTP host key matches DEPLOY_HOST_FINGERPRINT. Verify the server fingerprint before updating the variable.'
+            exit 1
+          fi
+
+          : "${DEPLOY_USER:?Set the production DEPLOY_USER secret}"
+          : "${LFTP_PASSWORD:?Set the production DEPLOY_PASSWORD secret}"
+          if [[ ! "$DEPLOY_USER" =~ ^[[:alnum:]_][[:alnum:]_-]*$ ||
+                ! "$DEPLOY_DIR" =~ ^(/[[:alnum:]_.-]+)+/?$ ||
+                "$DEPLOY_DIR" =~ /\.\.?(/|$) ]]; then
+            echo '::error::Check the production username and absolute deployment directory.'
             exit 1
           fi
 
