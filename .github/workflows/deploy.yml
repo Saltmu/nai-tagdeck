@@ -42,11 +42,10 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
           LFTP_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
-          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST_FINGERPRINT: ${{ vars.DEPLOY_HOST_FINGERPRINT }}
         run: |
           : "${DEPLOY_USER:?Set the production DEPLOY_USER secret}"
           : "${LFTP_PASSWORD:?Set the production DEPLOY_PASSWORD secret}"
-          : "${DEPLOY_KNOWN_HOSTS:?Set the production DEPLOY_KNOWN_HOSTS variable}"
           if [[ ! "$DEPLOY_HOST" =~ ^[[:alnum:]][[:alnum:].-]*$ ||
                 ! "$DEPLOY_USER" =~ ^[[:alnum:]_][[:alnum:]_-]*$ ||
                 ! "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ||
@@ -59,7 +58,31 @@ jobs:
           ssh_dir=$(mktemp -d)
           trap 'rm -rf -- "$ssh_dir"' EXIT
           umask 077
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          expected_fingerprint="${DEPLOY_HOST_FINGERPRINT%=}"
+          if [[ ! "$expected_fingerprint" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
+            echo '::error::Set DEPLOY_HOST_FINGERPRINT to the verified SHA256 fingerprint of the SFTP server.'
+            exit 1
+          fi
+
+          if ! ssh-keyscan -T 10 -p "$DEPLOY_PORT" "$DEPLOY_HOST" > "$ssh_dir/scanned_keys" 2>/dev/null; then
+            echo '::error::Could not retrieve a host key from the SFTP server.'
+            exit 1
+          fi
+
+          while IFS= read -r entry; do
+            if key_info=$(ssh-keygen -E sha256 -lf - <<< "$entry" 2>/dev/null); then
+              read -r _ fingerprint _ <<< "$key_info"
+              if [[ "$fingerprint" == "$expected_fingerprint" ]]; then
+                printf '%s\n' "$entry" > "$ssh_dir/known_hosts"
+                break
+              fi
+            fi
+          done < "$ssh_dir/scanned_keys"
+
+          if [[ ! -s "$ssh_dir/known_hosts" ]]; then
+            echo '::error::No SFTP host key matches DEPLOY_HOST_FINGERPRINT. Verify the server fingerprint before updating the variable.'
+            exit 1
+          fi
 
           preview=
           if [[ "$DRY_RUN" == true ]]; then
@@ -72,7 +95,7 @@ jobs:
           set net:timeout 20
           set net:max-retries 2
           set sftp:auto-confirm no
-          set sftp:connect-program "ssh -a -x -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o ConnectTimeout=15"
+          set sftp:connect-program "ssh -a -x -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1 -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o VerifyHostKeyDNS=no -o UserKnownHostsFile=$ssh_dir/known_hosts -o ConnectTimeout=15"
           set xfer:use-temp-file yes
           open --env-password -u "$DEPLOY_USER" "sftp://$DEPLOY_HOST:$DEPLOY_PORT"
           cd "${DEPLOY_DIR%/}"
