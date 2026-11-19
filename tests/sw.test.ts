@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import vm from 'node:vm';
+import { build as viteBuild, type Plugin } from 'vite';
 import { describe, expect, it, vi } from 'vitest';
 import { buildSwAsset, type SwBuildInput } from '../vite.config';
 
@@ -100,6 +101,66 @@ describe('buildSwAsset', () => {
   it('does not keep development brand-concepts under public/', () => {
     expect(existsSync(resolve('public/brand-concepts'))).toBe(false);
     expect(existsSync(resolve('docs/brand-concepts/index.html'))).toBe(true);
+  });
+});
+
+function extractBuildOutputs(result: Awaited<ReturnType<typeof viteBuild>>) {
+  const outputs = (Array.isArray(result) ? result : [result]).flatMap((r) => ('output' in r ? r.output : []));
+  const byName = new Map(outputs.map((item) => [item.fileName, item]));
+  const htmlAsset = byName.get('index.html');
+  const swAsset = byName.get('sw.js');
+  if (!htmlAsset || htmlAsset.type !== 'asset' || typeof htmlAsset.source !== 'string') {
+    throw new Error('missing index.html asset in build output');
+  }
+  if (!swAsset || swAsset.type !== 'asset' || typeof swAsset.source !== 'string') {
+    throw new Error('missing sw.js asset in build output');
+  }
+  const cacheMatch = swAsset.source.match(/const CACHE = '([^']+)';/);
+  const precacheMatch = swAsset.source.match(/const PRECACHE = (\[.*?\]);/);
+  if (!cacheMatch?.[1] || !precacheMatch?.[1]) {
+    throw new Error('failed to parse CACHE or PRECACHE from sw.js');
+  }
+  return {
+    html: htmlAsset.source,
+    cacheName: cacheMatch[1],
+    precache: JSON.parse(precacheMatch[1]) as string[],
+    chunkNames: outputs.filter((o) => o.type === 'chunk').map((o) => o.fileName).sort(),
+  };
+}
+
+describe('Vite build swPlugin integration', () => {
+  it('updates SW cache name when only index.html changes in a real Vite build', async () => {
+    const first = extractBuildOutputs(
+      await viteBuild({
+        configFile: resolve('vite.config.ts'),
+        logLevel: 'silent',
+        build: { write: false },
+      }),
+    );
+
+    const mutateTitlePlugin: Plugin = {
+      name: 'test-mutate-html-title',
+      enforce: 'pre',
+      transformIndexHtml(html) {
+        return html.replace(/<title>.*?<\/title>/, '<title>nai-tagdeck updated title</title>');
+      },
+    };
+
+    const second = extractBuildOutputs(
+      await viteBuild({
+        configFile: resolve('vite.config.ts'),
+        logLevel: 'silent',
+        plugins: [mutateTitlePlugin],
+        build: { write: false },
+      }),
+    );
+
+    expect(second.html).not.toBe(first.html);
+    expect(second.chunkNames).toEqual(first.chunkNames);
+    expect(second.precache).toEqual(first.precache);
+    expect(second.cacheName).not.toBe(first.cacheName);
+    expect(first.precache).not.toContain('./index.html');
+    expect(first.precache).not.toContain('./sitemap.xml');
   });
 });
 

@@ -104,6 +104,7 @@ function swPlugin(): Plugin {
   return {
     name: 'nai-tagdeck-sw',
     apply: 'build',
+    enforce: 'post',
     generateBundle(_options, bundle) {
       const publicFiles = readPublicFiles('public');
       const template = readFileSync('src/sw-template.js', 'utf-8');
