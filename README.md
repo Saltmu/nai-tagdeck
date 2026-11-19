@@ -82,6 +82,24 @@ npm run dev
 `npm run build` で作った `dist/` の中身を、静的サイトとして配信します。アセットは相対パスのため、サブディレクトリにも配置できます。公開環境ではサーバー側で HTTPS へリダイレクトを設定します。HTTPS で配信すると、Service Worker によるオフライン編集を利用できます。
 
 <details>
+<summary>GitHub Actions から SFTP でアップロード</summary>
+
+公開サーバーで SFTP のパスワード認証が利用できる場合に使えます。GitHub の **Settings → Environments** で `production` を作成し、Variables と Secrets を登録します。
+
+| 種別 | 名前 | 設定値 |
+| --- | --- | --- |
+| Variable | `DEPLOY_HOST` | WinSCP の SFTP 接続先ホスト名 |
+| Variable | `DEPLOY_PORT` | SFTP ポート（省略時は 22） |
+| Secret | `DEPLOY_USER` | SFTP ユーザー名 |
+| Variable | `DEPLOY_DIR` | `/home/user/www/nai-tagdeck` のような、SFTP で見える既存の公開ディレクトリの絶対パス |
+| Secret | `DEPLOY_PASSWORD` | SFTP ユーザーのパスワード |
+| Variable | `DEPLOY_KNOWN_HOSTS` | 既存の信頼できる SSH 接続やホスティング事業者で確認したホスト公開鍵を含む known_hosts の行。22 以外のポートではホスト欄を `[ホスト名]:ポート` にします |
+
+**Actions → Deploy nai-tagdeck → Run workflow** で `main` を選び、まず **Preview files without uploading** をオンにしたまま実行します。接続と転送予定を確認したら、チェックを外して再実行します。毎回テストとビルドを実行し、ハッシュ付きアセットを先にアップロードします。公開先のファイルは削除しないため、以前のアセットもサーバーに残ります。
+
+</details>
+
+<details>
 <summary>Windows から WinSCP でアップロード</summary>
 
 1. [設定例](deploy/config.example.json) を `deploy/config.local.json` にコピーし、WinSCP の保存済みセッション名と公開先ディレクトリを設定します。
