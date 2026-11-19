@@ -21,7 +21,7 @@ export function usePersistence<T>(
 ): PersistenceState {
   const [state, setState] = useState({ key, ...INITIAL });
   const writes = useRef(Promise.resolve());
-  const synced = useRef<{ key: string; value: T } | null>(null);
+  const synced = useRef<{ key: string; value: T; inFlight: number } | null>(null);
   const current = state.key === key ? state : INITIAL;
   const stateRef = useRef(current);
   stateRef.current = current;
@@ -53,10 +53,11 @@ export function usePersistence<T>(
   useEffect(() => {
     if (!current.loaded) return;
     if (synced.current?.key !== key) {
-      synced.current = { key, value };
+      synced.current = { key, value, inFlight: 0 };
       return;
     }
-    if (Object.is(synced.current.value, value)) return;
+    const tracker = synced.current;
+    if (tracker.inFlight === 0 && Object.is(tracker.value, value)) return;
 
     let active = true;
     let pending = true;
@@ -66,19 +67,20 @@ export function usePersistence<T>(
       if (!pending) return;
       pending = false;
       clearTimeout(timer);
+      tracker.inFlight += 1;
       // 遅い保存が新しい値を上書きしないよう、順番に書き込む。
       writes.current = writes.current.then(async () => {
-        if (!force && !active) return;
         try {
+          if (!force && !active) return;
           await setKV(key, value);
-          if (active) {
-            synced.current = { key, value };
-            if (stateRef.current.status !== 'idle' || stateRef.current.error !== null) {
-              setState({ key, loaded: true, status: 'idle', error: null });
-            }
+          tracker.value = value;
+          if (active && (stateRef.current.status !== 'idle' || stateRef.current.error !== null)) {
+            setState({ key, loaded: true, status: 'idle', error: null });
           }
         } catch (error) {
           if (active) setState({ key, loaded: true, status: 'error', error: `変更を保存できません (${key}): ${String(error)}` });
+        } finally {
+          tracker.inFlight -= 1;
         }
       });
     };

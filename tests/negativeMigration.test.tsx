@@ -2,7 +2,7 @@
 import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { useWorkspace } from '../src/hooks/useWorkspace';
+import { useSettings, useWorkspace } from '../src/hooks/useWorkspace';
 import { getKV, setKV } from '../src/lib/db';
 
 vi.mock('../src/lib/db', () => ({ getKV: vi.fn(), setKV: vi.fn() }));
@@ -58,4 +58,42 @@ it('keeps a negative already saved in the workspace without reading settings', a
   expect(current.workspace.negative.map((t) => t.tag)).toEqual(['blurry']);
   expect(getKV).not.toHaveBeenCalledWith('settings');
   expect(setKV).not.toHaveBeenCalled();
+});
+
+it('surfaces migration save failure and preserves legacy negativePrompt in settings until migration succeeds', async () => {
+  vi.useFakeTimers();
+  try {
+    stored({
+      workspace: { base: { quality: [{ tag: 'masterpiece' }] } },
+      settings: { weightSyntax: 'numeric', negativePrompt: 'lowres, bad hands' },
+    });
+    vi.mocked(setKV).mockImplementation(async (key: string) => {
+      if (key === 'workspace') throw new Error('quota exceeded');
+    });
+
+    let updateSettings!: ReturnType<typeof useSettings>[1];
+    function CombinedHarness() {
+      current = useWorkspace();
+      const [, update] = useSettings(current.loaded);
+      updateSettings = update;
+      return null;
+    }
+
+    await act(async () => root.render(<CombinedHarness />));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+
+    expect(current.loaded).toBe(false);
+    expect(current.persistence.status).toBe('error');
+    expect(current.persistence.error).toContain('quota exceeded');
+
+    await act(async () => updateSettings({ weightSyntax: 'brace' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+
+    expect(setKV).toHaveBeenCalledWith('settings', expect.objectContaining({
+      weightSyntax: 'brace',
+      negativePrompt: 'lowres, bad hands',
+    }));
+  } finally {
+    vi.useRealTimers();
+  }
 });

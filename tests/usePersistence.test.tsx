@@ -161,4 +161,27 @@ describe('persistent state', () => {
     expect(setKV).toHaveBeenCalledTimes(1);
     expect(setKV).toHaveBeenCalledWith('workspace', 'closing');
   });
+
+  it('persists reverting back to the original value while an intermediate save is in flight', async () => {
+    let finishB!: () => void;
+    vi.mocked(getKV).mockResolvedValue('A');
+    vi.mocked(setKV)
+      .mockImplementationOnce(() => new Promise<void>((r) => { finishB = r; }))
+      .mockResolvedValueOnce(undefined);
+
+    await act(async () => root.render(<Harness />));
+    await act(async () => change('B'));
+    await tick();
+    expect(setKV).toHaveBeenCalledTimes(1);
+    expect(setKV).toHaveBeenLastCalledWith('workspace', 'B');
+
+    // Revert to A while B is still writing
+    await act(async () => change('A'));
+    await act(async () => finishB());
+    await tick();
+
+    expect(setKV).toHaveBeenCalledTimes(2);
+    expect(setKV).toHaveBeenNthCalledWith(1, 'workspace', 'B');
+    expect(setKV).toHaveBeenNthCalledWith(2, 'workspace', 'A');
+  });
 });
