@@ -1,0 +1,199 @@
+// @vitest-environment jsdom
+import { act, StrictMode } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { DialogProvider } from '../src/components/Dialogs';
+import { Gallery } from '../src/components/Gallery';
+import { useImages, type ImageStore, type NewImage, type UseImagesOptions } from '../src/hooks/useImages';
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+let root: Root;
+let container: HTMLDivElement;
+let store: ImageStore;
+let urlSeq = 0;
+let createdUrls: string[];
+let revokedUrls: string[];
+
+function makeNewImage(seed: number, bytes = 128, width = 256, height = 256): NewImage {
+  return {
+    blob: new Blob([new Uint8Array(bytes)], { type: 'image/png' }),
+    seed,
+    width,
+    height,
+    prompt: `prompt-${seed}`,
+    characterPrompts: [],
+    createdAt: 1_700_000_000_000 + seed,
+  };
+}
+
+function Harness({ options }: { options?: UseImagesOptions }) {
+  store = useImages(options);
+  return null;
+}
+
+const renderHook = async (options?: UseImagesOptions) => {
+  await act(async () => {
+    root.render(
+      <StrictMode>
+        <Harness options={options} />
+      </StrictMode>,
+    );
+  });
+};
+
+beforeEach(() => {
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+  urlSeq = 0;
+  createdUrls = [];
+  revokedUrls = [];
+  vi.spyOn(URL, 'createObjectURL').mockImplementation(() => {
+    const url = `blob:img-${++urlSeq}`;
+    createdUrls.push(url);
+    return url;
+  });
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => {
+    revokedUrls.push(url);
+  });
+});
+
+afterEach(async () => {
+  await act(async () => root.unmount());
+  container.remove();
+  vi.restoreAllMocks();
+});
+
+it('revokes each Object URL exactly once on remove and clear under StrictMode', async () => {
+  await renderHook();
+
+  await act(async () => {
+    store.add([makeNewImage(1), makeNewImage(2), makeNewImage(3)]);
+  });
+  expect(store.images).toHaveLength(3);
+  expect(revokedUrls).toEqual([]);
+
+  const firstId = store.images[0]!.id;
+  const firstUrl = store.images[0]!.url;
+  await act(async () => {
+    store.remove(firstId);
+  });
+  expect(store.images).toHaveLength(2);
+  expect(revokedUrls).toEqual([firstUrl]);
+
+  const remainingUrls = store.images.map((img) => img.url);
+  await act(async () => {
+    store.clear();
+  });
+  expect(store.images).toHaveLength(0);
+  expect(revokedUrls).toEqual([firstUrl, ...remainingUrls]);
+});
+
+it('enforces retention limits, prioritizes downloaded images, and warns when undownloaded images are evicted', async () => {
+  const onEvictUndownloaded = vi.fn();
+  await renderHook({
+    limits: { maxCount: 2, maxBytes: 1000 },
+    onEvictUndownloaded,
+  });
+
+  await act(async () => {
+    store.add([makeNewImage(1)]);
+  });
+  await act(async () => {
+    store.add([makeNewImage(2)]);
+  });
+  // Mark the older image (seed 1) as downloaded
+  const olderId = store.images.find((img) => img.seed === 1)!.id;
+  const olderUrl = store.images.find((img) => img.seed === 1)!.url;
+  await act(async () => {
+    store.markDownloaded(olderId);
+  });
+
+  // Adding seed 3 exceeds maxCount=2; downloaded seed 1 should be evicted first without warning
+  await act(async () => {
+    store.add([makeNewImage(3)]);
+  });
+  expect(store.images.map((img) => img.seed)).toEqual([3, 2]);
+  expect(revokedUrls).toEqual([olderUrl]);
+  expect(onEvictUndownloaded).not.toHaveBeenCalled();
+
+  // Adding seed 4 when neither 3 nor 2 is downloaded should evict oldest undownloaded (seed 2) and warn
+  const seed2Url = store.images.find((img) => img.seed === 2)!.url;
+  await act(async () => {
+    store.add([makeNewImage(4)]);
+  });
+  expect(store.images.map((img) => img.seed)).toEqual([4, 3]);
+  expect(revokedUrls).toEqual([olderUrl, seed2Url]);
+  expect(onEvictUndownloaded).toHaveBeenCalledWith(1);
+});
+
+it('attaches beforeunload only when there are undownloaded images', async () => {
+  const addListener = vi.spyOn(window, 'addEventListener');
+  const removeListener = vi.spyOn(window, 'removeEventListener');
+  await renderHook();
+
+  expect(addListener.mock.calls.filter(([type]) => type === 'beforeunload')).toHaveLength(0);
+
+  await act(async () => {
+    store.add([makeNewImage(1)]);
+  });
+  expect(addListener.mock.calls.filter(([type]) => type === 'beforeunload')).toHaveLength(1);
+
+  const id = store.images[0]!.id;
+  await act(async () => {
+    store.markDownloaded(id);
+  });
+  expect(removeListener.mock.calls.filter(([type]) => type === 'beforeunload')).toHaveLength(1);
+});
+
+it('reuses existing image.url on Gallery download and renders thumbUrl for older thumbnails', async () => {
+  const onDownloaded = vi.fn();
+  const images = [
+    {
+      ...makeNewImage(2, 128, 1024, 1024),
+      id: 'new-2',
+      url: 'blob:full-2',
+      thumbUrl: 'blob:thumb-2',
+      downloaded: false,
+    },
+    {
+      ...makeNewImage(1, 128, 1024, 1024),
+      id: 'old-1',
+      url: 'blob:full-1',
+      thumbUrl: 'blob:thumb-1',
+      downloaded: false,
+    },
+  ];
+
+  const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+  await act(async () => {
+    root.render(
+      <DialogProvider>
+        <Gallery
+          images={images}
+          generating={false}
+          pendingSize={{ width: 1024, height: 1024 }}
+          onRemove={vi.fn()}
+          onClear={vi.fn()}
+          onUseSeed={vi.fn()}
+          onDownloaded={onDownloaded}
+          onReadPng={vi.fn()}
+        />
+      </DialogProvider>,
+    );
+  });
+
+  const imgs = Array.from(container.querySelectorAll('.thumb img')).map((el) => el.getAttribute('src'));
+  expect(imgs).toEqual(['blob:full-2', 'blob:thumb-1']);
+
+  const downloadBtn = container.querySelector('.thumb-download') as HTMLButtonElement;
+  await act(async () => {
+    downloadBtn.click();
+  });
+
+  expect(createdUrls).toEqual([]);
+  expect(anchorClick).toHaveBeenCalledOnce();
+  expect(onDownloaded).toHaveBeenCalledWith('new-2');
+});

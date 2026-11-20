@@ -16,14 +16,18 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export function downloadBlob(filename: string, blob: Blob): void {
-  const url = URL.createObjectURL(blob);
+export function downloadUrl(filename: string, url: string): void {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+export function downloadBlob(filename: string, blob: Blob): void {
+  const url = URL.createObjectURL(blob);
+  downloadUrl(filename, url);
   // すぐに revoke すると一部のブラウザで保存が失敗するため少し待つ
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

@@ -1,6 +1,6 @@
 import { type CSSProperties, type DragEvent, useRef, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
-import { downloadBlob } from '../lib/browser';
+import { downloadUrl } from '../lib/browser';
 import { ImageViewer, imageFileName } from './ImageViewer';
 import { useDialogs } from './Dialogs';
 import type { PromptSource } from './PromptImportDialog';
@@ -31,7 +31,7 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
   const dragDepth = useRef(0);
   const openIndex = images.findIndex((img) => img.id === openId);
   const downloadImage = (image: GeneratedImage) => {
-    downloadBlob(imageFileName(image), image.blob);
+    downloadUrl(imageFileName(image), image.url);
     onDownloaded(image.id);
   };
   const openImport = (blob: Blob, name: string) => {
@@ -114,7 +114,7 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
           {images.map((img, i) => (
             <li key={img.id} className="thumb" style={thumbStyle(img.width, img.height)}>
               <button type="button" className="thumb-btn" onClick={() => setOpenId(img.id)}>
-                <img src={img.url} alt={`生成画像 ${images.length - i}（シード ${img.seed}）`} loading="lazy" />
+                <img src={i === 0 ? img.url : (img.thumbUrl ?? img.url)} alt={`生成画像 ${images.length - i}（シード ${img.seed}）`} loading="lazy" />
               </button>
               <button
                 type="button"
