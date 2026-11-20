@@ -1,5 +1,6 @@
 import type { Dispatch } from 'react';
 import type { Character, CategoryKey, DictEntry, WeightSyntax, WorkTag } from '../types';
+import type { TagFilter } from '../lib/tagSearch';
 import type { WorkspaceAction } from '../lib/workspace';
 import { CHARACTER_CATEGORY_KEYS } from '../lib/categories';
 import { buildPrompt } from '../lib/prompt';
@@ -22,6 +23,8 @@ interface Props {
   onRegister: (tag: WorkTag, category: CategoryKey) => void;
   /** ポーズにタグを追加したとき（キャラ同士の動作なら相手にも付けるか尋ねる）。 */
   onPoseAdded?: (tag: string) => void;
+  /** 表示中のタグ検索と ON 絞り込み。 */
+  filter?: TagFilter;
 }
 
 export function CharacterCard({
@@ -36,6 +39,7 @@ export function CharacterCard({
   notify,
   onRegister,
   onPoseAdded,
+  filter,
 }: Props) {
   const { id, enabled, tags } = character;
   const name = character.name.trim() || `キャラ${index + 1}`;
@@ -70,20 +74,22 @@ export function CharacterCard({
           <button
             type="button"
             className="icon-btn"
-            aria-label={`${name} を上へ`}
+            aria-label={`${name} を左へ`}
+            title={`${name} を左へ`}
             disabled={index === 0}
             onClick={() => dispatch({ type: 'moveCharacter', id, delta: -1 })}
           >
-            ↑
+            ←
           </button>
           <button
             type="button"
             className="icon-btn"
-            aria-label={`${name} を下へ`}
+            aria-label={`${name} を右へ`}
+            title={`${name} を右へ`}
             disabled={index === count - 1}
             onClick={() => dispatch({ type: 'moveCharacter', id, delta: 1 })}
           >
-            ↓
+            →
           </button>
           <button type="button" className="icon-btn icon-btn-danger" aria-label={`${name} を削除`} onClick={remove}>
             ✕
@@ -110,6 +116,7 @@ export function CharacterCard({
             title={key === 'subject' ? '被写体' : undefined}
             interactions={key === 'pose'}
             onAdded={key === 'pose' ? onPoseAdded : undefined}
+            filter={filter}
           />
         ))}
       </div>

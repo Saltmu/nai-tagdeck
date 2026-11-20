@@ -1,6 +1,7 @@
 import { useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { WorkTag } from '../types';
 import { WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP, clampWeight } from '../lib/prompt';
+import { highlightTag } from '../lib/tagSearch';
 import { WeightInput } from './WeightInput';
 import { BookPlusIcon, CheckIcon, CloseIcon, EditIcon } from './icons';
 
@@ -13,6 +14,8 @@ interface Props {
   /** 辞書にないタグのときだけ渡す。 */
   onRegister?: () => void;
   categoryMove?: ReactNode;
+  /** 検索語。一致した範囲を目立たせる。 */
+  query?: string;
   /** 並べ替えモードのときだけ渡す（null は端で動かせない）。 */
   sorting?: {
     onUp: (() => void) | null;
@@ -22,7 +25,16 @@ interface Props {
   };
 }
 
-export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, categoryMove, sorting }: Props) {
+function TagLabel({ tag, query }: { tag: string; query: string }) {
+  const parts = highlightTag(tag, query);
+  return (
+    <span className="tag-name">
+      {parts.map((part, index) => (part.match ? <mark key={index}>{part.text}</mark> : <span key={index}>{part.text}</span>))}
+    </span>
+  );
+}
+
+export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, categoryMove, query = '', sorting }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(tag.tag);
   const [error, setError] = useState<string | null>(null);
@@ -89,12 +101,12 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
           onPointerDown={startDrag}
         >
           <span className="drag-handle" aria-hidden="true">||</span>
-          <span className="tag-name">{tag.tag}</span>
+          <TagLabel tag={tag.tag} query={query} />
         </span>
       ) : (
         <label className="tag-check">
           <input type="checkbox" checked={tag.enabled} onChange={onToggle} />
-          <span className="tag-name">{tag.tag}</span>
+          <TagLabel tag={tag.tag} query={query} />
         </label>
       )}
 

@@ -1,0 +1,47 @@
+import { describe, expect, it } from 'vitest';
+import { highlightTag, isTagFilterActive, tagMatchesQuery, visibleWorkTags } from '../src/lib/tagSearch';
+import type { WorkTag } from '../src/types';
+
+const tag = (id: string, name: string, enabled = true): WorkTag => ({ id, tag: name, enabled, weight: 1 });
+
+describe('タグ検索', () => {
+  it('大小文字・全角・かな・アンダースコアの違いを吸収して部分一致する', () => {
+    expect(tagMatchesQuery('long_hair', 'LONG HAIR')).toBe(true);
+    expect(tagMatchesQuery('Ｌｏｎｇ hair', 'long')).toBe(true);
+    expect(tagMatchesQuery('ロングヘア', 'ろんぐ')).toBe(true);
+    expect(tagMatchesQuery('ｱｲｽ', 'あいす')).toBe(true);
+    expect(tagMatchesQuery('hat', 'cat')).toBe(false);
+    expect(tagMatchesQuery('hat', '   ')).toBe(true);
+    expect(isTagFilterActive({ query: '  ', onlyEnabled: false })).toBe(false);
+    expect(isTagFilterActive({ query: '', onlyEnabled: true })).toBe(true);
+  });
+
+  it('ON と検索語の両方に合うタグだけを残す', () => {
+    const tags = [tag('a', 'long hair'), tag('b', 'short hair', false), tag('c', 'hat')];
+    expect(visibleWorkTags(tags, { query: 'hair', onlyEnabled: false }).map((item) => item.id)).toEqual(['a', 'b']);
+    expect(visibleWorkTags(tags, { query: 'hair', onlyEnabled: true }).map((item) => item.id)).toEqual(['a']);
+    expect(visibleWorkTags(tags, { query: '', onlyEnabled: true }).map((item) => item.id)).toEqual(['a', 'c']);
+  });
+
+  it('一致した範囲だけを元の表記のまま印にする', () => {
+    expect(highlightTag('School Uniform', 'uniform')).toEqual([
+      { text: 'School ', match: false },
+      { text: 'Uniform', match: true },
+    ]);
+    expect(highlightTag('long__hair', 'hair')).toEqual([
+      { text: 'long__', match: false },
+      { text: 'hair', match: true },
+    ]);
+    expect(highlightTag('long_hair', 'long hair')).toEqual([{ text: 'long_hair', match: true }]);
+    expect(highlightTag('ロング', 'ろんぐ')).toEqual([{ text: 'ロング', match: true }]);
+    expect(highlightTag('ｱｲｽ', 'あいす')).toEqual([{ text: 'ｱｲｽ', match: true }]);
+    expect(highlightTag('red hair and long hair', 'hair')).toEqual([
+      { text: 'red ', match: false },
+      { text: 'hair', match: true },
+      { text: ' and long ', match: false },
+      { text: 'hair', match: true },
+    ]);
+    expect(highlightTag('hat', 'cat')).toEqual([{ text: 'hat', match: false }]);
+    expect(highlightTag('hat', '')).toEqual([{ text: 'hat', match: false }]);
+  });
+});
