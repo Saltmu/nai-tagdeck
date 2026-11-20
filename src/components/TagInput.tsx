@@ -1,10 +1,15 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react';
 import type { CategoryKey, DictEntry } from '../types';
 import { categoryLabel } from '../lib/categories';
 import { parseTagList } from '../lib/prompt';
 import { normalize, suggest } from '../lib/suggest';
 import { useSuggestionPopup } from '../hooks/useSuggestionPopup';
 import { INTERACTIONS, splitInteraction, withInteraction, type Interaction } from '../lib/interaction';
+
+export interface TagInputDraft {
+  text: string;
+  picked: Interaction | null;
+}
 
 interface Props {
   category?: CategoryKey;
@@ -15,13 +20,15 @@ interface Props {
   onExpandedChange?: (expanded: boolean) => void;
   /** キャラ同士の動作（source# / target# / mutual#）を付けるボタンを出す。 */
   interactions?: boolean;
+  /** カテゴリを閉じてアンマウントしても入力中の文字列と動作接頭辞を保持するための参照。 */
+  draftRef?: RefObject<TagInputDraft>;
 }
 
-export function TagInput({ category, label, entries, onAdd, onExpandedChange, interactions }: Props) {
-  const [text, setText] = useState('');
+export function TagInput({ category, label, entries, onAdd, onExpandedChange, interactions, draftRef }: Props) {
+  const [text, setText] = useState(() => draftRef?.current.text ?? '');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const [picked, setPicked] = useState<Interaction | null>(null);
+  const [picked, setPicked] = useState<Interaction | null>(() => draftRef?.current.picked ?? null);
   const inputRef = useRef<HTMLInputElement>(null);
   // ウィンドウごとフォーカスを失った（別アプリに切り替えた）ときに立てる
   const leftWindow = useRef(false);
@@ -73,10 +80,15 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
     return () => onExpandedChange?.(false);
   }, [expanded, onExpandedChange]);
 
+  const updateDraft = (nextText: string, nextPicked: Interaction | null) => {
+    if (draftRef) draftRef.current = { text: nextText, picked: nextPicked };
+    setText(nextText);
+    setPicked(nextPicked);
+  };
+
   // 追加したあとは候補を閉じる（入力欄を押す・打つと再び開く）
   const reset = () => {
-    setText('');
-    setPicked(null);
+    updateDraft('', null);
     setActive(0);
     setOpen(false);
     inputRef.current?.focus();
@@ -111,8 +123,7 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
               onClick={() => {
                 const next = interaction === it.value ? null : it.value;
                 // 打ち込んだ接頭辞はボタンの選択に置き換える
-                setText(typed.body);
-                setPicked(next);
+                updateDraft(typed.body, next);
                 setOpen(true);
                 inputRef.current?.focus();
               }}
@@ -139,7 +150,9 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
           enterKeyHint="enter"
           value={text}
           onChange={(e) => {
-            setText(e.target.value);
+            const next = e.target.value;
+            if (draftRef) draftRef.current = { text: next, picked };
+            setText(next);
             setActive(0);
             setOpen(true);
           }}

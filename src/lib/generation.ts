@@ -31,6 +31,7 @@ export const NOISE_SCHEDULES = ['karras', 'exponential', 'polyexponential'] as c
 export const STEPS_MIN = 1;
 export const SCALE_MIN = 0;
 export const SCALE_MAX = 10;
+export const CFG_RESCALE_MAX = 1;
 export const SEED_MAX = 4_294_967_295;
 
 export interface GenerationSettings {
@@ -42,6 +43,8 @@ export interface GenerationSettings {
   noiseSchedule: string;
   /** null ならランダム。 */
   seed: number | null;
+  cfgRescale: number;
+  dynamicThresholding: boolean;
 }
 
 export const DEFAULT_GENERATION: GenerationSettings = {
@@ -52,6 +55,8 @@ export const DEFAULT_GENERATION: GenerationSettings = {
   sampler: DEFAULT_PARAMS.sampler,
   noiseSchedule: DEFAULT_PARAMS.noiseSchedule,
   seed: null,
+  cfgRescale: DEFAULT_PARAMS.cfgRescale,
+  dynamicThresholding: DEFAULT_PARAMS.dynamicThresholding,
 };
 
 export function isDefaultGeneration(g: GenerationSettings): boolean {
@@ -62,7 +67,9 @@ export function isDefaultGeneration(g: GenerationSettings): boolean {
     g.scale === DEFAULT_GENERATION.scale &&
     g.sampler === DEFAULT_GENERATION.sampler &&
     g.noiseSchedule === DEFAULT_GENERATION.noiseSchedule &&
-    g.seed === DEFAULT_GENERATION.seed
+    g.seed === DEFAULT_GENERATION.seed &&
+    g.cfgRescale === DEFAULT_GENERATION.cfgRescale &&
+    g.dynamicThresholding === DEFAULT_GENERATION.dynamicThresholding
   );
 }
 
@@ -76,6 +83,10 @@ export function normalizeSteps(n: unknown): number {
 
 export function normalizeScale(n: unknown): number {
   return Math.round(clamp(n, SCALE_MIN, SCALE_MAX, DEFAULT_GENERATION.scale) * 10) / 10;
+}
+
+export function normalizeCfgRescale(n: unknown): number {
+  return Math.round(clamp(n, 0, CFG_RESCALE_MAX, DEFAULT_GENERATION.cfgRescale) * 100) / 100;
 }
 
 export function normalizeSeed(n: unknown): number | null {
@@ -95,6 +106,8 @@ export function normalizeGeneration(raw: unknown): GenerationSettings {
     sampler: pick(r.sampler, SAMPLERS.map((s) => s.value), DEFAULT_GENERATION.sampler),
     noiseSchedule: pick(r.noiseSchedule, NOISE_SCHEDULES, DEFAULT_GENERATION.noiseSchedule),
     seed: normalizeSeed(r.seed),
+    cfgRescale: normalizeCfgRescale(r.cfgRescale),
+    dynamicThresholding: r.dynamicThresholding === true,
   };
 }
 
@@ -111,6 +124,8 @@ export function toParams(g: GenerationSettings, seed: number): GenerationParams 
     sampler: g.sampler,
     noiseSchedule: g.noiseSchedule,
     seed,
+    cfgRescale: normalizeCfgRescale(g.cfgRescale),
+    dynamicThresholding: g.dynamicThresholding === true,
   };
   // UI 側で範囲を絞っているが、念のため送信直前にも確かめる
   if (!isFreeGeneration(params)) throw new Error('Anlas を消費する設定になっています');

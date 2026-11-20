@@ -1,12 +1,13 @@
-import { memo, useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch } from 'react';
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch } from 'react';
 import type { CategoryKey, DictEntry, PromptCategoryKey, TargetId, WeightSyntax, WorkTag, WorkspaceCategoryKey } from '../types';
 import { BASE, type WorkspaceAction } from '../lib/workspace';
 import { categoryLabel, CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { buildCategoryPrompt, parseTagList } from '../lib/prompt';
 import { useCategoryOpen } from '../hooks/useCategoryOpen';
 import { normalize } from '../lib/suggest';
+import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import { TagRow } from './TagRow';
-import { TagInput } from './TagInput';
+import { TagInput, type TagInputDraft } from './TagInput';
 import { CheckIcon, CopyIcon, PasteIcon, SortIcon, ToggleAllIcon } from './icons';
 
 interface Props {
@@ -32,6 +33,8 @@ interface Props {
   interactions?: boolean;
   /** 入力欄からタグを追加した直後に呼ぶ。 */
   onAdded?: (tag: string) => void;
+  /** 検索語と ON だけの表示。並べ替えは絞り込み中は使わない。 */
+  filter?: TagFilter;
 }
 
 export const CategorySection = memo(function CategorySection({
@@ -51,12 +54,20 @@ export const CategorySection = memo(function CategorySection({
   title,
   interactions,
   onAdded,
+  filter,
 }: Props) {
   const [open, toggleOpen] = useCategoryOpen(target, category);
   const [sorting, setSorting] = useState(false);
+  const appliedFilter = filter ?? { query: '', onlyEnabled: false };
+  const filtering = isTagFilterActive(appliedFilter);
+  const visibleTags = filtering ? visibleWorkTags(tags, appliedFilter) : tags;
+  useEffect(() => {
+    if (filtering) setSorting(false);
+  }, [filtering]);
   const [suggesting, setSuggesting] = useState(false);
   const canSort = tags.length > 1;
   const listRef = useRef<HTMLUListElement>(null);
+  const draftRef = useRef<TagInputDraft>({ text: '', picked: null });
   const tagsRef = useRef(tags);
   useLayoutEffect(() => {
     tagsRef.current = tags;
@@ -66,8 +77,9 @@ export const CategorySection = memo(function CategorySection({
   const fullLabel = scopeLabel ? `${scopeLabel} / ${label}` : label;
   const enabledTags = tags.filter((t) => t.enabled);
   const enabledCount = enabledTags.length;
-  const summaryTags = enabledTags.slice(0, 2).map((t) => t.tag);
-  const remainingCount = enabledCount - summaryTags.length;
+  const summarySource = filtering ? visibleTags : enabledTags;
+  const summaryTags = summarySource.slice(0, 2).map((t) => t.tag);
+  const remainingCount = summarySource.length - summaryTags.length;
   const allOn = tags.length > 0 && enabledCount === tags.length;
   const sortLabel = sorting ? '完了' : '並べ替え';
   const toggleAllLabel = allOn ? '全OFF' : '全ON';
@@ -174,10 +186,17 @@ export const CategorySection = memo(function CategorySection({
             <span className="disclosure-icon" aria-hidden="true" />
             <span className="disclosure-label">{label}</span>
             {open ? (
-              <span className="count">{enabledCount}/{tags.length}</span>
+              <span className="count">
+                {enabledCount}/{tags.length}
+                {filtering ? ` · 該当 ${visibleTags.length}件` : ''}
+              </span>
             ) : (
               <span className="collapsed-summary">
-                <span className="count">{enabledCount}件ON</span>
+                {filtering ? (
+                  <span className="count">該当 {visibleTags.length}件</span>
+                ) : (
+                  <span className="count">{enabledCount}件ON</span>
+                )}
                 {summaryTags.length > 0 && <span className="summary-tags"> · {summaryTags.join(', ')}</span>}
                 {remainingCount > 0 && <span className="summary-more"> ほか{remainingCount}件</span>}
               </span>
@@ -185,7 +204,7 @@ export const CategorySection = memo(function CategorySection({
           </button>
         </h3>
         {open && <div className="head-actions">
-          {(canSort || sorting) && (
+          {(canSort || sorting) && !filtering && (
             <button
               type="button"
               className="icon-btn"
@@ -259,15 +278,19 @@ export const CategorySection = memo(function CategorySection({
               })}
             </div>
           )}
-          {tags.length > 0 && (
+          {filtering && tags.length > 0 && visibleTags.length === 0 && (
+            <p className="hint">該当なし</p>
+          )}
+          {visibleTags.length > 0 && (
             <ul className="tag-list" ref={listRef}>
-              {tags.map((t, i) => (
+              {visibleTags.map((t, i) => (
                 <TagRow
                   key={t.id}
                   tag={t}
-                  sorting={sorting && canSort}
+                  query={appliedFilter.query}
+                  sorting={sorting && canSort && !filtering}
                   canMoveUp={i > 0}
-                  canMoveDown={i < tags.length - 1}
+                  canMoveDown={i < visibleTags.length - 1}
                   onMove={handleMove}
                   onDrag={handleDrag}
                   onToggle={handleToggle}
@@ -289,6 +312,7 @@ export const CategorySection = memo(function CategorySection({
               entries={entries}
               onExpandedChange={setSuggesting}
               interactions={interactions}
+              draftRef={draftRef}
               onAdd={handleAdd}
             />
           )}

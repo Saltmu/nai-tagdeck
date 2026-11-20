@@ -113,7 +113,16 @@ export function sameWorkspace(a: PresetWorkspace, b: PresetWorkspace): boolean {
     const ca = a.characters[i]!;
     const cb = b.characters[i]!;
     if (ca === cb) continue;
-    if (ca.name !== cb.name || ca.enabled !== cb.enabled || !sameTagGroups(ca.tags, cb.tags)) return false;
+    if (
+      ca.name !== cb.name ||
+      ca.enabled !== cb.enabled ||
+      ca.negative !== cb.negative ||
+      ca.center?.x !== cb.center?.x ||
+      ca.center?.y !== cb.center?.y ||
+      !sameTagGroups(ca.tags, cb.tags)
+    ) {
+      return false;
+    }
   }
   if (a.negative !== undefined && b.negative !== undefined && !sameTagList(a.negative, b.negative)) {
     return false;

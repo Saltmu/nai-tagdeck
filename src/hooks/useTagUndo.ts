@@ -78,6 +78,10 @@ function actionLabel(before: Workspace, action: WorkspaceAction): string {
       return 'キャラクターを削除しました';
     case 'renameCharacter':
       return 'キャラクター名を変更しました';
+    case 'setCharacterNegative':
+      return 'キャラクターの個別ネガティブを変更しました';
+    case 'setCharacterCenter':
+      return 'キャラクターの位置を変更しました';
     case 'toggleCharacter':
       return 'キャラクターのON/OFFを切り替えました';
     case 'moveCharacter':
@@ -97,7 +101,7 @@ function sameTag(a: WorkspaceAction, b: WorkspaceAction): boolean {
 
 /**
  * ワークスペース操作を 1 ステップずつ取り消す・やり直す。
- * 入力中の重み変更とキャラクター名、ドラッグ中の並び替えだけを 1 ステップにまとめる。
+ * 入力中の重み、キャラクター名、個別ネガティブ、位置、ドラッグ中の並び替えだけを 1 ステップにまとめる。
  * 欄を離れる、通知を閉じる、または 3 秒空くと、そのまとまりは終わる。
  * テキスト入力中の Ctrl/Cmd+Z は入力欄に任せ、ダイアログ表示中は反応しない。
  * 永続化の読み込みなど、この dispatch を通らない置換は履歴を捨てる。
@@ -161,8 +165,9 @@ export function useTagUndo(
       const merge =
         previous !== null &&
         previous.type === action.type &&
-        ((action.type === 'renameCharacter' &&
-          previous.type === 'renameCharacter' &&
+        (((action.type === 'renameCharacter' || action.type === 'setCharacterNegative' || action.type === 'setCharacterCenter') &&
+          previous.type === action.type &&
+          'id' in previous &&
           previous.id === action.id &&
           editing &&
           now - lastAtRef.current < EDIT_MERGE_MS) ||

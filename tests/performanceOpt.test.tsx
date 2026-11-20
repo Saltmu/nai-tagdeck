@@ -63,6 +63,60 @@ describe('CategorySection collapsed unmounting', () => {
     expect(container.querySelector('.tag-row')).not.toBeNull();
     expect(container.querySelector('.tag-input')).not.toBeNull();
   });
+
+  it('preserves pending TagInput text and interaction prefix across collapse and expand', async () => {
+    await act(async () =>
+      root.render(
+        <CategorySection
+          target={BASE}
+          category="pose"
+          tags={[]}
+          dispatch={vi.fn()}
+          entries={[]}
+          syntax="numeric"
+          isKnown={() => true}
+          onCopy={vi.fn()}
+          notify={vi.fn()}
+          onRegister={vi.fn()}
+          interactions
+        />,
+      ),
+    );
+
+    const disclosure = container.querySelector<HTMLButtonElement>('.disclosure')!;
+    if (disclosure.getAttribute('aria-expanded') === 'false') {
+      await act(async () => disclosure.click());
+    }
+
+    const input = container.querySelector<HTMLInputElement>('.tag-input input')!;
+    const sourceBtn = [...container.querySelectorAll<HTMLButtonElement>('.interaction-picks button')].find((b) =>
+      b.textContent?.startsWith('source#'),
+    )!;
+
+    await act(async () => {
+      sourceBtn.click();
+    });
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setValue.call(input, 'master');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(input.value).toBe('master');
+    expect(sourceBtn.getAttribute('aria-pressed')).toBe('true');
+
+    // Collapse unmounts TagInput
+    await act(async () => disclosure.click());
+    expect(container.querySelector('.tag-input')).toBeNull();
+
+    // Expand restores both pending text and picked interaction
+    await act(async () => disclosure.click());
+    const reopenedInput = container.querySelector<HTMLInputElement>('.tag-input input')!;
+    const reopenedSourceBtn = [...container.querySelectorAll<HTMLButtonElement>('.interaction-picks button')].find((b) =>
+      b.textContent?.startsWith('source#'),
+    )!;
+    expect(reopenedInput.value).toBe('master');
+    expect(reopenedSourceBtn.getAttribute('aria-pressed')).toBe('true');
+  });
 });
 
 describe('Toast isolation', () => {

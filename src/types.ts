@@ -26,12 +26,22 @@ export interface WorkTag {
 export type TagGroups = Record<PromptCategoryKey, WorkTag[]>;
 
 /** V4 以降のキャラクタープロンプト（char_captions の1件）。 */
+/** 画像内の位置。左上を (0, 0)、右下を (1, 1) とする。 */
+export interface CharacterCenter {
+  x: number;
+  y: number;
+}
+
 export interface Character {
   id: string;
   /** 画面上の呼び名。プロンプトには出力しない。 */
   name: string;
   enabled: boolean;
   tags: TagGroups;
+  /** このキャラだけのネガティブ。未設定なら設定の共通ネガティブを使う。空文字はネガティブなし。 */
+  negative?: string;
+  /** 未設定なら座標を送らない。誰か一人でも指定すると、リクエスト全体で座標を有効にする。 */
+  center?: CharacterCenter;
 }
 
 export interface Workspace {

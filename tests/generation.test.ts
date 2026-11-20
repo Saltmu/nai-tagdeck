@@ -274,6 +274,16 @@ describe('generation settings', () => {
     });
     expect(normalizeGeneration(null)).toEqual(DEFAULT_GENERATION);
     expect(normalizeGeneration({ steps: 0.4, scale: 5.55, seed: 12.9 })).toMatchObject({ steps: 1, scale: 5.6, seed: 12 });
+    expect(normalizeGeneration({}).cfgRescale).toBe(0);
+    expect(normalizeGeneration({}).dynamicThresholding).toBe(false);
+    expect(normalizeGeneration({ cfgRescale: 1.234, dynamicThresholding: true })).toMatchObject({
+      cfgRescale: 1,
+      dynamicThresholding: true,
+    });
+    expect(normalizeGeneration({ cfgRescale: 'high', dynamicThresholding: 'yes' })).toMatchObject({
+      cfgRescale: 0,
+      dynamicThresholding: false,
+    });
   });
 
   it('送信用のパラメータにする', () => {
@@ -282,6 +292,12 @@ describe('generation settings', () => {
       height: 832,
       steps: 28,
       seed: 7,
+      cfgRescale: 0,
+      dynamicThresholding: false,
+    });
+    expect(toParams({ ...DEFAULT_GENERATION, cfgRescale: 0.2, dynamicThresholding: true }, 7)).toMatchObject({
+      cfgRescale: 0.2,
+      dynamicThresholding: true,
     });
   });
 });

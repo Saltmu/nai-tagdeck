@@ -2,6 +2,7 @@ import { memo, useCallback, useId, useRef, useState, type PointerEvent as ReactP
 import type { PromptCategoryKey, WorkTag } from '../types';
 import { categoryLabel } from '../lib/categories';
 import { WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP, clampWeight } from '../lib/prompt';
+import { highlightTag } from '../lib/tagSearch';
 import { WeightInput } from './WeightInput';
 import { BookPlusIcon, CheckIcon, CloseIcon, EditIcon } from './icons';
 
@@ -17,6 +18,8 @@ interface Props {
   /** 未分類カテゴリからの移動先一覧。 */
   moveDestinations?: readonly PromptCategoryKey[];
   onMoveCategory?: (id: string, to: PromptCategoryKey) => void;
+  /** 検索語。一致した範囲を目立たせる。 */
+  query?: string;
   /** 並べ替えモード。 */
   sorting?: boolean;
   canMoveUp?: boolean;
@@ -24,6 +27,15 @@ interface Props {
   onMove?: (id: string, delta: -1 | 1) => void;
   /** 「||」をつかんで動かしている間、ポインターの縦位置を渡す。 */
   onDrag?: (id: string, clientY: number) => void;
+}
+
+function TagLabel({ tag, query }: { tag: string; query: string }) {
+  const parts = highlightTag(tag, query);
+  return (
+    <span className="tag-name">
+      {parts.map((part, index) => (part.match ? <mark key={index}>{part.text}</mark> : <span key={index}>{part.text}</span>))}
+    </span>
+  );
 }
 
 export const TagRow = memo(function TagRow({
@@ -36,6 +48,7 @@ export const TagRow = memo(function TagRow({
   onRegister,
   moveDestinations,
   onMoveCategory,
+  query = '',
   sorting = false,
   canMoveUp = false,
   canMoveDown = false,
@@ -109,12 +122,12 @@ export const TagRow = memo(function TagRow({
           onPointerDown={startDrag}
         >
           <span className="drag-handle" aria-hidden="true">||</span>
-          <span className="tag-name">{tag.tag}</span>
+          <TagLabel tag={tag.tag} query={query} />
         </span>
       ) : (
         <label className="tag-check">
           <input type="checkbox" checked={tag.enabled} onChange={() => onToggle(tag.id)} />
-          <span className="tag-name">{tag.tag}</span>
+          <TagLabel tag={tag.tag} query={query} />
         </label>
       )}
 
