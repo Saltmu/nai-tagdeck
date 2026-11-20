@@ -6,7 +6,7 @@ const { pathToFileURL } = require('node:url');
   const browser = await chromium.launch({ channel: 'msedge', headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 700, height: 900 } });
-    await page.goto(pathToFileURL(resolve('public/brand-concepts/index.html')).href);
+    await page.goto(pathToFileURL(resolve('docs/brand-concepts/index.html')).href);
     for (const width of [320, 380, 519, 520, 767, 768, 804, 805, 1000]) {
       const result = await page.evaluate(width => {
         const slider = document.querySelector('#width');
