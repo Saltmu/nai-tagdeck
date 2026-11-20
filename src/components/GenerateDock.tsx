@@ -1,4 +1,4 @@
-import { type PointerEvent, type ReactNode, useId, useRef, useState } from 'react';
+import { type PointerEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 
 type DockTab = 'prompt' | 'generate';
 
@@ -18,8 +18,29 @@ interface Props {
  */
 export function GenerateDock({ collapseSignal, generating, error, onDismissError, promptPanel, generatePanel }: Props) {
   const id = useId();
+  const dockRef = useRef<HTMLElement>(null);
   const [tab, setTab] = useState<DockTab>('prompt');
   const [open, setOpen] = useState(false);
+
+  // 狭い画面ではドックが下端に固定される。高さの分だけ通知を持ち上げる。
+  useEffect(() => {
+    const el = dockRef.current;
+    if (!el) return;
+    const media = window.matchMedia?.('(max-width: 1099px)');
+    const publish = () => {
+      const height = media?.matches ? Math.ceil(el.getBoundingClientRect().height) : 0;
+      document.documentElement.style.setProperty('--dock-offset', `${height}px`);
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    media?.addEventListener('change', publish);
+    return () => {
+      observer.disconnect();
+      media?.removeEventListener('change', publish);
+      document.documentElement.style.removeProperty('--dock-offset');
+    };
+  }, [open, error]);
 
   const [seenSignal, setSeenSignal] = useState(collapseSignal);
   if (seenSignal !== collapseSignal) {
@@ -56,7 +77,7 @@ export function GenerateDock({ collapseSignal, generating, error, onDismissError
   ];
 
   return (
-    <section className={`dock${open ? ' is-open' : ''}`} aria-label="プロンプトと生成設定">
+    <section ref={dockRef} className={`dock${open ? ' is-open' : ''}`} aria-label="プロンプトと生成設定">
       {/* 閉じていてもエラーは見えるようにする */}
       {error && (
         <div className="gen-error" role="alert">

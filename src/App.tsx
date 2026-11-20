@@ -61,7 +61,10 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     if ((e.target as Element).closest('.dock')) return;
     if (window.matchMedia?.('(min-width: 1100px)').matches) setDockCollapse((n) => n + 1);
   };
-  const tagUndo = useTagUndo(workspace, rawDispatch, show);
+  const tagUndo = useTagUndo(workspace, rawDispatch, show, {
+    activeId: presets.activeId,
+    setActiveId: presets.setActiveId,
+  });
   const dispatch = tagUndo.dispatch;
   const openEditor = useCallback(() => setTab('editor'), []);
   const firstRunReady = dictionary.loaded && !dictionary.error &&
@@ -114,6 +117,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   });
   const latest = imageStore.images[0];
   const { unseenId, dismiss } = useLatestImageNotice(latest?.id, tab === 'generate');
+  const showLatest = tab === 'editor' && !!latest && unseenId === latest.id;
   const pickPng = firstRunReady ? () => pngInput.current?.click() : undefined;
   const openPromptImport = (source: PromptSource) => {
     if (firstRunReady) setPromptSource(source);
@@ -196,6 +200,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               notify={show}
               presets={presets}
               onPickPng={pickPng}
+              onReadPng={openPromptImport}
               characterNegative={settings.characterNegativePrompt}
               onCharacterNegativeChange={(characterNegativePrompt) => updateSettings({ characterNegativePrompt })}
               shown={tab === 'editor'}
@@ -279,13 +284,21 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         />
       )}
 
-      {tab === 'editor' && latest && unseenId === latest.id && (
+      {showLatest && latest && (
         <LatestPreview image={latest} onOpen={() => setTab('generate')} onDismiss={dismiss} />
       )}
 
-      <UndoBar removed={tagUndo.removed} onUndo={tagUndo.undo} onDismiss={tagUndo.dismiss} />
+      <UndoBar
+        open={tagUndo.barOpen}
+        label={tagUndo.label}
+        canUndo={tagUndo.canUndo}
+        canRedo={tagUndo.canRedo}
+        onUndo={tagUndo.undo}
+        onRedo={tagUndo.redo}
+        onDismiss={tagUndo.dismiss}
+      />
 
-      <div className={`toast${tagUndo.removed.length > 0 ? ' toast-raised' : ''}${tab === 'generate' ? ' toast-above-dock' : ''}`} role="status" aria-live="polite">
+      <div className="toast" role="status" aria-live="polite">
         {message}
       </div>
     </div>

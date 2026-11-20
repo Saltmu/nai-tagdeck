@@ -17,7 +17,7 @@ type TagAction =
   | { type: 'toggle'; id: string }
   | { type: 'setWeight'; id: string; weight: number }
   | { type: 'setTag'; id: string; tag: string }
-  /** undo: 取り消し通知の対象にする（タグ行の✕など、利用者が行を消す操作）。reducer では無視する。 */
+  /** 以前は取り消し通知の対象を示すだけだった。履歴は操作全般を記録するので、reducer では無視する。 */
   | { type: 'remove'; id: string; undo?: boolean }
   /** 消したタグを元の位置に戻す。同じタグが今あれば重複させず、現在のタグを優先する。 */
   | { type: 'restore'; tag: WorkTag; index: number }
@@ -37,7 +37,9 @@ export type WorkspaceAction =
   | { type: 'renameCharacter'; id: string; name: string }
   | { type: 'toggleCharacter'; id: string }
   | { type: 'moveCharacter'; id: string; delta: -1 | 1 }
-  | { type: 'replace'; workspace: Workspace };
+  | { type: 'replace'; workspace: Workspace }
+  /** 取り消し履歴が計算した状態を、正規化し直さずそのまま入れる。 */
+  | { type: 'commit'; workspace: Workspace };
 
 export function emptyGroups(): TagGroups {
   return Object.fromEntries(PROMPT_CATEGORY_KEYS.map((k) => [k, []])) as unknown as TagGroups;
@@ -255,6 +257,8 @@ export function workspaceReducer(state: Workspace, action: WorkspaceAction): Wor
       return { ...state, characters: moveItem(state.characters, action.id, action.delta) };
     case 'replace':
       return normalizeWorkspace(action.workspace);
+    case 'commit':
+      return action.workspace;
     case 'moveFromUnclassified': {
       const keys = action.target === BASE ? PROMPT_CATEGORY_KEYS : CHARACTER_CATEGORY_KEYS;
       if (action.to === 'unclassified' || !keys.includes(action.to)) return state;

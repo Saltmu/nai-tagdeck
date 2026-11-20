@@ -38,6 +38,10 @@
   --z-toast: 70;
   --z-undo-bar: 80;
   --z-gesture-shield: 90; /* 候補の外を押したあと、その押下が下の要素に届かないよう一時的に覆う透明な板 */
+  /* 狭い画面で下端に固定した生成ドック・未読プレビュー・取り消しバーの高さ。無いときは 0 */
+  --dock-offset: 0px;
+  --latest-offset: 0px;
+  --undo-offset: 0px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1175,7 +1179,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  bottom: calc(env(safe-area-inset-bottom) + 12px + var(--dock-offset) + var(--latest-offset) + var(--undo-offset));
   z-index: var(--z-toast);
   max-width: calc(100vw - 2rem);
   padding: 0.55rem 1rem;
@@ -1196,7 +1200,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
 .undo-bar-slot {
   position: fixed;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  bottom: calc(env(safe-area-inset-bottom) + 12px + var(--dock-offset) + var(--latest-offset));
   z-index: var(--z-undo-bar);
   width: max-content;
   max-width: calc(100vw - 1.5rem);
@@ -1205,6 +1209,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
 
 .undo-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
   padding: 0.35rem 0.4rem 0.35rem 0.9rem;
@@ -1213,6 +1218,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   color: var(--toast-text);
   box-shadow: var(--shadow-pop);
   font-size: 0.9rem;
+  pointer-events: auto;
 }
 
 .undo-bar-text {
@@ -1224,10 +1230,6 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
 
 .undo-bar .btn {
   flex: none;
-}
-
-.toast-raised {
-  bottom: calc(env(safe-area-inset-bottom) + 64px);
 }
 
 /* ---- tablet / desktop ---- */
@@ -1259,15 +1261,11 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   }
 
   .toast {
-    bottom: 1.5rem;
+    bottom: calc(1.5rem + var(--dock-offset) + var(--latest-offset) + var(--undo-offset));
   }
 
   .undo-bar-slot {
-    bottom: 1.5rem;
-  }
-
-  .toast-raised {
-    bottom: 4.5rem;
+    bottom: calc(1.5rem + var(--dock-offset) + var(--latest-offset));
   }
 }
 
@@ -1455,8 +1453,9 @@ textarea {
     padding-top: 0.9rem;
   }
 
-  .toast-above-dock {
-    bottom: calc(env(safe-area-inset-bottom) + 72px);
+  /* 幅が決まらないとボタンが max-content のまま折り返さず、プレビュー側へはみ出す */
+  .undo-bar-slot {
+    width: calc(100vw - 1.5rem - env(safe-area-inset-left) - env(safe-area-inset-right));
   }
 }
 
@@ -1787,6 +1786,16 @@ textarea {
 
 .png-drop-zone.is-dragging {
   border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.editor {
+  border-radius: var(--radius);
+}
+
+.editor.is-dragging {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
   background: var(--accent-soft);
 }
 
@@ -2275,7 +2284,7 @@ textarea {
 .latest-preview {
   position: fixed;
   right: max(0.75rem, env(safe-area-inset-right));
-  bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
+  bottom: calc(env(safe-area-inset-bottom) + 0.75rem + var(--dock-offset));
   z-index: var(--z-latest-preview);
   display: flex;
   align-items: flex-start;
