@@ -136,7 +136,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const showWorkbench = tab === 'editor' || tab === 'generate';
 
   return (
-    <div className={`app${showLatest ? ' has-latest' : ''}`}>
+    <div className="app">
       <header className="app-header" data-occludes>
         <h1 className="app-title" aria-label="nai-tagdeck">
           <img className="brand-icon" src={`${import.meta.env.BASE_URL}brand/icon.svg`} width="24" height="24" alt="" />
@@ -294,7 +294,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         onDismiss={tagUndo.dismiss}
       />
 
-      <div className={`toast${tagUndo.barOpen ? ' toast-raised' : ''}`} role="status" aria-live="polite">
+      <div className="toast" role="status" aria-live="polite">
         {message}
       </div>
     </div>

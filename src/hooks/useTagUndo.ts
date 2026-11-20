@@ -5,6 +5,8 @@ import { tagsOf, workspaceReducer, type WorkspaceAction } from '../lib/workspace
 const HISTORY_LIMIT = 100;
 /** ドラッグ中の moveTo は連続するので、この間隔以内なら 1 ステップにまとめる。 */
 const DRAG_MERGE_MS = 500;
+/** 重み入力とキャラクター名は、この間隔を空けるか欄を離れたら別のステップにする。 */
+const EDIT_MERGE_MS = 3000;
 
 interface PastStep {
   before: Workspace;
@@ -88,7 +90,8 @@ function sameTag(a: WorkspaceAction, b: WorkspaceAction): boolean {
 
 /**
  * ワークスペース操作を 1 ステップずつ取り消す・やり直す。
- * 重みの連続変更とキャラクター名の入力、ドラッグ中の並び替えは 1 ステップにまとめる。
+ * 入力中の重み変更とキャラクター名、ドラッグ中の並び替えだけを 1 ステップにまとめる。
+ * 欄を離れる、通知を閉じる、または 3 秒空くと、そのまとまりは終わる。
  * テキスト入力中の Ctrl/Cmd+Z は入力欄に任せ、ダイアログ表示中は反応しない。
  * 永続化の読み込みなど、この dispatch を通らない置換は履歴を捨てる。
  */
@@ -138,11 +141,20 @@ export function useTagUndo(
       }
       const now = Date.now();
       const previous = lastActionRef.current;
+      const editing = isTextEntry(document.activeElement);
       const merge =
         previous !== null &&
         previous.type === action.type &&
-        ((action.type === 'renameCharacter' && previous.type === 'renameCharacter' && previous.id === action.id) ||
-          (action.type === 'setWeight' && previous.type === 'setWeight' && sameTag(previous, action)) ||
+        ((action.type === 'renameCharacter' &&
+          previous.type === 'renameCharacter' &&
+          previous.id === action.id &&
+          editing &&
+          now - lastAtRef.current < EDIT_MERGE_MS) ||
+          (action.type === 'setWeight' &&
+            previous.type === 'setWeight' &&
+            sameTag(previous, action) &&
+            editing &&
+            now - lastAtRef.current < EDIT_MERGE_MS) ||
           (action.type === 'moveTo' &&
             previous.type === 'moveTo' &&
             sameTag(previous, action) &&
@@ -198,12 +210,23 @@ export function useTagUndo(
     notify('やり直しました');
   }, [apply, notify]);
 
-  const dismiss = useCallback(() => setBarHidden(true), []);
+  const dismiss = useCallback(() => {
+    lastActionRef.current = null;
+    setBarHidden(true);
+  }, []);
 
   const undoRef = useRef(undo);
   const redoRef = useRef(redo);
   undoRef.current = undo;
   redoRef.current = redo;
+
+  useEffect(() => {
+    const onFocusOut = (event: FocusEvent) => {
+      if (isTextEntry(event.target)) lastActionRef.current = null;
+    };
+    document.addEventListener('focusout', onFocusOut);
+    return () => document.removeEventListener('focusout', onFocusOut);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
