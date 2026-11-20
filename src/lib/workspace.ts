@@ -70,6 +70,11 @@ export function newCharacter(index: number): Character {
 
 // ---- 保存データの読み込み ----
 
+/** 空文字や空白だけの ID は採番し直す（辞書の取り込み・プリセットと同じ）。 */
+function storedId(id: unknown): string {
+  return typeof id === 'string' && id.trim() ? id : newId();
+}
+
 function normalizeTags(list: unknown[]): WorkTag[] {
   return list.flatMap((item): WorkTag[] => {
     if (!item || typeof item !== 'object') return [];
@@ -77,7 +82,7 @@ function normalizeTags(list: unknown[]): WorkTag[] {
     if (typeof t.tag !== 'string' || !t.tag.trim()) return [];
     return [
       {
-        id: typeof t.id === 'string' ? t.id : newId(),
+        id: storedId(t.id),
         tag: t.tag.trim(),
         enabled: t.enabled !== false,
         weight: clampWeight(typeof t.weight === 'number' ? t.weight : 1),
@@ -125,7 +130,7 @@ export function normalizeWorkspace(raw: unknown, fallbackNegative?: readonly Wor
         const c = item as Record<string, unknown>;
         return [
           {
-            id: typeof c.id === 'string' ? c.id : newId(),
+            id: storedId(c.id),
             name: typeof c.name === 'string' && c.name.trim() ? c.name : `キャラ${i + 1}`,
             enabled: c.enabled !== false,
             tags: normalizeGroups(c.tags),
@@ -256,10 +261,13 @@ export function workspaceReducer(state: Workspace, action: WorkspaceAction): Wor
       const move = (groups: TagGroups): TagGroups => {
         const tag = groups.unclassified.find((t) => t.id === action.id);
         if (!tag) return groups;
+        const key = normalize(tag.tag);
+        const destination = groups[action.to];
+        const exists = destination.some((t) => normalize(t.tag) === key);
         return {
           ...groups,
           unclassified: groups.unclassified.filter((t) => t.id !== tag.id),
-          [action.to]: [...groups[action.to], tag],
+          [action.to]: exists ? destination : [...destination, tag],
         };
       };
       if (action.target === BASE) {

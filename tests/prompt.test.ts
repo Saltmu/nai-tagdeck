@@ -35,6 +35,11 @@ describe('formatTag', () => {
   it('空白だけのタグは出力しない', () => {
     expect(formatTag('  ', 1.2, 'numeric')).toBe('');
   });
+  it('括弧が極端に多くなる重みは数値記法に戻す', () => {
+    expect(formatTag('a', 0.01, 'brace')).toBe('0.01::a::');
+    expect(formatTag('a', 0.05, 'brace').startsWith('[')).toBe(true);
+    expect(formatTag('a', 3, 'brace').startsWith('{')).toBe(true);
+  });
 });
 
 describe('clampWeight', () => {
@@ -138,5 +143,29 @@ describe('parseTagList', () => {
       const text = formatTag('x', 1.1, syntax);
       expect(parseTagList(text)).toEqual([{ tag: 'x', weight: 1.1 }]);
     }
+  });
+  it('括弧と数値重みの混在を読む', () => {
+    expect(parseTagList('{1.2::tag::}')).toEqual([{ tag: 'tag', weight: 1.26 }]);
+    expect(parseTagList('1.2::{blue eyes}::')).toEqual([{ tag: 'blue eyes', weight: 1.26 }]);
+    expect(parseTagList('{{1.2::tag::}}')).toEqual([{ tag: 'tag', weight: 1.32 }]);
+    expect(parseTagList('{1.2::a, b::}')).toEqual([
+      { tag: 'a', weight: 1.26 },
+      { tag: 'b', weight: 1.26 },
+    ]);
+  });
+  it('余った閉じ括弧は後続のタグへ重みを波及させない', () => {
+    expect(parseTagList('foo}, bar')).toEqual([
+      { tag: 'foo', weight: 1 },
+      { tag: 'bar', weight: 1 },
+    ]);
+    expect(parseTagList('foo], bar, {baz}')).toEqual([
+      { tag: 'foo', weight: 1 },
+      { tag: 'bar', weight: 1 },
+      { tag: 'baz', weight: 1.05 },
+    ]);
+    expect(parseTagList('{{a}}}, b')).toEqual([
+      { tag: 'a', weight: 1.1 },
+      { tag: 'b', weight: 1 },
+    ]);
   });
 });

@@ -113,13 +113,32 @@ export function toCSV(entries: readonly DictEntry[]): string {
   return lines.join('\r\n') + '\r\n';
 }
 
-/** RFC 4180 形式（ダブルクォート・改行入りセル対応）の CSV を行の配列にする。 */
-export function parseCSVRows(text: string): string[][] {
-  const rows: string[][] = [];
+interface CsvRecord {
+  /** ファイル上の開始行（1 始まり）。引用符内の改行や空行を飛ばした番号にはしない。 */
+  line: number;
+  cells: string[];
+}
+
+function isBlankRow(cells: readonly string[]): boolean {
+  return !cells.some((cell) => cell.trim() !== '');
+}
+
+/** RFC 4180 形式（ダブルクォート・改行入りセル対応）の CSV を、空行を残した行の配列にする。 */
+function parseCSVRecords(text: string): CsvRecord[] {
+  const records: CsvRecord[] = [];
   let row: string[] = [];
   let cell = '';
   let quoted = false;
+  let line = 1;
+  let recordLine = 1;
   const src = text.replace(/^﻿/, '');
+
+  const pushRecord = () => {
+    row.push(cell);
+    records.push({ line: recordLine, cells: row });
+    row = [];
+    cell = '';
+  };
 
   for (let i = 0; i < src.length; i++) {
     const ch = src[i];
@@ -133,40 +152,51 @@ export function parseCSVRows(text: string): string[][] {
         }
       } else {
         cell += ch;
+        if (ch === '\n' || ch === '\r') {
+          line++;
+          if (ch === '\r' && src[i + 1] === '\n') i++;
+        }
       }
-    } else if (ch === '"') {
+    } else if (ch === '"' && cell === '') {
       quoted = true;
     } else if (ch === ',') {
       row.push(cell);
       cell = '';
     } else if (ch === '\n' || ch === '\r') {
       if (ch === '\r' && src[i + 1] === '\n') i++;
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = '';
+      pushRecord();
+      line++;
+      recordLine = line;
     } else {
       cell += ch;
     }
   }
   if (cell !== '' || row.length > 0) {
-    row.push(cell);
-    rows.push(row);
+    pushRecord();
   }
-  return rows.filter((r) => r.some((c) => c.trim() !== ''));
+  return records;
+}
+
+/** RFC 4180 形式（ダブルクォート・改行入りセル対応）の CSV を行の配列にする。空行も残す。 */
+export function parseCSVRows(text: string): string[][] {
+  return parseCSVRecords(text).map((record) => record.cells);
 }
 
 export function fromCSV(text: string): ImportResult {
-  const rows = parseCSVRows(text);
-  const header = rows[0]?.map((h) => h.trim().toLowerCase());
-  if (!header || !header.includes('tag') || !header.includes('category')) {
+  const records = parseCSVRecords(text);
+  const headerIndex = records.findIndex((record) => !isBlankRow(record.cells));
+  const header = records[headerIndex]?.cells.map((h) => h.trim().toLowerCase());
+  if (headerIndex < 0 || !header || !header.includes('tag') || !header.includes('category')) {
     return { entries: [], errors: ['1行目に tag と category を含む見出しが必要です'] };
   }
   return collect(
-    rows.slice(1).map((cells, i) => ({
-      raw: Object.fromEntries(header.map((h, j) => [h, cells[j] ?? ''])),
-      where: `${i + 2}行目`,
-    })),
+    records.slice(headerIndex + 1).flatMap((record) => {
+      if (isBlankRow(record.cells)) return [];
+      return [{
+        raw: Object.fromEntries(header.map((h, j) => [h, record.cells[j] ?? ''])),
+        where: `${record.line}行目`,
+      }];
+    }),
   );
 }
 
@@ -201,7 +231,10 @@ export function mergeEntries(
   }
   for (const e of incoming) {
     const byId = idToKey.get(e.id);
-    if (byId) result.delete(byId);
+    if (byId) {
+      result.delete(byId);
+      idToKey.delete(e.id);
+    }
     const key = entryKey(e);
     const prev = result.get(key);
     const merged = prev ? { ...e, id: prev.id } : e;

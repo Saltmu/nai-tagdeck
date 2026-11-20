@@ -7,6 +7,8 @@ export const WEIGHT_MIN = -3;
 export const WEIGHT_MAX = 3;
 export const WEIGHT_STEP = 0.05;
 const BRACE_RATIO = 1.05;
+/** これを超える段数はプロンプトが読みにくく、数値記法に戻す（0.01 は約 94 段）。 */
+const MAX_BRACE_DEPTH = 64;
 
 export function clampWeight(weight: number): number {
   if (!Number.isFinite(weight)) return 1;
@@ -31,9 +33,9 @@ export function formatTag(tag: string, weight: number, syntax: WeightSyntax): st
   if (syntax === 'numeric' || w <= 0) return `${formatWeight(w)}::${t}::`;
   const n = Math.round(Math.log(w) / Math.log(BRACE_RATIO));
   if (n === 0) return t;
+  if (!Number.isFinite(n) || Math.abs(n) > MAX_BRACE_DEPTH) return `${formatWeight(w)}::${t}::`;
   const [open, close] = n > 0 ? ['{', '}'] : ['[', ']'];
-  const k = Math.abs(n);
-  return open.repeat(k) + t + close.repeat(k);
+  return open.repeat(Math.abs(n)) + t + close.repeat(Math.abs(n));
 }
 
 export function buildCategoryPrompt(tags: readonly WorkTag[], syntax: WeightSyntax): string {
@@ -93,30 +95,38 @@ export function parseTagList(text: string, onWeightAdjusted?: (tag: string, weig
     if (!s) continue;
 
     let base: number = groupWeight ?? 1;
-    const open = /^(-?\d+(?:\.\d+)?)::(.*)$/.exec(s);
-    if (open) {
-      base = Number.parseFloat(open[1] ?? '1');
-      groupWeight = base;
-      s = (open[2] ?? '').trim();
-    }
     let closesGroup = false;
-    if (s.endsWith('::')) {
-      s = s.slice(0, -2).trim();
-      closesGroup = true;
-    }
+    // 閉じ括弧は、いま開いている段だけを戻す。余った `}` / `]` は後続タグへ波及させない。
+    let pending = 0;
 
-    while (s.startsWith('{') || s.startsWith('[')) {
-      braceDepth += s.startsWith('{') ? 1 : -1;
-      s = s.slice(1).trimStart();
-    }
-    let closing = 0;
-    while (s.endsWith('}') || s.endsWith(']')) {
-      closing += s.endsWith('}') ? -1 : 1;
-      s = s.slice(0, -1).trimEnd();
+    while (s) {
+      const before = s;
+      while (s.startsWith('{') || s.startsWith('[')) {
+        braceDepth += s.startsWith('{') ? 1 : -1;
+        s = s.slice(1).trimStart();
+      }
+      while (s.endsWith('}') || s.endsWith(']')) {
+        const curly = s.endsWith('}');
+        const projected = braceDepth + pending;
+        if (curly && projected > 0) pending -= 1;
+        else if (!curly && projected < 0) pending += 1;
+        s = s.slice(0, -1).trimEnd();
+      }
+      const open = /^(-?\d+(?:\.\d+)?)::(.*)$/.exec(s);
+      if (open) {
+        base = Number.parseFloat(open[1] ?? '1');
+        groupWeight = base;
+        s = (open[2] ?? '').trim();
+      }
+      if (s.endsWith('::')) {
+        s = s.slice(0, -2).trim();
+        closesGroup = true;
+      }
+      if (s === before) break;
     }
 
     const weight = base * Math.pow(BRACE_RATIO, braceDepth);
-    braceDepth += closing;
+    braceDepth += pending;
     if (closesGroup) groupWeight = null;
     if (s) {
       const adjusted = clampWeight(weight);
