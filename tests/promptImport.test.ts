@@ -227,7 +227,11 @@ describe('NovelAI PNG import', () => {
     expect(charOnly.characters[0]?.tags.unclassified.map((t) => t.tag)).toEqual(['wolf']);
     expect(charOnly.generation.values.mode).toBe('furry');
 
-    await expect(read({ v4_prompt: caption('fur dataset') })).rejects.toThrow('適用できる正');
+    const furOnly = await read({ v4_prompt: caption('fur dataset') });
+    expect(furOnly.base.unclassified.map((t) => t.tag)).toEqual(['fur dataset']);
+    expect(buildPrompt(importedBaseForMode(furOnly, 'anime'), 'numeric')).toBe('fur dataset');
+    expect(buildPrompt(importedBaseForMode(furOnly, 'furry'), 'numeric')).toBe('fur dataset');
+    expect(furOnly.generation.values.mode).toBe('furry');
 
     const nonLeading = await read({ prompt: 'wolf, fur dataset' });
     expect(nonLeading.furDataset).toBeUndefined();

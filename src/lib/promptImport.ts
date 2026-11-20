@@ -182,7 +182,8 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
   const baseTags = readTags(normalizedBaseText, 'ベース', furDataset ? [normalize(furDataset)] : undefined);
   const characterTags = positiveChars.map(({ text }, i) => readTags(text, `キャラ${i + 1}`));
   if (baseTags.length === 0 && characterTags.every((tags) => tags.length === 0)) {
-    throw new Error('適用できる正のプロンプトがありません');
+    if (!furDataset) throw new Error('適用できる正のプロンプトがありません');
+    baseTags.push({ id: newId(), enabled: true, tag: furDataset, weight: 1 });
   }
   const base = group(baseTags, PROMPT_CATEGORY_KEYS);
   const characters = characterTags.map((tags, i) => ({

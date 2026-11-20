@@ -233,3 +233,16 @@ it('allows generating after importing a fur-dataset-only base with character tag
     }),
   }), expect.anything());
 });
+
+it('imports and generates a fur-dataset-only PNG without character tags without duplicating fur dataset', async () => {
+  const furOnlyBytes = pngFixture({ v4_prompt: caption('fur dataset') });
+  await drop(imageFile(furOnlyBytes, 'fur-only.png'));
+  const dialog = container.querySelector('dialog')!;
+  await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await click(button('適用', dialog));
+  expect(preview()).toBe('fur dataset');
+  await click(button('生成する（Ctrl+Enter）'));
+  expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
+    input: 'fur dataset',
+  }), expect.anything());
+});
