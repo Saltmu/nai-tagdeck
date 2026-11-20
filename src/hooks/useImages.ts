@@ -26,15 +26,17 @@ export type NewImage = Omit<GeneratedImage, 'id' | 'url' | 'thumbUrl' | 'downloa
 
 export interface ImageStore {
   images: GeneratedImage[];
+  evictedCount: number;
   add: (images: NewImage[]) => void;
   remove: (id: string) => void;
   clear: () => void;
   markDownloaded: (id: string) => void;
+  dismissEviction: () => void;
 }
 
 export interface UseImagesOptions {
   limits?: ImageHistoryLimits;
-  onEvictUndownloaded?: (count: number) => void;
+  onEvict?: (count: number) => void;
 }
 
 function revokeImageUrls(img: Pick<GeneratedImage, 'url' | 'thumbUrl'>): void {
@@ -44,12 +46,13 @@ function revokeImageUrls(img: Pick<GeneratedImage, 'url' | 'thumbUrl'>): void {
 
 export function useImages(options?: UseImagesOptions): ImageStore {
   const [images, setImages] = useState<GeneratedImage[]>([]);
+  const [evictedCount, setEvictedCount] = useState(0);
   const imagesRef = useRef<GeneratedImage[]>([]);
   const mountedRef = useRef(true);
   const limitsRef = useRef(options?.limits ?? DEFAULT_IMAGE_HISTORY_LIMITS);
   limitsRef.current = options?.limits ?? DEFAULT_IMAGE_HISTORY_LIMITS;
-  const onEvictRef = useRef(options?.onEvictUndownloaded);
-  onEvictRef.current = options?.onEvictUndownloaded;
+  const onEvictRef = useRef(options?.onEvict);
+  onEvictRef.current = options?.onEvict;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -67,7 +70,7 @@ export function useImages(options?: UseImagesOptions): ImageStore {
       url: URL.createObjectURL(img.blob),
       downloaded: false,
     }));
-    const { retained, evicted, evictedUndownloadedCount } = applyImageRetention(
+    const { retained, evicted } = applyImageRetention(
       [...created, ...imagesRef.current],
       limitsRef.current,
     );
@@ -75,7 +78,11 @@ export function useImages(options?: UseImagesOptions): ImageStore {
     setImages(retained);
 
     for (const img of evicted) revokeImageUrls(img);
-    if (evictedUndownloadedCount > 0) onEvictRef.current?.(evictedUndownloadedCount);
+    if (evicted.length > 0) {
+      // <a download> では保存完了を確認できないため、downloaded の有無に関わらず破棄を通知する
+      setEvictedCount((prev) => prev + evicted.length);
+      onEvictRef.current?.(evicted.length);
+    }
 
     const retainedIds = new Set(retained.map((img) => img.id));
     for (const img of created) {
@@ -108,23 +115,24 @@ export function useImages(options?: UseImagesOptions): ImageStore {
 
   const clear = useCallback(() => {
     const prev = imagesRef.current;
+    setEvictedCount(0);
     if (prev.length === 0) return;
     imagesRef.current = [];
     setImages([]);
     for (const img of prev) revokeImageUrls(img);
   }, []);
 
-  // 未ダウンロードの画像があるときだけ、閉じる・再読み込みの前に確認を出す（unload では確認を出せない）
-  const hasUndownloaded = images.some((img) => !img.downloaded);
+  // <a download> では保存完了（キャンセル含む）を確認できないため、画像がある間は常に離脱確認を出す
+  const hasImages = images.length > 0;
   useEffect(() => {
-    if (!hasUndownloaded) return;
+    if (!hasImages) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = '';
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [hasUndownloaded]);
+  }, [hasImages]);
 
   const markDownloaded = useCallback((id: string) => {
     if (!imagesRef.current.some((img) => img.id === id && !img.downloaded)) return;
@@ -133,5 +141,7 @@ export function useImages(options?: UseImagesOptions): ImageStore {
     setImages(next);
   }, []);
 
-  return { images, add, remove, clear, markDownloaded };
+  const dismissEviction = useCallback(() => setEvictedCount(0), []);
+
+  return { images, evictedCount, add, remove, clear, markDownloaded, dismissEviction };
 }

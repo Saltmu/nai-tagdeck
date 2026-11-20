@@ -90,11 +90,11 @@ it('revokes each Object URL exactly once on remove and clear under StrictMode', 
   expect(revokedUrls).toEqual([firstUrl, ...remainingUrls]);
 });
 
-it('enforces retention limits, prioritizes downloaded images, and warns when undownloaded images are evicted', async () => {
-  const onEvictUndownloaded = vi.fn();
+it('enforces retention limits, prioritizes downloaded images, and keeps eviction notice until dismissed', async () => {
+  const onEvict = vi.fn();
   await renderHook({
     limits: { maxCount: 2, maxBytes: 1000 },
-    onEvictUndownloaded,
+    onEvict,
   });
 
   await act(async () => {
@@ -110,25 +110,33 @@ it('enforces retention limits, prioritizes downloaded images, and warns when und
     store.markDownloaded(olderId);
   });
 
-  // Adding seed 3 exceeds maxCount=2; downloaded seed 1 should be evicted first without warning
+  // Adding seed 3 exceeds maxCount=2; downloaded seed 1 is evicted first, and eviction is still notified
+  // because <a download> cannot confirm save completion
   await act(async () => {
     store.add([makeNewImage(3)]);
   });
   expect(store.images.map((img) => img.seed)).toEqual([3, 2]);
   expect(revokedUrls).toEqual([olderUrl]);
-  expect(onEvictUndownloaded).not.toHaveBeenCalled();
+  expect(onEvict).toHaveBeenCalledWith(1);
+  expect(store.evictedCount).toBe(1);
 
-  // Adding seed 4 when neither 3 nor 2 is downloaded should evict oldest undownloaded (seed 2) and warn
+  // Adding seed 4 evicts oldest remaining (seed 2) and accumulates evictedCount
   const seed2Url = store.images.find((img) => img.seed === 2)!.url;
   await act(async () => {
     store.add([makeNewImage(4)]);
   });
   expect(store.images.map((img) => img.seed)).toEqual([4, 3]);
   expect(revokedUrls).toEqual([olderUrl, seed2Url]);
-  expect(onEvictUndownloaded).toHaveBeenCalledWith(1);
+  expect(onEvict).toHaveBeenLastCalledWith(1);
+  expect(store.evictedCount).toBe(2);
+
+  await act(async () => {
+    store.dismissEviction();
+  });
+  expect(store.evictedCount).toBe(0);
 });
 
-it('attaches beforeunload only when there are undownloaded images', async () => {
+it('keeps beforeunload protection even after markDownloaded until all images are removed', async () => {
   const addListener = vi.spyOn(window, 'addEventListener');
   const removeListener = vi.spyOn(window, 'removeEventListener');
   await renderHook();
@@ -144,11 +152,17 @@ it('attaches beforeunload only when there are undownloaded images', async () => 
   await act(async () => {
     store.markDownloaded(id);
   });
+  expect(removeListener.mock.calls.filter(([type]) => type === 'beforeunload')).toHaveLength(0);
+
+  await act(async () => {
+    store.clear();
+  });
   expect(removeListener.mock.calls.filter(([type]) => type === 'beforeunload')).toHaveLength(1);
 });
 
-it('reuses existing image.url on Gallery download and renders thumbUrl for older thumbnails', async () => {
+it('reuses existing image.url on Gallery download, renders thumbUrl for older thumbnails, and shows eviction notice', async () => {
   const onDownloaded = vi.fn();
+  const onDismissEviction = vi.fn();
   const images = [
     {
       ...makeNewImage(2, 128, 1024, 1024),
@@ -175,6 +189,8 @@ it('reuses existing image.url on Gallery download and renders thumbUrl for older
           images={images}
           generating={false}
           pendingSize={{ width: 1024, height: 1024 }}
+          evictedCount={2}
+          onDismissEviction={onDismissEviction}
           onRemove={vi.fn()}
           onClear={vi.fn()}
           onUseSeed={vi.fn()}
@@ -184,6 +200,13 @@ it('reuses existing image.url on Gallery download and renders thumbUrl for older
       </DialogProvider>,
     );
   });
+
+  const notice = container.querySelector('.notice');
+  expect(notice?.textContent).toContain('古い画像 2枚を削除しました');
+  await act(async () => {
+    (notice?.querySelector('button') as HTMLButtonElement).click();
+  });
+  expect(onDismissEviction).toHaveBeenCalledOnce();
 
   const imgs = Array.from(container.querySelectorAll('.thumb img')).map((el) => el.getAttribute('src'));
   expect(imgs).toEqual(['blob:full-2', 'blob:thumb-1']);

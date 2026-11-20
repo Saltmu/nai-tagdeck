@@ -10,6 +10,8 @@ interface Props {
   generating: boolean;
   /** 生成中のプレースホルダーの縦横比に使う。 */
   pendingSize: { width: number; height: number };
+  evictedCount?: number;
+  onDismissEviction?: () => void;
   onRemove: (id: string) => void;
   onClear: () => void;
   onUseSeed: (seed: number) => void;
@@ -23,7 +25,19 @@ function thumbStyle(width: number, height: number): CSSProperties {
   return { aspectRatio: `${width} / ${height}`, '--ar': width / height } as CSSProperties;
 }
 
-export function Gallery({ images, generating, pendingSize, onRemove, onClear, onUseSeed, onDownloaded, onPickPng, onReadPng }: Props) {
+export function Gallery({
+  images,
+  generating,
+  pendingSize,
+  evictedCount = 0,
+  onDismissEviction,
+  onRemove,
+  onClear,
+  onUseSeed,
+  onDownloaded,
+  onPickPng,
+  onReadPng,
+}: Props) {
   const dialogs = useDialogs();
   const [openId, setOpenId] = useState<string | null>(null);
   const [fileError, setFileError] = useState('');
@@ -102,6 +116,16 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
         <span className="hint">または NovelAI の PNG をここにドロップ</span>
       </div>
       {fileError && <p className="error-banner" role="alert">{fileError}</p>}
+      {evictedCount > 0 && (
+        <div className="notice" role="status">
+          <span>履歴上限のため、古い画像 {evictedCount}枚を削除しました。残したい画像はダウンロードしてください。</span>
+          {onDismissEviction && (
+            <button type="button" className="btn btn-small" onClick={onDismissEviction}>
+              閉じる
+            </button>
+          )}
+        </div>
+      )}
 
       {images.length === 0 && !generating ? null : (
         <ul className="thumbs">

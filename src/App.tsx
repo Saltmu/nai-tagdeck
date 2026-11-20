@@ -49,7 +49,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const presets = usePresets();
   const { message, show } = useToast();
   const imageStore = useImages({
-    onEvictUndownloaded: (count) => show(`履歴上限のため、未ダウンロードの古い画像 ${count}枚を削除しました`, 6000),
+    onEvict: (count) => show(`履歴上限のため、古い画像 ${count}枚を削除しました`, 6000),
   });
   const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
@@ -206,6 +206,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               images={imageStore.images}
               generating={generator.generating}
               pendingSize={sizeOf(generation.size)}
+              evictedCount={imageStore.evictedCount}
+              onDismissEviction={imageStore.dismissEviction}
               onRemove={imageStore.remove}
               onClear={imageStore.clear}
               onUseSeed={applySeed}
