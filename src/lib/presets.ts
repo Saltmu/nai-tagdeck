@@ -1,4 +1,4 @@
-import type { Workspace } from '../types';
+import type { WorkTag, Workspace } from '../types';
 import { PROMPT_CATEGORY_KEYS } from './categories';
 import { newId } from './id';
 import { normalize } from './suggest';
@@ -79,22 +79,55 @@ export function mergePresets(existing: readonly Preset[], incoming: readonly Pre
   return sortPresets([...byId.values()]);
 }
 
+function sameTagList(a: readonly WorkTag[] | undefined, b: readonly WorkTag[] | undefined): boolean {
+  const lenA = a?.length ?? 0;
+  const lenB = b?.length ?? 0;
+  if (lenA !== lenB) return false;
+  if (a === b) return true;
+  for (let i = 0; i < lenA; i++) {
+    const ta = a![i]!;
+    const tb = b![i]!;
+    if (ta === tb) continue;
+    if (ta.tag !== tb.tag || ta.enabled !== tb.enabled || ta.weight !== tb.weight) return false;
+  }
+  return true;
+}
+
+function sameTagGroups(a: Workspace['base'], b: Workspace['base']): boolean {
+  if (a === b) return true;
+  for (const key of PROMPT_CATEGORY_KEYS) {
+    if (!sameTagList(a[key], b[key])) return false;
+  }
+  return true;
+}
+
 /**
  * ON/OFF・重み・並び順まで含めて同じか。タグの id は比べない。
  * ネガティブはどちらも持っているときだけ比べる（古いプリセットは読み込んでもネガティブを変えないため）。
  */
 export function sameWorkspace(a: PresetWorkspace, b: PresetWorkspace): boolean {
-  const list = (tags: Workspace['negative']) => tags.map((t) => [t.tag, t.enabled, t.weight]);
-  const compareNegative = a.negative !== undefined && b.negative !== undefined;
-  const strip = (ws: PresetWorkspace) => {
-    const groups = (g: Workspace['base']) => PROMPT_CATEGORY_KEYS.map((k) => list(g[k] ?? []));
-    return JSON.stringify([
-      groups(ws.base),
-      ws.characters.map((c) => [c.name, c.enabled, groups(c.tags)]),
-      compareNegative ? list(ws.negative!) : null,
-    ]);
-  };
-  return strip(a) === strip(b);
+  if (a === b) return true;
+  if (a.characters.length !== b.characters.length) return false;
+  if (!sameTagGroups(a.base, b.base)) return false;
+  for (let i = 0; i < a.characters.length; i++) {
+    const ca = a.characters[i]!;
+    const cb = b.characters[i]!;
+    if (ca === cb) continue;
+    if (
+      ca.name !== cb.name ||
+      ca.enabled !== cb.enabled ||
+      ca.negative !== cb.negative ||
+      ca.center?.x !== cb.center?.x ||
+      ca.center?.y !== cb.center?.y ||
+      !sameTagGroups(ca.tags, cb.tags)
+    ) {
+      return false;
+    }
+  }
+  if (a.negative !== undefined && b.negative !== undefined && !sameTagList(a.negative, b.negative)) {
+    return false;
+  }
+  return true;
 }
 
 /** ベースとキャラクターが空か。ネガティブは既定値が入っているので見ない。 */

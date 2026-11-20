@@ -6,6 +6,13 @@ export const DEFAULT_SETTINGS: Settings = {
   characterNegativePrompt: DEFAULT_CHARACTER_NEGATIVE,
 };
 
+export function isDefaultSettings(s: Settings): boolean {
+  return (
+    s.weightSyntax === DEFAULT_SETTINGS.weightSyntax &&
+    s.characterNegativePrompt === DEFAULT_SETTINGS.characterNegativePrompt
+  );
+}
+
 /** 以前は設定に文字列で持っていたネガティブ。移行用に取り出す（なければ null）。 */
 export function legacyNegativePrompt(raw: unknown): string | null {
   if (!raw || typeof raw !== 'object') return null;

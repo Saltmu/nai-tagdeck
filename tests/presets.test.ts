@@ -79,13 +79,27 @@ describe('presets', () => {
     expect(normalizePresets(null)).toEqual([]);
   });
 
-  it('sameWorkspace はタグの id を無視し、ON/OFF・重み・順番を比べる', () => {
+  it('sameWorkspace はタグの id を無視し、ON/OFF・重み・順番・キャラ情報を比べる', () => {
     const a = withTag(emptyWorkspace(), 'masterpiece');
     const b = withTag(emptyWorkspace(), 'masterpiece');
     expect(a.base.quality[0]!.id).not.toBe(b.base.quality[0]!.id);
     expect(sameWorkspace(a, b)).toBe(true);
+    expect(sameWorkspace(a, a)).toBe(true);
     const toggled = workspaceReducer(b, { type: 'toggle', target: BASE, category: 'quality', id: b.base.quality[0]!.id });
     expect(sameWorkspace(a, toggled)).toBe(false);
+    const weighted = workspaceReducer(b, { type: 'setWeight', target: BASE, category: 'quality', id: b.base.quality[0]!.id, weight: 1.5 });
+    expect(sameWorkspace(a, weighted)).toBe(false);
+
+    const charA = workspaceReducer(a, { type: 'addCharacter' });
+    const charB = workspaceReducer(b, { type: 'addCharacter' });
+    expect(sameWorkspace(charA, a)).toBe(false);
+    expect(sameWorkspace(charA, charB)).toBe(true);
+    const renamed = workspaceReducer(charB, { type: 'renameCharacter', id: charB.characters[0]!.id, name: '別名' });
+    expect(sameWorkspace(charA, renamed)).toBe(false);
+    const disabled = workspaceReducer(charB, { type: 'toggleCharacter', id: charB.characters[0]!.id });
+    expect(sameWorkspace(charA, disabled)).toBe(false);
+    const charTagged = workspaceReducer(charB, { type: 'add', target: charB.characters[0]!.id, category: 'pose', tag: 'standing' });
+    expect(sameWorkspace(charA, charTagged)).toBe(false);
   });
 
   it('isEmptyWorkspace', () => {

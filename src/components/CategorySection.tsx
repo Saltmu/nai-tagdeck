@@ -1,5 +1,5 @@
-import { memo, useEffect, useId, useRef, useState, type Dispatch } from 'react';
-import type { CategoryKey, DictEntry, TargetId, WeightSyntax, WorkTag, WorkspaceCategoryKey } from '../types';
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch } from 'react';
+import type { CategoryKey, DictEntry, PromptCategoryKey, TargetId, WeightSyntax, WorkTag, WorkspaceCategoryKey } from '../types';
 import { BASE, type WorkspaceAction } from '../lib/workspace';
 import { categoryLabel, CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { buildCategoryPrompt, parseTagList } from '../lib/prompt';
@@ -7,7 +7,7 @@ import { useCategoryOpen } from '../hooks/useCategoryOpen';
 import { normalize } from '../lib/suggest';
 import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import { TagRow } from './TagRow';
-import { TagInput } from './TagInput';
+import { TagInput, type TagInputDraft } from './TagInput';
 import { CheckIcon, CopyIcon, PasteIcon, SortIcon, ToggleAllIcon } from './icons';
 
 interface Props {
@@ -67,20 +67,87 @@ export const CategorySection = memo(function CategorySection({
   const [suggesting, setSuggesting] = useState(false);
   const canSort = tags.length > 1;
   const listRef = useRef<HTMLUListElement>(null);
+  const draftRef = useRef<TagInputDraft>({ text: '', picked: null });
+  const tagsRef = useRef(tags);
+  useLayoutEffect(() => {
+    tagsRef.current = tags;
+  });
   const bodyId = useId();
   const label = title ?? categoryLabel(category);
   const fullLabel = scopeLabel ? `${scopeLabel} / ${label}` : label;
-  const enabledCount = tags.filter((t) => t.enabled).length;
-  const summarySource = filtering ? visibleTags : tags.filter((t) => t.enabled);
+  const enabledTags = tags.filter((t) => t.enabled);
+  const enabledCount = enabledTags.length;
+  const summarySource = filtering ? visibleTags : enabledTags;
   const summaryTags = summarySource.slice(0, 2).map((t) => t.tag);
   const remainingCount = summarySource.length - summaryTags.length;
   const allOn = tags.length > 0 && enabledCount === tags.length;
   const sortLabel = sorting ? '完了' : '並べ替え';
   const toggleAllLabel = allOn ? '全OFF' : '全ON';
-  const text = buildCategoryPrompt(tags, syntax);
-  const destinations = category === 'unclassified'
-    ? (target === BASE ? PROMPT_CATEGORY_KEYS : CHARACTER_CATEGORY_KEYS).filter((key) => key !== 'unclassified')
-    : [];
+  const text = open ? buildCategoryPrompt(tags, syntax) : '';
+  const destinations = useMemo(
+    () =>
+      category === 'unclassified'
+        ? (target === BASE ? PROMPT_CATEGORY_KEYS : CHARACTER_CATEGORY_KEYS).filter((key) => key !== 'unclassified')
+        : undefined,
+    [category, target],
+  );
+
+  const handleToggle = useCallback(
+    (id: string) => dispatch({ type: 'toggle', target, category, id }),
+    [dispatch, target, category],
+  );
+  const handleWeight = useCallback(
+    (id: string, weight: number) => dispatch({ type: 'setWeight', target, category, id, weight }),
+    [dispatch, target, category],
+  );
+  const handleEdit = useCallback(
+    (id: string, nextTag: string) => {
+      if (!nextTag.trim()) return 'タグを入力してください';
+      if (tagsRef.current.some((other) => other.id !== id && normalize(other.tag) === normalize(nextTag))) {
+        return '同じタグがこのカテゴリにあります';
+      }
+      dispatch({ type: 'setTag', target, category, id, tag: nextTag });
+      return null;
+    },
+    [dispatch, target, category],
+  );
+  const handleRemove = useCallback(
+    (id: string) => dispatch({ type: 'remove', target, category, id, undo: true }),
+    [dispatch, target, category],
+  );
+  const handleRegister = useCallback(
+    (tag: WorkTag) => {
+      if (category !== 'unclassified') onRegister(tag, category);
+    },
+    [onRegister, category],
+  );
+  const handleMoveCategory = useCallback(
+    (id: string, to: PromptCategoryKey) => dispatch({ type: 'moveFromUnclassified', target, id, to }),
+    [dispatch, target],
+  );
+  const handleMove = useCallback(
+    (id: string, delta: -1 | 1) => dispatch({ type: 'move', target, category, id, delta }),
+    [dispatch, target, category],
+  );
+  const handleDrag = useCallback(
+    (id: string, clientY: number) => {
+      const rows = Array.from(listRef.current?.children ?? []);
+      const to = rows.findIndex((row) => {
+        const r = row.getBoundingClientRect();
+        return clientY >= r.top && clientY < r.bottom;
+      });
+      const from = tagsRef.current.findIndex((t) => t.id === id);
+      if (to >= 0 && from >= 0 && to !== from) dispatch({ type: 'moveTo', target, category, id, index: to });
+    },
+    [dispatch, target, category],
+  );
+  const handleAdd = useCallback(
+    (tag: string, weight: number) => {
+      dispatch({ type: 'add', target, category, tag, weight });
+      onAdded?.(tag);
+    },
+    [dispatch, target, category, onAdded],
+  );
 
   const pasteTags = async () => {
     let clipboardText: string;
@@ -181,108 +248,76 @@ export const CategorySection = memo(function CategorySection({
         </div>}
       </div>
 
-      <div id={bodyId} hidden={!open}>
-        {quickPicks && (
-          <div className="quick-picks" role="group" aria-label={`${fullLabel}のよく使うタグ`}>
-            {quickPicks.map((pick) => {
-              const existing = tags.find((t) => normalize(t.tag) === normalize(pick));
-              const on = !!existing && (quickPicksMode === 'one' || existing.enabled);
-              return (
-                <button
-                  key={pick}
-                  type="button"
-                  className={`btn btn-small${on ? ' btn-primary' : ''}`}
-                  aria-pressed={on}
-                  onClick={() => {
-                    if (quickPicksMode === 'one') {
-                      dispatch({ type: 'pickOne', target, category, group: quickPicks, tag: on ? null : pick });
-                    } else if (existing && on) {
-                      dispatch({ type: 'remove', target, category, id: existing.id });
-                    } else {
-                      // 無いなら追加、OFF なら ON に戻す（add は同じタグを重複させず ON にする）
-                      dispatch({ type: 'add', target, category, tag: pick });
-                    }
-                  }}
-                >
-                  {pick}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {filtering && tags.length > 0 && visibleTags.length === 0 && (
-          <p className="hint">該当なし</p>
-        )}
-        {visibleTags.length > 0 && (
-          <ul className="tag-list" ref={listRef}>
-            {visibleTags.map((t, i) => (
-              <TagRow
-                key={t.id}
-                tag={t}
-                query={appliedFilter.query}
-                sorting={
-                  sorting && canSort && !filtering
-                    ? {
-                        onUp: i > 0 ? () => dispatch({ type: 'move', target, category, id: t.id, delta: -1 }) : null,
-                        onDown:
-                          i < visibleTags.length - 1
-                            ? () => dispatch({ type: 'move', target, category, id: t.id, delta: 1 })
-                            : null,
-                        onDrag: (clientY) => {
-                          const rows = Array.from(listRef.current?.children ?? []);
-                          const to = rows.findIndex((row) => {
-                            const r = row.getBoundingClientRect();
-                            return clientY >= r.top && clientY < r.bottom;
-                          });
-                          if (to >= 0 && to !== i) dispatch({ type: 'moveTo', target, category, id: t.id, index: to });
-                        },
+      {open && (
+        <div id={bodyId}>
+          {quickPicks && (
+            <div className="quick-picks" role="group" aria-label={`${fullLabel}のよく使うタグ`}>
+              {quickPicks.map((pick) => {
+                const existing = tags.find((t) => normalize(t.tag) === normalize(pick));
+                const on = !!existing && (quickPicksMode === 'one' || existing.enabled);
+                return (
+                  <button
+                    key={pick}
+                    type="button"
+                    className={`btn btn-small${on ? ' btn-primary' : ''}`}
+                    aria-pressed={on}
+                    onClick={() => {
+                      if (quickPicksMode === 'one') {
+                        dispatch({ type: 'pickOne', target, category, group: quickPicks, tag: on ? null : pick });
+                      } else if (existing && on) {
+                        dispatch({ type: 'remove', target, category, id: existing.id });
+                      } else {
+                        // 無いなら追加、OFF なら ON に戻す（add は同じタグを重複させず ON にする）
+                        dispatch({ type: 'add', target, category, tag: pick });
                       }
-                    : undefined
-                }
-                onToggle={() => dispatch({ type: 'toggle', target, category, id: t.id })}
-                onWeight={(weight) => dispatch({ type: 'setWeight', target, category, id: t.id, weight })}
-                onEdit={(tag) => {
-                  if (!tag.trim()) return 'タグを入力してください';
-                  if (tags.some((other) => other.id !== t.id && normalize(other.tag) === normalize(tag))) {
-                    return '同じタグがこのカテゴリにあります';
-                  }
-                  dispatch({ type: 'setTag', target, category, id: t.id, tag });
-                  return null;
-                }}
-                onRemove={() => dispatch({ type: 'remove', target, category, id: t.id, undo: true })}
-                onRegister={category !== 'unclassified' && !isKnown(t.tag) ? () => onRegister(t, category) : undefined}
-                categoryMove={category === 'unclassified' ? (
-                  <select
-                    className="tag-category-move"
-                    aria-label={`${t.tag} の移動先カテゴリ`}
-                    value=""
-                    onChange={(e) => {
-                      const to = destinations.find((key) => key === e.target.value);
-                      if (to) dispatch({ type: 'moveFromUnclassified', target, id: t.id, to });
                     }}
                   >
-                    <option value="" disabled>移動先</option>
-                    {destinations.map((key) => <option key={key} value={key}>{categoryLabel(key)}</option>)}
-                  </select>
-                ) : undefined}
-              />
-            ))}
-          </ul>
-        )}
-        {!sorting && (
-          <TagInput
-            category={category === 'unclassified' ? undefined : category}
-            label={fullLabel}
-            entries={entries}
-            onExpandedChange={setSuggesting}
-            interactions={interactions}
-            onAdd={(tag, weight) => {
-              dispatch({ type: 'add', target, category, tag, weight });
-              onAdded?.(tag);
-            }}
-          />
-        )}
-      </div>
+                    {pick}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {filtering && tags.length > 0 && visibleTags.length === 0 && (
+            <p className="hint">該当なし</p>
+          )}
+          {visibleTags.length > 0 && (
+            <ul className="tag-list" ref={listRef}>
+              {visibleTags.map((t, i) => (
+                <TagRow
+                  key={t.id}
+                  tag={t}
+                  query={appliedFilter.query}
+                  sorting={sorting && canSort && !filtering}
+                  canMoveUp={i > 0}
+                  canMoveDown={i < visibleTags.length - 1}
+                  onMove={handleMove}
+                  onDrag={handleDrag}
+                  onToggle={handleToggle}
+                  onWeight={handleWeight}
+                  onEdit={handleEdit}
+                  onRemove={handleRemove}
+                  canRegister={category !== 'unclassified' && !isKnown(t.tag)}
+                  onRegister={handleRegister}
+                  moveDestinations={destinations}
+                  onMoveCategory={destinations ? handleMoveCategory : undefined}
+                />
+              ))}
+            </ul>
+          )}
+          {!sorting && (
+            <TagInput
+              category={category === 'unclassified' ? undefined : category}
+              label={fullLabel}
+              entries={entries}
+              onExpandedChange={setSuggesting}
+              interactions={interactions}
+              draftRef={draftRef}
+              onAdd={handleAdd}
+            />
+          )}
+        </div>
+      )}
     </section>
   );
 });
