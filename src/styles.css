@@ -1202,6 +1202,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   color: var(--toast-text);
   box-shadow: var(--shadow-pop);
   font-size: 0.9rem;
+  pointer-events: auto;
 }
 
 .undo-bar-text {
@@ -1769,6 +1770,16 @@ textarea {
 
 .png-drop-zone.is-dragging {
   border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.editor {
+  border-radius: var(--radius);
+}
+
+.editor.is-dragging {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
   background: var(--accent-soft);
 }
 
