@@ -2,9 +2,11 @@ import type { CategoryKey, DictEntry, PromptCategoryKey, TagGroups, Workspace, W
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from './categories';
 import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
 import {
-  NOISE_SCHEDULES, SAMPLERS, SIZE_PRESETS, normalizeCfgRescale, normalizeScale, normalizeSeed, normalizeSteps, type GenerationSettings,
+  NOISE_SCHEDULES, SAMPLERS, SCALE_MAX, SCALE_MIN, SIZE_PRESETS, normalizeCfgRescale, normalizeScale, normalizeSeed, normalizeSteps,
+  type GenerationSettings,
 } from './generation';
 import { newId } from './id';
+import type { GenerationMode } from './novelai';
 import { readPngMetadata } from './pngMetadata';
 import { parseTagList } from './prompt';
 import { normalize } from './suggest';
@@ -39,7 +41,9 @@ function sameCenters(a: unknown, b: unknown): boolean {
   });
 }
 
-function generationFrom(comment: Fields) {
+const FUR_DATASET_PREFIX = /^\s*(fur[\s_]+dataset)(?:\s*[,\n]+\s*|\s*$)/i;
+
+function generationFrom(comment: Fields, isFurry: boolean) {
   const values: Partial<GenerationSettings> = {};
   const labels: string[] = [];
   const skipped: string[] = [];
@@ -52,16 +56,20 @@ function generationFrom(comment: Fields) {
       labels.push(`${label} ${formatted ?? value}`);
     }
   };
+  if (isFurry) add('mode', '生成モード', 'furry', 'ケモノ');
   const size = SIZE_PRESETS.find((s) => s.width === comment.width && s.height === comment.height);
   const seed = normalizeSeed(comment.seed);
   const steps = normalizeSteps(comment.steps);
-  const scale = normalizeScale(comment.scale);
+  const scale = typeof comment.scale === 'number' && Number.isFinite(comment.scale) &&
+    comment.scale >= SCALE_MIN && comment.scale <= SCALE_MAX
+    ? normalizeScale(comment.scale)
+    : undefined;
   const sampler = SAMPLERS.find((s) => s.value === comment.sampler);
   const schedule = NOISE_SCHEDULES.find((s) => s === comment.noise_schedule);
   add('seed', 'シード', seed !== null && seed === comment.seed ? seed : undefined);
   add('size', 'サイズ', size?.key, size?.label);
   add('steps', 'ステップ', steps === comment.steps ? steps : undefined);
-  add('scale', 'ガイダンス', scale === comment.scale ? scale : undefined);
+  add('scale', 'ガイダンス', scale);
   add('sampler', 'サンプラー', sampler?.value, sampler?.label);
   add('noiseSchedule', 'ノイズスケジュール', schedule);
   if (typeof comment.cfg_rescale === 'number' && Number.isFinite(comment.cfg_rescale)) {
@@ -75,11 +83,24 @@ function generationFrom(comment: Fields) {
 
 export interface PromptImport {
   base: Workspace['base'];
+  furDataset?: string;
   characters: Workspace['characters'];
   negative?: Workspace['negative'];
   characterNegative?: string;
   generation: ReturnType<typeof generationFrom>;
   notes: string[];
+}
+
+export function importedBaseForMode(result: Pick<PromptImport, 'base' | 'furDataset'>, mode: GenerationMode): Workspace['base'] {
+  if (!result.furDataset || mode === 'furry') return result.base;
+  const key = normalize(result.furDataset);
+  const exists = Object.values(result.base).some((tags) => tags.some((t) => normalize(t.tag) === key));
+  if (exists) return result.base;
+  // 品質カテゴリは PROMPT_CATEGORY_KEYS の先頭なので、分類済みタグがあっても送信時の先頭に保てる
+  return {
+    ...result.base,
+    quality: [{ id: newId(), enabled: true, tag: result.furDataset, weight: 1 }, ...result.base.quality],
+  };
 }
 
 function dictionaryCategories(entries: readonly DictEntry[]) {
@@ -129,25 +150,40 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
     throw new Error(`画像のキャラクター数が保存上限（${MAX_CHARACTERS}人）を超えています`);
   }
 
+  const furDataset = baseText.match(FUR_DATASET_PREFIX)?.[1];
+  const isFurry = furDataset !== undefined;
+  const normalizedBaseText = isFurry ? baseText.replace(FUR_DATASET_PREFIX, '') : baseText;
   const notes: string[] = [];
   const byTag = dictionaryCategories(entries);
-  const readTags = (text: string, scope: string): WorkTag[] =>
-    parseTagList(text, (tag, weight, adjusted) => notes.push(`${scope}「${tag}」の重みを ${weight} から ${adjusted} に調整します。`))
-      .map(({ tag, weight }) => ({ id: newId(), enabled: true, tag, weight }));
+  const readTags = (text: string, scope: string, initialSeen?: readonly string[]): WorkTag[] => {
+    const seen = new Set<string>(initialSeen);
+    const tags: WorkTag[] = [];
+    for (const { tag, weight } of parseTagList(
+      text,
+      (t, w, adjusted) => notes.push(`${scope}「${t}」の重みを ${w} から ${adjusted} に調整します。`),
+    )) {
+      const key = normalize(tag);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      tags.push({ id: newId(), enabled: true, tag, weight });
+    }
+    return tags;
+  };
   const group = (tags: WorkTag[], allowed: readonly PromptCategoryKey[]): TagGroups => {
     const groups = emptyGroups();
     for (const tag of tags) {
       const matches = byTag.get(normalize(tag.tag));
-      const category = matches?.size === 1 ? matches.values().next().value : undefined;
-      const key = allowed.find((key) => key === category) ?? 'unclassified';
+      const candidates = matches ? allowed.filter((key) => key !== 'unclassified' && matches.has(key)) : [];
+      const key = candidates.length === 1 ? candidates[0]! : 'unclassified';
       groups[key].push(tag);
     }
     return groups;
   };
-  const baseTags = readTags(baseText, 'ベース');
+  const baseTags = readTags(normalizedBaseText, 'ベース', furDataset ? [normalize(furDataset)] : undefined);
   const characterTags = positiveChars.map(({ text }, i) => readTags(text, `キャラ${i + 1}`));
   if (baseTags.length === 0 && characterTags.every((tags) => tags.length === 0)) {
-    throw new Error('適用できる正のプロンプトがありません');
+    if (!furDataset) throw new Error('適用できる正のプロンプトがありません');
+    baseTags.push({ id: newId(), enabled: true, tag: furDataset, weight: 1 });
   }
   const base = group(baseTags, PROMPT_CATEGORY_KEYS);
   const characters = characterTags.map((tags, i) => ({
@@ -203,7 +239,7 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
       notes.push(`${missed.join('、')} の座標は読み取れませんでした。再生成では中央（0.5, 0.5）になります。`);
     }
   }
-  notes.push('生成モード（アニメ／ケモノ）は現在の設定を使います。');
+  if (!isFurry) notes.push('生成モード（アニメ／ケモノ）は現在の設定を使います。');
 
-  return { base, characters, negative, characterNegative, generation: generationFrom(comment), notes };
+  return { base, furDataset, characters, negative, characterNegative, generation: generationFrom(comment, isFurry), notes };
 }
