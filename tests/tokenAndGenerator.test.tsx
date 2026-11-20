@@ -86,6 +86,53 @@ describe('useToken', () => {
     expect(tokenState.token).toBe('pst-session');
     expect(tokenState.storage).toBe('session');
   });
+
+  it('保存失敗でメモリ保持中のトークンは他タブの storage イベントで消されない', async () => {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'pst-local');
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <Harness />
+        </StrictMode>,
+      );
+    });
+    expect(tokenState.token).toBe('pst-local');
+
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('QuotaExceededError', 'QuotaExceededError');
+    });
+    try {
+      let saved = true;
+      await act(async () => {
+        saved = tokenState.save('pst-memory-only', 'session');
+      });
+      expect(saved).toBe(false);
+      expect(tokenState.token).toBe('pst-memory-only');
+      expect(tokenState.storage).toBe('session');
+    } finally {
+      setItemSpy.mockRestore();
+    }
+
+    // 別タブでローカル保存のトークンが削除されてもメモリ保持中の値は残る
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+    await act(async () => {
+      window.dispatchEvent(new StorageEvent('storage', { key: TOKEN_STORAGE_KEY, oldValue: 'pst-local', newValue: null }));
+    });
+    expect(tokenState.token).toBe('pst-memory-only');
+    expect(tokenState.storage).toBe('session');
+
+    // 明示的に削除すれば同期が再開する
+    await act(async () => {
+      tokenState.clear();
+    });
+    expect(tokenState.token).toBeNull();
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'pst-after-clear');
+    await act(async () => {
+      window.dispatchEvent(new StorageEvent('storage', { key: TOKEN_STORAGE_KEY, newValue: 'pst-after-clear' }));
+    });
+    expect(tokenState.token).toBe('pst-after-clear');
+    expect(tokenState.storage).toBe('local');
+  });
 });
 
 describe('TokenSettings', () => {

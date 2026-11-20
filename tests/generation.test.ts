@@ -180,6 +180,42 @@ describe('requestImages', () => {
     expect(cancelCtrl.signal.aborted).toBe(true);
     expect((cancelErr as { name?: string })?.name).not.toBe('TimeoutError');
   });
+
+  it('エラー応答の本文受信中にタイムアウトした場合は HTTP エラーではなくタイムアウトとして扱う', async () => {
+    let onReadingBody: (() => void) | undefined;
+    vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => ({
+      ok: false,
+      status: 503,
+      headers: new Headers(),
+      text: () =>
+        new Promise<string>((_resolve, reject) => {
+          onReadingBody?.();
+          if (init?.signal?.aborted) {
+            reject(init.signal.reason);
+            return;
+          }
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+        }),
+    }));
+
+    const userCtrl = new AbortController();
+    const timeoutErr = await requestImages('pst-ok', {} as never, userCtrl.signal, 20).catch((e: unknown) => e);
+    expect(userCtrl.signal.aborted).toBe(false);
+    expect(timeoutErr).not.toBeInstanceOf(NovelAIError);
+    expect(describeError(timeoutErr)).toContain('タイムアウト');
+
+    const cancelCtrl = new AbortController();
+    const readingStarted = new Promise<void>((resolve) => {
+      onReadingBody = resolve;
+    });
+    const cancelPromise = requestImages('pst-ok', {} as never, cancelCtrl.signal, 5000).catch((e: unknown) => e);
+    await readingStarted;
+    cancelCtrl.abort();
+    const cancelErr = await cancelPromise;
+    expect(cancelCtrl.signal.aborted).toBe(true);
+    expect(cancelErr).not.toBeInstanceOf(NovelAIError);
+    expect((cancelErr as { name?: string })?.name).not.toBe('TimeoutError');
+  });
 });
 
 describe('parseRetryAfter', () => {

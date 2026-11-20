@@ -303,8 +303,16 @@ function extractErrorField(data: Record<string, unknown>): string | null {
   return null;
 }
 
-async function readErrorMessage(res: Response): Promise<string> {
-  const text = await res.text().catch(() => '');
+async function readErrorMessage(res: Response, signal?: AbortSignal): Promise<string> {
+  if (signal?.aborted) throw signal.reason ?? createTimeoutError();
+  let text: string;
+  try {
+    text = await res.text();
+  } catch (err) {
+    if (signal?.aborted) throw signal.reason ?? err;
+    if (isTimeoutError(err)) throw err;
+    return '';
+  }
   try {
     const data: unknown = JSON.parse(text);
     if (data && typeof data === 'object' && !Array.isArray(data)) {
@@ -403,12 +411,21 @@ export async function requestImages(
       referrerPolicy: 'no-referrer',
     });
     if (!res.ok) {
-      throw new NovelAIError(res.status, await readErrorMessage(res), {
+      const message = await readErrorMessage(res, requestSignal);
+      if (requestSignal?.aborted) throw requestSignal.reason ?? createTimeoutError();
+      throw new NovelAIError(res.status, message, {
         retryAfterSeconds: parseRetryAfter(res.headers?.get('retry-after') ?? null),
         correlationId,
       });
     }
-    return extractImages(await res.arrayBuffer());
+    const buffer = await res.arrayBuffer();
+    if (requestSignal?.aborted) throw requestSignal.reason ?? createTimeoutError();
+    return extractImages(buffer);
+  } catch (err) {
+    if (requestSignal?.aborted && !signal?.aborted && isTimeoutError(requestSignal.reason)) {
+      throw requestSignal.reason;
+    }
+    throw err;
   } finally {
     cleanup();
   }
