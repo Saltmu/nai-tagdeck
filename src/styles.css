@@ -14,6 +14,15 @@
   --weighted: #b45309;
   --toast-bg: #1c2029;
   --toast-text: #ffffff;
+  /* 生成画像の上に載るボタン。下地の明暗に左右されないよう、カラースキームでは変えない */
+  --overlay-text: #1c2029;
+  --overlay-bg: #ffffff;
+  --overlay-bg-hover: #eef0f4;
+  --overlay-border: #d6dbe3;
+  --overlay-done-text: #1c2029;
+  --overlay-done-bg: #b8bec8;
+  --overlay-done-bg-hover: #a8b0bc;
+  --overlay-done-border: #a8b0bc;
   --radius: 10px;
   --shadow: 0 1px 2px rgb(15 20 30 / 0.06), 0 1px 1px rgb(15 20 30 / 0.04);
   --shadow-pop: 0 8px 24px rgb(15 20 30 / 0.14);
@@ -221,7 +230,7 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.5rem max(0.75rem, env(safe-area-inset-left));
+  padding: 0.5rem max(0.75rem, env(safe-area-inset-right)) 0.5rem max(0.75rem, env(safe-area-inset-left));
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
@@ -311,14 +320,14 @@ input[type='checkbox'] {
 .app-main {
   max-width: 1320px;
   margin: 0 auto;
-  padding: 0.75rem max(0.75rem, env(safe-area-inset-left));
+  padding: 0.75rem max(0.75rem, env(safe-area-inset-right)) 0.75rem max(0.75rem, env(safe-area-inset-left));
 }
 
 .error-banner {
   margin: 0;
   padding: 0.6rem 1rem;
   background: var(--danger);
-  color: #fff;
+  color: var(--accent-text);
 }
 
 /* ---- cards ---- */
@@ -654,7 +663,7 @@ input[type='checkbox'] {
 .editor-tab[aria-selected='true'] {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 
 .editor-tab.is-off:not([aria-selected='true']) {
@@ -682,7 +691,7 @@ input[type='checkbox'] {
 }
 
 .editor-tab-wrap:has(.editor-tab[aria-selected='true']) .editor-tab-check {
-  accent-color: #fff;
+  accent-color: var(--accent-text);
 }
 
 .editor-tab:disabled {
@@ -1247,8 +1256,11 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
     transition: none !important;
+    animation: none !important;
   }
 }
 
@@ -1596,9 +1608,9 @@ textarea {
 }
 
 .thumb-download {
-  color: #1c2029;
-  background: #ffffff;
-  border-color: #d6dbe3;
+  color: var(--overlay-text);
+  background: var(--overlay-bg);
+  border-color: var(--overlay-border);
   position: absolute;
   top: 0.4rem;
   right: 0.4rem;
@@ -1609,17 +1621,17 @@ textarea {
 }
 
 .thumb-download:hover:not(:disabled) {
-  background: #eef0f4;
+  background: var(--overlay-bg-hover);
 }
 
 .thumb-download.is-downloaded {
-  color: #858e9c;
-  background: #b8bec8;
-  border-color: #a8b0bc;
+  color: var(--overlay-done-text);
+  background: var(--overlay-done-bg);
+  border-color: var(--overlay-done-border);
 }
 
 .thumb-download.is-downloaded:hover:not(:disabled) {
-  background: #a8b0bc;
+  background: var(--overlay-done-bg-hover);
 }
 
 .thumb.is-pending {
