@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { normalizePresets, type Preset } from '../lib/presets';
 import { usePersistence, type PersistenceState } from './usePersistence';
 
@@ -16,6 +16,10 @@ export function usePresets(): PresetStore {
   const [activeId, setActiveId] = useState<string | null>(null);
   const presetState = usePersistence('presets', presets, (raw) => setPresets(normalizePresets(raw)));
   const activeState = usePersistence('activePreset', activeId, (raw) => setActiveId(typeof raw === 'string' ? raw : null));
-  return { persistence: [presetState, activeState], presets, setPresets, activeId, setActiveId };
+  const persistence = useMemo(() => [presetState, activeState], [presetState, activeState]);
+  return useMemo(
+    () => ({ persistence, presets, setPresets, activeId, setActiveId }),
+    [persistence, presets, activeId],
+  );
 }
 

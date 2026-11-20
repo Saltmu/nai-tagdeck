@@ -197,3 +197,52 @@ it('accepts a PNG dropped anywhere on the editor and toggles dragging state', as
   await click(button('適用', container.querySelector('dialog')!));
   expect(preview()).toBe('editor dropped tag');
 });
+
+it('preserves fur dataset at the start even with classified tags when generation settings are not applied in anime mode', async () => {
+  const furryBytes = pngFixture({ v4_prompt: caption('fur dataset, blazer, wolf') });
+  await drop(imageFile(furryBytes, 'furry.png'));
+  await click(button('適用', container.querySelector('dialog')!));
+  expect(preview()).toBe('fur dataset, blazer, wolf');
+  await click(button('生成する（Ctrl+Enter）'));
+  expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
+    input: 'fur dataset, blazer, wolf',
+  }), expect.anything());
+
+  await drop(imageFile(furryBytes, 'furry.png'));
+  const dialog = container.querySelector('dialog')!;
+  await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await click(button('適用', dialog));
+  expect(preview()).toBe('blazer, wolf');
+  await click(button('生成する（Ctrl+Enter）'));
+  expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
+    input: 'fur dataset, blazer, wolf',
+  }), expect.anything());
+});
+
+it('allows generating after importing a fur-dataset-only base with character tags and applying furry mode', async () => {
+  const charOnlyFurryBytes = pngFixture({ v4_prompt: caption('fur dataset', ['wolf']) });
+  await drop(imageFile(charOnlyFurryBytes, 'char-furry.png'));
+  const dialog = container.querySelector('dialog')!;
+  await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await click(button('適用', dialog));
+  await click(button('生成する（Ctrl+Enter）'));
+  expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
+    input: 'fur dataset',
+    parameters: expect.objectContaining({
+      characterPrompts: [expect.objectContaining({ prompt: 'wolf' })],
+    }),
+  }), expect.anything());
+});
+
+it('imports and generates a fur-dataset-only PNG without character tags without duplicating fur dataset', async () => {
+  const furOnlyBytes = pngFixture({ v4_prompt: caption('fur dataset') });
+  await drop(imageFile(furOnlyBytes, 'fur-only.png'));
+  const dialog = container.querySelector('dialog')!;
+  await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await click(button('適用', dialog));
+  expect(preview()).toBe('fur dataset');
+  await click(button('生成する（Ctrl+Enter）'));
+  expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
+    input: 'fur dataset',
+  }), expect.anything());
+});
