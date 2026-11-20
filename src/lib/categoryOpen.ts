@@ -2,16 +2,31 @@ import type { WorkspaceCategoryKey, TargetId } from '../types';
 
 type CategoryStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
-const listeners = new Set<() => void>();
+interface CategoryOpenChange {
+  target: TargetId;
+  categories: readonly WorkspaceCategoryKey[];
+  open: boolean;
+}
+
+const listeners = new Set<(change: CategoryOpenChange) => void>();
 
 /** 一括開閉など、このフックの外から保存した開閉を画面へ伝える。 */
-export function subscribeCategoryOpen(listener: () => void): () => void {
+export function subscribeCategoryOpen(listener: (change: CategoryOpenChange) => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
-function emitCategoryOpen(): void {
-  for (const listener of [...listeners]) listener();
+function emitCategoryOpen(change: CategoryOpenChange): void {
+  for (const listener of [...listeners]) listener(change);
+}
+
+function resolveStorage(storage?: CategoryStorage): CategoryStorage | null {
+  if (storage) return storage;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 function storageKey(target: TargetId, category: WorkspaceCategoryKey): string {
@@ -39,15 +54,16 @@ export function saveCategoriesOpen(
   open: boolean,
   storage?: CategoryStorage,
 ): void {
-  const box = storage ?? window.localStorage;
-  let wrote = false;
-  for (const category of categories) {
-    try {
-      box.setItem(storageKey(target, category), String(open));
-      wrote = true;
-    } catch {
-      // 保存が利用できない環境でも、画面上の開閉は続けられる。
+  const box = resolveStorage(storage);
+  if (box) {
+    for (const category of categories) {
+      try {
+        box.setItem(storageKey(target, category), String(open));
+      } catch {
+        // 保存が利用できない環境でも、画面上の開閉は続けられる。
+      }
     }
   }
-  if (!storage && wrote) emitCategoryOpen();
+  // 保存の成否とは別に、今の画面には開閉を反映する。
+  if (!storage) emitCategoryOpen({ target, categories, open });
 }

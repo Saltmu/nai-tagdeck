@@ -7,8 +7,9 @@ export function useCategoryOpen(target: TargetId, category: WorkspaceCategoryKey
   const [state, setState] = useState(() => ({ key, open: loadCategoryOpen(target, category) }));
   const open = state.key === key ? state.open : loadCategoryOpen(target, category);
 
-  useEffect(() => subscribeCategoryOpen(() => {
-    setState({ key, open: loadCategoryOpen(target, category) });
+  useEffect(() => subscribeCategoryOpen((change) => {
+    if (change.target !== target || !change.categories.includes(category)) return;
+    setState({ key, open: change.open });
   }), [key, target, category]);
 
   const toggle = () => {

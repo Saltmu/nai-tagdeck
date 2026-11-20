@@ -26,25 +26,67 @@ export interface HighlightPart {
   match: boolean;
 }
 
-/** 1文字を normalize と同じ規則で畳む。検索語の位置を元の文字列へ戻すために使う。 */
-function foldChar(char: string): string {
-  return char
-    .normalize('NFKC')
+interface NormUnit {
+  /** 元の文字列上の UTF-16 位置。合成された文字はまとめて一つの範囲にする。 */
+  start: number;
+  end: number;
+  /** 正規化後の1文字。絵文字など、複数の UTF-16 符号単位になることがある。 */
+  ch: string;
+}
+
+function codePointEnd(text: string, index: number): number {
+  const code = text.codePointAt(index);
+  if (code === undefined) return Math.min(text.length, index + 1);
+  return index + (code > 0xffff ? 2 : 1);
+}
+
+/**
+ * NFKC で隣の文字と合成される範囲（半角カナ＋濁点など）を、元の位置つきで取り出す。
+ * 次の文字を足しても正規化結果がつながらなくなるまで範囲を伸ばす。
+ */
+function nfkcUnits(text: string): NormUnit[] {
+  const units: NormUnit[] = [];
+  let index = 0;
+  while (index < text.length) {
+    let end = codePointEnd(text, index);
+    let norm = text.slice(index, end).normalize('NFKC');
+    while (end < text.length) {
+      const nextEnd = codePointEnd(text, end);
+      const nextNorm = text.slice(end, nextEnd).normalize('NFKC');
+      const combined = text.slice(index, nextEnd).normalize('NFKC');
+      if (combined === norm + nextNorm) break;
+      end = nextEnd;
+      norm = combined;
+    }
+    for (let offset = 0; offset < norm.length; ) {
+      const charEnd = codePointEnd(norm, offset);
+      units.push({ start: index, end, ch: norm.slice(offset, charEnd) });
+      offset = charEnd;
+    }
+    index = end;
+  }
+  return units;
+}
+
+/** NFKC の後に normalize と同じ大小文字・かな・アンダースコアの規則を適用する。 */
+function foldUnit(unit: NormUnit): NormUnit[] {
+  const folded = unit.ch
     .toLowerCase()
     .replace(/[ァ-ヶ]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60))
     .replace(/_/g, ' ');
-}
-
-interface NormUnit {
-  start: number;
-  end: number;
-  ch: string;
+  const units: NormUnit[] = [];
+  for (let offset = 0; offset < folded.length; ) {
+    const charEnd = codePointEnd(folded, offset);
+    units.push({ start: unit.start, end: unit.end, ch: folded.slice(offset, charEnd) });
+    offset = charEnd;
+  }
+  return units;
 }
 
 /**
  * normalize と同じ文字列を、元の文字位置つきで作る。
  * 空白の連続と両端の空白は、normalize と同様に1つの空白へ畳んでから除く。
- * 文字の合成などで一致しないときは null。
+ * 対応を取れないときは null。
  */
 function normalizedUnits(tag: string): NormUnit[] | null {
   const units: NormUnit[] = [];
@@ -55,19 +97,13 @@ function normalizedUnits(tag: string): NormUnit[] | null {
     pending = null;
   };
 
-  for (let index = 0; index < tag.length; ) {
-    const char = String.fromCodePoint(tag.codePointAt(index)!);
-    const end = index + char.length;
-    const folded = foldChar(char);
-    for (const ch of folded) {
-      if (/\s/.test(ch)) {
-        pending = pending ? { start: pending.start, end } : { start: index, end };
-      } else {
-        flushSpace();
-        units.push({ start: index, end, ch });
-      }
+  for (const unit of nfkcUnits(tag).flatMap(foldUnit)) {
+    if (/\s/u.test(unit.ch)) {
+      pending = pending ? { start: pending.start, end: unit.end } : { start: unit.start, end: unit.end };
+    } else {
+      flushSpace();
+      units.push(unit);
     }
-    index = end;
   }
   flushSpace();
   while (units[0]?.ch === ' ') units.shift();
@@ -82,22 +118,32 @@ export function highlightTag(tag: string, query: string): HighlightPart[] {
   if (!q || !normalize(tag).includes(q)) return plain;
 
   const units = normalizedUnits(tag);
-  if (!units) return [{ text: tag, match: true }];
+  if (!units) return normalize(tag) === q ? [{ text: tag, match: true }] : plain;
 
-  const matched = Array<boolean>(tag.length).fill(false);
   const norm = units.map((unit) => unit.ch).join('');
+  // indexOf は UTF-16 の位置を返す。units の添字とは、絵文字のように1文字が2符号単位のときずれる。
+  const unitAt: number[] = [];
+  units.forEach((unit, index) => {
+    for (let offset = 0; offset < unit.ch.length; offset += 1) unitAt.push(index);
+  });
+  const matched = Array<boolean>(tag.length).fill(false);
   let from = 0;
+  let found = false;
   while (from <= norm.length - q.length) {
     const at = norm.indexOf(q, from);
     if (at < 0) break;
-    for (let index = at; index < at + q.length; index += 1) {
+    const startUnit = unitAt[at];
+    const endUnit = unitAt[at + q.length - 1];
+    if (startUnit === undefined || endUnit === undefined) break;
+    for (let index = startUnit; index <= endUnit; index += 1) {
       const unit = units[index];
       if (!unit) continue;
       for (let pos = unit.start; pos < unit.end; pos += 1) matched[pos] = true;
     }
-    from = at + Math.max(q.length, 1);
+    found = true;
+    from = at + q.length;
   }
-  if (!matched.some(Boolean)) return [{ text: tag, match: true }];
+  if (!found) return plain;
 
   const parts: HighlightPart[] = [];
   let start = 0;

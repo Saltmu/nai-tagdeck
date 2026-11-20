@@ -43,5 +43,14 @@ describe('タグ検索', () => {
     ]);
     expect(highlightTag('hat', 'cat')).toEqual([{ text: 'hat', match: false }]);
     expect(highlightTag('hat', '')).toEqual([{ text: 'hat', match: false }]);
+    expect(highlightTag('赤いﾊﾞﾗ', 'ばら')).toEqual([
+      { text: '赤い', match: false },
+      { text: 'ﾊﾞﾗ', match: true },
+    ]);
+    expect(highlightTag('🌸花束', '花')).toEqual([
+      { text: '🌸', match: false },
+      { text: '花', match: true },
+      { text: '束', match: false },
+    ]);
   });
 });
