@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import type { TokenState } from '../hooks/useToken';
-import { maskToken, normalizeToken, type TokenStorage } from '../lib/token';
+import { maskToken, normalizeToken, validateToken, type TokenStorage } from '../lib/token';
 
 interface Props {
   token: TokenState;
@@ -16,11 +16,18 @@ export function TokenSettings({ token, notify }: Props) {
   const id = useId();
   const [input, setInput] = useState('');
   const [storage, setStorage] = useState<TokenStorage>(token.storage);
+  const [error, setError] = useState<string | null>(null);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const value = normalizeToken(input);
     if (!value) return;
+    const validationError = validateToken(value);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setError(null);
     const ok = token.save(value, storage);
     setInput('');
     notify(ok ? 'トークンを保存しました' : 'ブラウザに保存できないため、このタブを開いている間だけ使います');
@@ -62,9 +69,18 @@ export function TokenSettings({ token, notify }: Props) {
             spellCheck={false}
             placeholder="pst-…"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            aria-invalid={error ? true : undefined}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setError(null);
+            }}
           />
         </label>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
         <fieldset className="radio-group">
           <legend>保存先</legend>
           {(['session', 'local'] as const).map((kind) => (

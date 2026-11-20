@@ -1,4 +1,5 @@
 import { unzipSync } from 'fflate';
+import { validateToken } from './token';
 
 /**
  * NovelAI Diffusion V5 の生成リクエスト。公式 Web UI が送っている内容（2026-10-05 に取得）に合わせている。
@@ -7,6 +8,7 @@ import { unzipSync } from 'fflate';
 
 export const GENERATE_URL = 'https://image.novelai.net/ai/generate-image';
 export const NAI_MODEL = 'nai-diffusion-5-full';
+export const REQUEST_TIMEOUT_MS = 120_000;
 
 /** Opus プランで Anlas を消費しない条件（最新の条件は公式で確認すること）。 */
 export const FREE_LIMITS = { maxPixels: 1024 * 1024, maxSteps: 28, nSamples: 1 } as const;
@@ -154,13 +156,24 @@ export function buildGenerateRequest({ prompt, negative, characters, params, mod
 
 // ---- 送信と応答の解釈 ----
 
+export interface NovelAIErrorOptions {
+  retryAfterSeconds?: number;
+  correlationId?: string;
+}
+
 export class NovelAIError extends Error {
+  readonly retryAfterSeconds?: number;
+  readonly correlationId?: string;
+
   constructor(
     readonly status: number,
     message: string,
+    options?: NovelAIErrorOptions,
   ) {
     super(message);
     this.name = 'NovelAIError';
+    this.retryAfterSeconds = options?.retryAfterSeconds;
+    this.correlationId = options?.correlationId;
   }
 }
 
@@ -185,7 +198,12 @@ function isZip(bytes: Uint8Array): boolean {
 }
 
 function base64ToBytes(b64: string): Uint8Array {
-  const bin = atob(b64.replace(/^data:[^,]*,/, ''));
+  let bin: string;
+  try {
+    bin = atob(b64.replace(/^data:[^,]*,/, ''));
+  } catch {
+    throw new NovelAIError(0, '応答の画像データを読み取れませんでした');
+  }
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
@@ -202,19 +220,35 @@ export function extractImages(buffer: ArrayBuffer): ImageResult[] {
   let images: Array<ImageResult | null>;
 
   if (isZip(bytes)) {
-    const files = unzipSync(bytes);
+    let files: Record<string, Uint8Array>;
+    try {
+      files = unzipSync(bytes);
+    } catch {
+      throw new NovelAIError(0, '応答の ZIP データを展開できませんでした');
+    }
     images = Object.keys(files)
       .sort()
       .map((name) => toImage(files[name]!));
   } else if (sniffImageType(bytes)) {
     images = [toImage(bytes)];
   } else {
-    const data = JSON.parse(new TextDecoder().decode(bytes)) as {
-      images?: Array<{ image?: string; seed?: number }>;
-    };
-    images = (data.images ?? []).map((img) =>
-      typeof img.image === 'string' ? toImage(base64ToBytes(img.image), img.seed) : null,
-    );
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      throw new NovelAIError(0, '応答を読み取れませんでした');
+    }
+    const rawImages =
+      parsed && typeof parsed === 'object' && Array.isArray((parsed as { images?: unknown }).images)
+        ? (parsed as { images: unknown[] }).images
+        : [];
+    images = rawImages.map((img) => {
+      if (!img || typeof img !== 'object') return null;
+      const { image, seed } = img as { image?: unknown; seed?: unknown };
+      return typeof image === 'string'
+        ? toImage(base64ToBytes(image), typeof seed === 'number' ? seed : undefined)
+        : null;
+    });
   }
 
   const found = images.filter((i): i is ImageResult => i !== null);
@@ -222,15 +256,127 @@ export function extractImages(buffer: ArrayBuffer): ImageResult[] {
   return found;
 }
 
-async function readErrorMessage(res: Response): Promise<string> {
-  const text = await res.text().catch(() => '');
-  try {
-    const data = JSON.parse(text) as { message?: unknown };
-    if (typeof data.message === 'string' && data.message) return data.message;
-  } catch {
-    // JSON でなければ本文をそのまま使う
+const CORRELATION_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+/** NovelAI の 500 問い合わせ用 `x-correlation-id`（英数字6文字）。 */
+export function createCorrelationId(): string {
+  const length = 6;
+  const bytes = new Uint8Array(length);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < length; i++) bytes[i] = Math.floor(Math.random() * 256);
   }
-  return text.slice(0, 300);
+  let out = '';
+  for (let i = 0; i < length; i++) {
+    out += CORRELATION_ALPHABET[bytes[i]! % CORRELATION_ALPHABET.length];
+  }
+  return out;
+}
+
+export function parseRetryAfter(value: string | null, now = Date.now()): number | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  const timestamp = Date.parse(trimmed);
+  if (!Number.isFinite(timestamp)) return undefined;
+  return Math.max(0, Math.ceil((timestamp - now) / 1000));
+}
+
+function extractErrorField(data: Record<string, unknown>): string | null {
+  for (const key of ['message', 'error', 'detail'] as const) {
+    const value = data[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  const nestedError = data.error;
+  if (nestedError && typeof nestedError === 'object') {
+    const message = (nestedError as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message.trim();
+  }
+  if (Array.isArray(data.detail)) {
+    const messages = data.detail
+      .map((item) => (item && typeof item === 'object' ? (item as { msg?: unknown }).msg : null))
+      .filter((msg): msg is string => typeof msg === 'string' && msg.trim().length > 0)
+      .map((msg) => msg.trim());
+    if (messages.length > 0) return messages.join(', ');
+  }
+  return null;
+}
+
+async function readErrorMessage(res: Response, signal?: AbortSignal): Promise<string> {
+  if (signal?.aborted) throw signal.reason ?? createTimeoutError();
+  let text: string;
+  try {
+    text = await res.text();
+  } catch (err) {
+    if (signal?.aborted) throw signal.reason ?? err;
+    if (isTimeoutError(err)) throw err;
+    return '';
+  }
+  try {
+    const data: unknown = JSON.parse(text);
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      const extracted = extractErrorField(data as Record<string, unknown>);
+      if (extracted) return extracted;
+    }
+  } catch {
+    // JSON でなければ本文を使う
+  }
+  const trimmed = text.trim();
+  const contentType = res.headers?.get('content-type') ?? '';
+  if (contentType.includes('text/html') || trimmed.startsWith('<')) return '';
+  return trimmed.slice(0, 300);
+}
+
+function createTimeoutError(): Error {
+  if (typeof DOMException !== 'undefined') {
+    return new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+  }
+  const err = new Error('The operation was aborted due to timeout');
+  err.name = 'TimeoutError';
+  return err;
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    (error as { name?: unknown }).name === 'TimeoutError'
+  );
+}
+
+function createRequestSignal(
+  userSignal: AbortSignal | undefined,
+  timeoutMs: number,
+): { signal: AbortSignal | undefined; cleanup: () => void } {
+  if (!(timeoutMs > 0)) return { signal: userSignal, cleanup: () => {} };
+
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    if (!userSignal) return { signal: timeoutSignal, cleanup: () => {} };
+    if (typeof AbortSignal.any === 'function') {
+      return { signal: AbortSignal.any([userSignal, timeoutSignal]), cleanup: () => {} };
+    }
+  }
+
+  const controller = new AbortController();
+  const onUserAbort = () => controller.abort(userSignal?.reason);
+  if (userSignal) {
+    if (userSignal.aborted) {
+      controller.abort(userSignal.reason);
+      return { signal: controller.signal, cleanup: () => {} };
+    }
+    userSignal.addEventListener('abort', onUserAbort, { once: true });
+  }
+  const timer = setTimeout(() => controller.abort(createTimeoutError()), timeoutMs);
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timer);
+      userSignal?.removeEventListener('abort', onUserAbort);
+    },
+  };
 }
 
 /**
@@ -241,27 +387,58 @@ export async function requestImages(
   token: string,
   body: GenerateRequest,
   signal?: AbortSignal,
+  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<ImageResult[]> {
+  const tokenError = validateToken(token);
+  if (tokenError) throw new NovelAIError(0, `トークンの形式が正しくありません（${tokenError}）`);
+
+  const correlationId = createCorrelationId();
   const form = new FormData();
   form.append('request', new Blob([JSON.stringify(body)], { type: 'application/json' }), 'blob');
 
-  const res = await fetch(GENERATE_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
-    signal,
-    credentials: 'omit',
-    cache: 'no-store',
-    referrerPolicy: 'no-referrer',
-  });
-  if (!res.ok) throw new NovelAIError(res.status, await readErrorMessage(res));
-  return extractImages(await res.arrayBuffer());
+  const { signal: requestSignal, cleanup } = createRequestSignal(signal, timeoutMs);
+  try {
+    const res = await fetch(GENERATE_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-correlation-id': correlationId,
+      },
+      body: form,
+      signal: requestSignal,
+      credentials: 'omit',
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
+    });
+    if (!res.ok) {
+      const message = await readErrorMessage(res, requestSignal);
+      if (requestSignal?.aborted) throw requestSignal.reason ?? createTimeoutError();
+      throw new NovelAIError(res.status, message, {
+        retryAfterSeconds: parseRetryAfter(res.headers?.get('retry-after') ?? null),
+        correlationId,
+      });
+    }
+    const buffer = await res.arrayBuffer();
+    if (requestSignal?.aborted) throw requestSignal.reason ?? createTimeoutError();
+    return extractImages(buffer);
+  } catch (err) {
+    if (requestSignal?.aborted && !signal?.aborted && isTimeoutError(requestSignal.reason)) {
+      throw requestSignal.reason;
+    }
+    throw err;
+  } finally {
+    cleanup();
+  }
 }
 
 /** 画面に出すエラー文。 */
 export function describeError(error: unknown): string {
+  if (isTimeoutError(error)) {
+    return '生成がタイムアウトしました。時間をおいてもう一度お試しください';
+  }
   if (error instanceof NovelAIError) {
     const detail = error.message ? `（${error.message}）` : '';
+    const corr = error.correlationId ? ` [ID: ${error.correlationId}]` : '';
     switch (error.status) {
       case 0:
         return error.message;
@@ -271,11 +448,19 @@ export function describeError(error: unknown): string {
         return 'トークンが無効です。設定でトークンを確認してください';
       case 402:
         return `Anlas が足りないか、プランの範囲外です${detail}`;
+      case 403:
+        return `アクセスが拒否されました。アカウントやプランの状態、トークンの権限を確認してください${detail}`;
       case 429:
-        return '同時に生成できる数の上限です。前の生成が終わってから、もう一度押してください';
+        return error.retryAfterSeconds && error.retryAfterSeconds > 0
+          ? `リクエストが多すぎるか、同時に生成できる数の上限です。${error.retryAfterSeconds}秒ほど待ってから、もう一度お試しください`
+          : '同時に生成できる数の上限です。前の生成が終わってから、もう一度押してください';
+      case 502:
+      case 503:
+      case 504:
+        return `NovelAI のサーバーが一時的に応答できません（${error.status}）。時間をおいてもう一度お試しください${detail}${corr}`;
       default:
         return error.status >= 500
-          ? `NovelAI 側でエラーが起きました（${error.status}）${detail}`
+          ? `NovelAI 側でエラーが起きました（${error.status}）${detail}${corr}`
           : `生成できませんでした（${error.status}）${detail}`;
     }
   }
