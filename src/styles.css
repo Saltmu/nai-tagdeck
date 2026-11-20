@@ -1157,20 +1157,30 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   font-size: 0.85rem;
 }
 
-/* ---- toast ---- */
-.toast {
+/* ---- toast / undo bar（同じコンテナで縦に積み、折り返し時も重ならないようにする） ---- */
+.bottom-notices {
   position: fixed;
   left: 50%;
   bottom: calc(env(safe-area-inset-bottom) + 12px + var(--dock-offset));
   z-index: var(--z-toast);
-  max-width: calc(100vw - 2rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: max-content;
+  max-width: calc(100vw - 1.5rem);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  max-width: 100%;
   padding: 0.55rem 1rem;
   border-radius: 999px;
   background: var(--toast-bg);
   color: var(--toast-text);
   box-shadow: var(--shadow-pop);
   font-size: 0.9rem;
-  transform: translateX(-50%);
   pointer-events: none;
 }
 
@@ -1178,15 +1188,8 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   display: none;
 }
 
-/* ---- undo bar（タグ削除の取り消し。toast とは別に保持する） ---- */
 .undo-bar-slot {
-  position: fixed;
-  left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 12px + var(--dock-offset));
-  z-index: var(--z-undo-bar);
-  width: max-content;
-  max-width: calc(100vw - 1.5rem);
-  transform: translateX(-50%);
+  max-width: 100%;
 }
 
 .undo-bar {
@@ -1199,6 +1202,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   color: var(--toast-text);
   box-shadow: var(--shadow-pop);
   font-size: 0.9rem;
+  pointer-events: auto;
 }
 
 .undo-bar-text {
@@ -1210,10 +1214,6 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
 
 .undo-bar .btn {
   flex: none;
-}
-
-.toast-raised {
-  bottom: calc(env(safe-area-inset-bottom) + 64px + var(--dock-offset));
 }
 
 /* ---- tablet / desktop ---- */
@@ -1244,16 +1244,8 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
     grid-column: auto;
   }
 
-  .toast {
+  .bottom-notices {
     bottom: calc(1.5rem + var(--dock-offset));
-  }
-
-  .undo-bar-slot {
-    bottom: calc(1.5rem + var(--dock-offset));
-  }
-
-  .toast-raised {
-    bottom: calc(4.5rem + var(--dock-offset));
   }
 }
 
@@ -1442,10 +1434,10 @@ textarea {
   }
 
   /* 未読のプレビューは右下。取り消しとトーストは左に寄せて重ならないようにする */
-  .has-latest .undo-bar-slot,
-  .has-latest .toast {
+  .has-latest .bottom-notices {
     left: max(0.75rem, env(safe-area-inset-left));
     transform: none;
+    align-items: flex-start;
     max-width: calc(100vw - 10.25rem - env(safe-area-inset-left) - env(safe-area-inset-right));
   }
 

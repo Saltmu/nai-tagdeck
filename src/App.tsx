@@ -288,18 +288,19 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         <LatestPreview image={latest} onOpen={() => setTab('generate')} onDismiss={dismiss} />
       )}
 
-      <UndoBar
-        open={tagUndo.barOpen}
-        label={tagUndo.label}
-        canUndo={tagUndo.canUndo}
-        canRedo={tagUndo.canRedo}
-        onUndo={tagUndo.undo}
-        onRedo={tagUndo.redo}
-        onDismiss={tagUndo.dismiss}
-      />
-
-      <div className={`toast${tagUndo.barOpen ? ' toast-raised' : ''}`} role="status" aria-live="polite">
-        {message}
+      <div className="bottom-notices">
+        <div className="toast" role="status" aria-live="polite">
+          {message}
+        </div>
+        <UndoBar
+          open={tagUndo.barOpen}
+          label={tagUndo.label}
+          canUndo={tagUndo.canUndo}
+          canRedo={tagUndo.canRedo}
+          onUndo={tagUndo.undo}
+          onRedo={tagUndo.redo}
+          onDismiss={tagUndo.dismiss}
+        />
       </div>
     </div>
   );
