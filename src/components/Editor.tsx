@@ -17,10 +17,12 @@ import { pairedInteraction } from '../lib/interaction';
 import { CategorySection } from './CategorySection';
 import { CharacterCard } from './CharacterCard';
 import { PresetBar } from './PresetBar';
+import type { PromptSource } from './PromptImportDialog';
 import { useDialogs } from './Dialogs';
 import type { PresetStore } from '../hooks/usePresets';
 
 import { useEditorSelection } from '../hooks/useEditorSelection';
+import { usePngDrop } from '../hooks/usePngDrop';
 import { useScrollMemory } from '../hooks/useScrollMemory';
 
 /** ベースの品質でよく使うタグ（公式の Quality Tags と定番）。ボタンで付け外しする。 */
@@ -36,6 +38,7 @@ interface Props {
   notify: (message: string) => void;
   presets: PresetStore;
   onPickPng?: () => void;
+  onReadPng?: (source: PromptSource) => void;
   /** 個別指定がないキャラクターに付けるネガティブ。 */
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
@@ -53,6 +56,7 @@ export function Editor({
   notify,
   presets,
   onPickPng,
+  onReadPng,
   characterNegative,
   onCharacterNegativeChange,
   shown,
@@ -138,8 +142,14 @@ export function Editor({
   // ベース・ネガティブ・各キャラごとにスクロール位置を覚え、タブを切り替えたときや他の画面から戻ったときに戻す
   useScrollMemory(selected, shown, tabsRef);
 
+  const { dragging, dropProps } = usePngDrop({
+    enabled: !!onPickPng && !!onReadPng,
+    onDropFile: (source) => onReadPng?.(source),
+    onMultipleFiles: () => notify('PNG を1枚ずつドロップしてください'),
+  });
+
   return (
-    <div className="editor" aria-busy={!loaded}>
+    <div className={`editor${dragging ? ' is-dragging' : ''}`} aria-busy={!loaded} {...dropProps}>
       <PresetBar store={presets} workspace={workspace} dispatch={dispatch} notify={notify} onPickPng={onPickPng} />
 
       <div

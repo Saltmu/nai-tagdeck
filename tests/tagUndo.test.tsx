@@ -143,6 +143,7 @@ it('treats a drag of the same tag as one step', async () => {
 
 it('collapses consecutive character renames into one step', async () => {
   await run(() => api.dispatch({ type: 'addCharacter' }));
+  focusField();
   const id = ws.characters[0]!.id;
   focusField();
   await run(() => api.dispatch({ type: 'renameCharacter', id, name: 'あ' }));
@@ -251,6 +252,71 @@ it('leaves text entry, composition and open dialogs to the browser', async () =>
   document.body.append(dialog);
   await key({ key: 'z', metaKey: true });
   expect(names()).toEqual(['a', 'b', 'd']);
+});
+
+it('does not merge weight changes after leaving the field, waiting, or from button clicks', async () => {
+  const input = focusField();
+  await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.2 }));
+  await run(() => input.blur());
+  input.focus();
+  await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.5 }));
+  expect(weightOf('b')).toBe(1.5);
+  await run(() => api.undo());
+  expect(weightOf('b')).toBe(1.2);
+  await run(() => api.undo());
+  expect(weightOf('b')).toBe(1);
+
+  vi.useFakeTimers();
+  try {
+    input.focus();
+    await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.2 }));
+    vi.advanceTimersByTime(60_000);
+    await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.5 }));
+    await run(() => api.undo());
+    expect(weightOf('b')).toBe(1.2);
+    await run(() => api.undo());
+    expect(weightOf('b')).toBe(1);
+  } finally {
+    vi.useRealTimers();
+  }
+
+  input.blur();
+  await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.2 }));
+  await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.5 }));
+  await run(() => api.undo());
+  expect(weightOf('b')).toBe(1.2);
+});
+
+it('restores and redoes activePresetId alongside workspace replacement', async () => {
+  let activeId: string | null = 'preset-a';
+  const setActiveId = vi.fn((next: string | null) => {
+    activeId = next;
+  });
+  function PresetHarness({ initial }: { initial: Workspace }) {
+    const [workspace, dispatch] = useReducer(workspaceReducer, initial);
+    ws = workspace;
+    api = useTagUndo(workspace, dispatch, notify, { activeId, setActiveId });
+    return null;
+  }
+  await act(async () => root.render(<PresetHarness initial={ws} />));
+  const presetB = emptyWorkspace();
+  await run(() => {
+    api.dispatch({ type: 'replace', workspace: presetB });
+    activeId = 'preset-b';
+  });
+  await act(async () => root.render(<PresetHarness initial={ws} />));
+  expect(ws.base.appearance).toEqual([]);
+  expect(activeId).toBe('preset-b');
+
+  await run(() => api.undo());
+  expect(names()).toEqual(['a', 'b', 'c', 'd']);
+  expect(setActiveId).toHaveBeenLastCalledWith('preset-a');
+  expect(activeId).toBe('preset-a');
+
+  await run(() => api.redo());
+  expect(ws.base.appearance).toEqual([]);
+  expect(setActiveId).toHaveBeenLastCalledWith('preset-b');
+  expect(activeId).toBe('preset-b');
 });
 
 it('does not record an action that changes nothing', async () => {
