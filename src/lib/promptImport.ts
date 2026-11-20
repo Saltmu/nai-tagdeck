@@ -2,7 +2,7 @@ import type { CategoryKey, DictEntry, PromptCategoryKey, TagGroups, Workspace, W
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from './categories';
 import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
 import {
-  NOISE_SCHEDULES, SAMPLERS, SCALE_MAX, SCALE_MIN, SIZE_PRESETS, normalizeScale, normalizeSeed, normalizeSteps,
+  NOISE_SCHEDULES, SAMPLERS, SCALE_MAX, SCALE_MIN, SIZE_PRESETS, normalizeCfgRescale, normalizeScale, normalizeSeed, normalizeSteps,
   type GenerationSettings,
 } from './generation';
 import { newId } from './id';
@@ -10,7 +10,7 @@ import type { GenerationMode } from './novelai';
 import { readPngMetadata } from './pngMetadata';
 import { parseTagList } from './prompt';
 import { normalize } from './suggest';
-import { emptyGroups, newCharacter } from './workspace';
+import { emptyGroups, newCharacter, normalizeCenter } from './workspace';
 
 type Fields = Record<string, unknown>;
 
@@ -27,6 +27,10 @@ function getCaptionList(value: unknown): Array<{ text: string; centers: unknown 
     result.push({ text: caption.char_caption, centers: caption.centers });
   }
   return result;
+}
+
+function readCenter(centers: unknown): { x: number; y: number } | undefined {
+  return Array.isArray(centers) ? normalizeCenter(centers[0]) : undefined;
 }
 
 function sameCenters(a: unknown, b: unknown): boolean {
@@ -68,6 +72,12 @@ function generationFrom(comment: Fields, isFurry: boolean) {
   add('scale', 'ガイダンス', scale);
   add('sampler', 'サンプラー', sampler?.value, sampler?.label);
   add('noiseSchedule', 'ノイズスケジュール', schedule);
+  if (typeof comment.cfg_rescale === 'number' && Number.isFinite(comment.cfg_rescale)) {
+    add('cfgRescale', 'CFGリスケール', normalizeCfgRescale(comment.cfg_rescale));
+  }
+  if (typeof comment.dynamic_thresholding === 'boolean') {
+    add('dynamicThresholding', 'ダイナミックしきい値', comment.dynamic_thresholding, comment.dynamic_thresholding ? 'オン' : 'オフ');
+  }
   return { values, labels, skipped };
 }
 
@@ -193,7 +203,18 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
         (!useCoordinates || sameCenters(item.centers, positiveChars[i]?.centers)))) {
     characterNegative = shared;
   } else if (characters.length > 0 || (Array.isArray(rawNegativeChars) && rawNegativeChars.length > 0)) {
-    notes.push('画像のキャラ用ネガティブを共通欄に反映できないため、現在の値を使います。');
+    const stored = negativeChars !== undefined && negativeChars.length === characters.length && characters.length > 0;
+    if (stored) {
+      characters.forEach((character, i) => {
+        character.negative = negativeChars[i]!.text;
+      });
+    }
+    const textsDiffer = stored && negativeChars.some((item) => item.text !== negativeChars[0]?.text);
+    notes.push(!stored
+      ? '画像のキャラ用ネガティブを共通欄に反映できないため、現在の値を使います。'
+      : textsDiffer
+        ? 'キャラ用ネガティブがキャラごとに違うため、各キャラの個別欄に入れました。'
+        : 'キャラ用ネガティブの位置が正のプロンプトと違うため、各キャラの個別欄に入れました。');
     if (Array.isArray(rawNegativeChars)) {
       rawNegativeChars.forEach((item, i) => {
         const text = fields(item)?.char_caption;
@@ -203,7 +224,19 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
   }
   const model = typeof comment.model_name === 'string' ? comment.model_name : metadata.Source;
   if (model) notes.push(`画像のモデルは ${model} です。生成時はこのアプリのモデルを使います。`);
-  if (useCoordinates) notes.push('画像に記録されたキャラクターの座標は反映できません。');
+  if (useCoordinates) {
+    const missed: string[] = [];
+    characters.forEach((character, i) => {
+      const center = readCenter(positiveChars[i]?.centers);
+      if (center) character.center = center;
+      else missed.push(character.name);
+    });
+    if (characters.length === 0 || missed.length === characters.length) {
+      notes.push('画像に記録されたキャラクターの座標は反映できません。');
+    } else if (missed.length > 0) {
+      notes.push(`${missed.join('、')} の座標は読み取れませんでした。再生成では中央（0.5, 0.5）になります。`);
+    }
+  }
   if (!isFurry) notes.push('生成モード（アニメ／ケモノ）は現在の設定を使います。');
 
   return { base, furDataset, characters, negative, characterNegative, generation: generationFrom(comment, isFurry), notes };

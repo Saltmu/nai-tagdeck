@@ -7,7 +7,7 @@ export interface GenerateArgs {
   token: string;
   prompt: string;
   negative: string;
-  characters: Array<{ prompt: string; negative: string }>;
+  characters: Array<{ prompt: string; negative: string; center?: { x: number; y: number } }>;
   settings: GenerationSettings;
 }
 

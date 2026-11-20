@@ -10,12 +10,19 @@ const EDIT_MERGE_MS = 3000;
 
 interface PastStep {
   before: Workspace;
+  activePresetId: string | null;
   label: string;
 }
 
 interface FutureStep {
   state: Workspace;
+  activePresetId: string | null;
   label: string;
+}
+
+export interface PresetSelectionSync {
+  activeId: string | null;
+  setActiveId: (id: string | null) => void;
 }
 
 function isTextEntry(target: EventTarget | null): boolean {
@@ -71,6 +78,10 @@ function actionLabel(before: Workspace, action: WorkspaceAction): string {
       return 'キャラクターを削除しました';
     case 'renameCharacter':
       return 'キャラクター名を変更しました';
+    case 'setCharacterNegative':
+      return 'キャラクターの個別ネガティブを変更しました';
+    case 'setCharacterCenter':
+      return 'キャラクターの位置を変更しました';
     case 'toggleCharacter':
       return 'キャラクターのON/OFFを切り替えました';
     case 'moveCharacter':
@@ -90,7 +101,7 @@ function sameTag(a: WorkspaceAction, b: WorkspaceAction): boolean {
 
 /**
  * ワークスペース操作を 1 ステップずつ取り消す・やり直す。
- * 入力中の重み変更とキャラクター名、ドラッグ中の並び替えだけを 1 ステップにまとめる。
+ * 入力中の重み、キャラクター名、個別ネガティブ、位置、ドラッグ中の並び替えだけを 1 ステップにまとめる。
  * 欄を離れる、通知を閉じる、または 3 秒空くと、そのまとまりは終わる。
  * テキスト入力中の Ctrl/Cmd+Z は入力欄に任せ、ダイアログ表示中は反応しない。
  * 永続化の読み込みなど、この dispatch を通らない置換は履歴を捨てる。
@@ -99,6 +110,7 @@ export function useTagUndo(
   workspace: Workspace,
   dispatch: Dispatch<WorkspaceAction>,
   notify: (message: string) => void,
+  preset?: PresetSelectionSync,
 ) {
   const [past, setPast] = useState<PastStep[]>([]);
   const [future, setFuture] = useState<FutureStep[]>([]);
@@ -106,10 +118,14 @@ export function useTagUndo(
   const pastRef = useRef(past);
   const futureRef = useRef(future);
   const ownedRef = useRef(workspace);
+  const activeIdRef = useRef<string | null>(preset?.activeId ?? null);
+  const setActiveIdRef = useRef(preset?.setActiveId);
   const lastActionRef = useRef<WorkspaceAction | null>(null);
   const lastAtRef = useRef(0);
   pastRef.current = past;
   futureRef.current = future;
+  activeIdRef.current = preset?.activeId ?? null;
+  setActiveIdRef.current = preset?.setActiveId;
 
   // 永続化の読み込みなど、このフックを通らない更新は履歴と対応しないので捨てる。
   if (workspace !== ownedRef.current) {
@@ -124,9 +140,13 @@ export function useTagUndo(
   }
 
   const apply = useCallback(
-    (snapshot: Workspace) => {
+    (snapshot: Workspace, activePresetId: string | null) => {
       ownedRef.current = snapshot;
       dispatch({ type: 'commit', workspace: snapshot });
+      if (setActiveIdRef.current) {
+        activeIdRef.current = activePresetId;
+        setActiveIdRef.current(activePresetId);
+      }
     },
     [dispatch],
   );
@@ -145,8 +165,9 @@ export function useTagUndo(
       const merge =
         previous !== null &&
         previous.type === action.type &&
-        ((action.type === 'renameCharacter' &&
-          previous.type === 'renameCharacter' &&
+        (((action.type === 'renameCharacter' || action.type === 'setCharacterNegative' || action.type === 'setCharacterCenter') &&
+          previous.type === action.type &&
+          'id' in previous &&
           previous.id === action.id &&
           editing &&
           now - lastAtRef.current < EDIT_MERGE_MS) ||
@@ -162,7 +183,10 @@ export function useTagUndo(
       lastActionRef.current = action;
       lastAtRef.current = now;
       if (!merge || pastRef.current.length === 0) {
-        const next = [...pastRef.current, { before, label: actionLabel(before, action) }];
+        const next = [
+          ...pastRef.current,
+          { before, activePresetId: activeIdRef.current, label: actionLabel(before, action) },
+        ];
         if (next.length > HISTORY_LIMIT) next.shift();
         pastRef.current = next;
         setPast(next);
@@ -182,15 +206,19 @@ export function useTagUndo(
     const step = pastRef.current.at(-1);
     if (!step) return;
     const current = ownedRef.current;
+    const currentPresetId = activeIdRef.current;
     const nextPast = pastRef.current.slice(0, -1);
     pastRef.current = nextPast;
     setPast(nextPast);
-    const nextFuture = [...futureRef.current, { state: current, label: step.label }];
+    const nextFuture = [
+      ...futureRef.current,
+      { state: current, activePresetId: currentPresetId, label: step.label },
+    ];
     futureRef.current = nextFuture;
     setFuture(nextFuture);
     lastActionRef.current = null;
     setBarHidden(false);
-    apply(step.before);
+    apply(step.before, step.activePresetId);
     notify('元に戻しました');
   }, [apply, notify]);
 
@@ -198,15 +226,19 @@ export function useTagUndo(
     const step = futureRef.current.at(-1);
     if (!step) return;
     const current = ownedRef.current;
+    const currentPresetId = activeIdRef.current;
     const nextFuture = futureRef.current.slice(0, -1);
     futureRef.current = nextFuture;
     setFuture(nextFuture);
-    const nextPast = [...pastRef.current, { before: current, label: step.label }];
+    const nextPast = [
+      ...pastRef.current,
+      { before: current, activePresetId: currentPresetId, label: step.label },
+    ];
     pastRef.current = nextPast;
     setPast(nextPast);
     lastActionRef.current = null;
     setBarHidden(false);
-    apply(step.state);
+    apply(step.state, step.activePresetId);
     notify('やり直しました');
   }, [apply, notify]);
 

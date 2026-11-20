@@ -249,9 +249,47 @@ describe('normalizeWorkspace', () => {
     expect(ws.characters).toHaveLength(1);
     expect(ws.characters[0]).toMatchObject({ name: 'キャラ1', enabled: true });
     expect(ws.characters[0]!.tags.subject[0]!.tag).toBe('girl');
+    expect(ws.characters[0]).not.toHaveProperty('negative');
+    expect(ws.characters[0]).not.toHaveProperty('center');
     const empty = normalizeWorkspace(null);
     expect(empty).toMatchObject({ base: emptyGroups(), characters: [] });
     expect(empty.negative.map((t) => t.tag)).toEqual(emptyWorkspace().negative.map((t) => t.tag));
+  });
+
+  it('個別ネガティブと座標を読み、壊れた値は捨てる', () => {
+    const ws = normalizeWorkspace({
+      base: {},
+      characters: [
+        { id: 'a', name: 'A', negative: '', center: { x: 1.4, y: -0.2 } },
+        { id: 'b', name: 'B', negative: 1, center: { x: '0.5', y: 0.5 } },
+        { id: 'c', name: 'C' },
+      ],
+    });
+    expect(ws.characters[0]).toMatchObject({ negative: '', center: { x: 1, y: 0 } });
+    expect(ws.characters[1]).not.toHaveProperty('negative');
+    expect(ws.characters[1]).not.toHaveProperty('center');
+    expect(ws.characters[2]).not.toHaveProperty('center');
+    const round = normalizeWorkspace(JSON.parse(JSON.stringify(ws)));
+    expect(round.characters[0]).toMatchObject({ negative: '', center: { x: 1, y: 0 } });
+    expect(round.characters[1]).not.toHaveProperty('negative');
+  });
+
+  it('個別ネガティブと座標を付け外しできる', () => {
+    let ws = run(emptyWorkspace(), { type: 'addCharacter' });
+    const id = ws.characters[0]!.id;
+    ws = run(ws, { type: 'setCharacterNegative', id, negative: 'lowres' });
+    expect(ws.characters[0]?.negative).toBe('lowres');
+    ws = run(ws, { type: 'setCharacterNegative', id, negative: '' });
+    expect(ws.characters[0]?.negative).toBe('');
+    const cleared = run(ws, { type: 'setCharacterNegative', id, negative: null });
+    expect(cleared.characters[0]).not.toHaveProperty('negative');
+    expect(run(cleared, { type: 'setCharacterNegative', id, negative: null })).toBe(cleared);
+    ws = run(cleared, { type: 'setCharacterCenter', id, center: { x: 0.234, y: 2 } });
+    expect(ws.characters[0]?.center).toEqual({ x: 0.23, y: 1 });
+    expect(run(ws, { type: 'setCharacterCenter', id, center: { x: 0.23, y: 1 } })).toBe(ws);
+    const off = run(ws, { type: 'setCharacterCenter', id, center: null });
+    expect(off.characters[0]).not.toHaveProperty('center');
+    expect(run(off, { type: 'setCharacterCenter', id, center: null })).toBe(off);
   });
 
   it('空の ID は読み込み時に振り直す', () => {

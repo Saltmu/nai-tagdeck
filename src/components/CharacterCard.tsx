@@ -1,9 +1,11 @@
 import type { Dispatch } from 'react';
 import type { Character, CategoryKey, DictEntry, WeightSyntax, WorkTag } from '../types';
+import type { TagFilter } from '../lib/tagSearch';
 import type { WorkspaceAction } from '../lib/workspace';
 import { CHARACTER_CATEGORY_KEYS } from '../lib/categories';
 import { buildPrompt } from '../lib/prompt';
 import { CategorySection } from './CategorySection';
+import { NumberField } from './NumberField';
 import { useDialogs } from './Dialogs';
 
 /** キャラクタープロンプトの先頭に書く種類（人数は付けない）。 */
@@ -20,8 +22,12 @@ interface Props {
   onCopy: (text: string, label: string) => void;
   notify: (message: string) => void;
   onRegister: (tag: WorkTag, category: CategoryKey) => void;
+  /** 個別指定がないキャラに付ける共通ネガティブ。 */
+  sharedNegative: string;
   /** ポーズにタグを追加したとき（キャラ同士の動作なら相手にも付けるか尋ねる）。 */
   onPoseAdded?: (tag: string) => void;
+  /** 表示中のタグ検索と ON 絞り込み。 */
+  filter?: TagFilter;
 }
 
 export function CharacterCard({
@@ -35,7 +41,9 @@ export function CharacterCard({
   onCopy,
   notify,
   onRegister,
+  sharedNegative,
   onPoseAdded,
+  filter,
 }: Props) {
   const { id, enabled, tags } = character;
   const name = character.name.trim() || `キャラ${index + 1}`;
@@ -70,25 +78,104 @@ export function CharacterCard({
           <button
             type="button"
             className="icon-btn"
-            aria-label={`${name} を上へ`}
+            aria-label={`${name} を左へ`}
+            title={`${name} を左へ`}
             disabled={index === 0}
             onClick={() => dispatch({ type: 'moveCharacter', id, delta: -1 })}
           >
-            ↑
+            ←
           </button>
           <button
             type="button"
             className="icon-btn"
-            aria-label={`${name} を下へ`}
+            aria-label={`${name} を右へ`}
+            title={`${name} を右へ`}
             disabled={index === count - 1}
             onClick={() => dispatch({ type: 'moveCharacter', id, delta: 1 })}
           >
-            ↓
+            →
           </button>
           <button type="button" className="icon-btn icon-btn-danger" aria-label={`${name} を削除`} onClick={remove}>
             ✕
           </button>
         </div>
+      </div>
+
+      <div className="character-extra">
+        <label className="check-line">
+          <input
+            type="checkbox"
+            checked={character.negative !== undefined}
+            onChange={(e) => dispatch({
+              type: 'setCharacterNegative',
+              id,
+              negative: e.target.checked ? sharedNegative : null,
+            })}
+          />
+          個別のネガティブを使う
+        </label>
+        {character.negative !== undefined && (
+          <textarea
+            rows={2}
+            spellCheck={false}
+            autoCapitalize="off"
+            aria-label={`${name} の個別ネガティブ`}
+            value={character.negative}
+            onChange={(e) => dispatch({ type: 'setCharacterNegative', id, negative: e.target.value })}
+          />
+        )}
+        {character.negative !== undefined && (
+          <p className="hint">空欄にすると、このキャラにはネガティブを付けません。チェックを外すと共通の文面に戻します。</p>
+        )}
+        <label className="check-line">
+          <input
+            type="checkbox"
+            checked={character.center !== undefined}
+            onChange={(e) => dispatch({
+              type: 'setCharacterCenter',
+              id,
+              center: e.target.checked ? { x: 0.5, y: 0.5 } : null,
+            })}
+          />
+          位置を指定する
+        </label>
+        {character.center && (
+          <div className="center-grid">
+            <label className="field" htmlFor={`${id}-x`}>
+              <span>横（0 が左、1 が右）</span>
+              <NumberField
+                id={`${id}-x`}
+                value={character.center.x}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(v) => dispatch({
+                  type: 'setCharacterCenter',
+                  id,
+                  center: { x: v ?? character.center!.x, y: character.center!.y },
+                })}
+              />
+            </label>
+            <label className="field" htmlFor={`${id}-y`}>
+              <span>縦（0 が上、1 が下）</span>
+              <NumberField
+                id={`${id}-y`}
+                value={character.center.y}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(v) => dispatch({
+                  type: 'setCharacterCenter',
+                  id,
+                  center: { x: character.center!.x, y: v ?? character.center!.y },
+                })}
+              />
+            </label>
+          </div>
+        )}
+        {character.center && (
+          <p className="hint">位置を指定していないキャラは、この指定があるあいだ中央（0.5, 0.5）で送ります。</p>
+        )}
       </div>
 
       <div className="category-grid">
@@ -110,6 +197,7 @@ export function CharacterCard({
             title={key === 'subject' ? '被写体' : undefined}
             interactions={key === 'pose'}
             onAdded={key === 'pose' ? onPoseAdded : undefined}
+            filter={filter}
           />
         ))}
       </div>

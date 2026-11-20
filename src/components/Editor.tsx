@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type Dispatch } from 'react';
-import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
+import type { CategoryKey, WeightSyntax, WorkTag, Workspace, WorkspaceCategoryKey } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import {
   BASE,
@@ -9,7 +9,9 @@ import {
   defaultNegativeTags,
   type WorkspaceAction,
 } from '../lib/workspace';
-import { PROMPT_CATEGORY_KEYS } from '../lib/categories';
+import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
+import { saveCategoriesOpen } from '../lib/categoryOpen';
+import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import { DEFAULT_CHARACTER_NEGATIVE } from '../lib/novelai';
 import { normalize } from '../lib/suggest';
 import { newId } from '../lib/id';
@@ -17,10 +19,13 @@ import { pairedInteraction } from '../lib/interaction';
 import { CategorySection } from './CategorySection';
 import { CharacterCard } from './CharacterCard';
 import { PresetBar } from './PresetBar';
+import { TagFilterBar } from './TagFilterBar';
+import type { PromptSource } from './PromptImportDialog';
 import { useDialogs } from './Dialogs';
 import type { PresetStore } from '../hooks/usePresets';
 
 import { useEditorSelection } from '../hooks/useEditorSelection';
+import { usePngDrop } from '../hooks/usePngDrop';
 import { useScrollMemory } from '../hooks/useScrollMemory';
 
 /** ベースの品質でよく使うタグ（公式の Quality Tags と定番）。ボタンで付け外しする。 */
@@ -36,7 +41,8 @@ interface Props {
   notify: (message: string) => void;
   presets: PresetStore;
   onPickPng?: () => void;
-  /** キャラクタープロンプトに付けるネガティブ（全キャラ共通の文面）。 */
+  onReadPng?: (source: PromptSource) => void;
+  /** 個別指定がないキャラクターに付けるネガティブ。 */
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
   /** 編集画面を開いている（false の間は他の画面を表示している）。 */
@@ -53,6 +59,7 @@ export function Editor({
   notify,
   presets,
   onPickPng,
+  onReadPng,
   characterNegative,
   onCharacterNegativeChange,
   shown,
@@ -105,10 +112,29 @@ export function Editor({
 
   const enabledCount = characters.filter((c) => c.enabled).length;
 
+  const [tagQuery, setTagQuery] = useState('');
+  const [onlyEnabledTags, setOnlyEnabledTags] = useState(false);
+  const tagFilter = useMemo<TagFilter>(
+    () => ({ query: tagQuery, onlyEnabled: onlyEnabledTags }),
+    [tagQuery, onlyEnabledTags],
+  );
+
   const { selected, select } = useEditorSelection(characters.map((c) => c.id), loaded);
   const negativeSelected = selected === NEGATIVE;
   const activeIndex = characters.findIndex((c) => c.id === selected);
   const active = activeIndex >= 0 ? characters[activeIndex] : undefined;
+  const paneTarget = negativeSelected ? NEGATIVE : active?.id ?? BASE;
+  const paneCategories: readonly WorkspaceCategoryKey[] = negativeSelected
+    ? ['negative']
+    : active
+      ? CHARACTER_CATEGORY_KEYS
+      : PROMPT_CATEGORY_KEYS;
+  const paneTagLists: WorkTag[][] = negativeSelected
+    ? [workspace.negative]
+    : (active ? CHARACTER_CATEGORY_KEYS : PROMPT_CATEGORY_KEYS).map((key) => (active ? active.tags[key] : workspace.base[key]));
+  const matchCount = isTagFilterActive(tagFilter)
+    ? paneTagLists.reduce((sum, tags) => sum + visibleWorkTags(tags, tagFilter).length, 0)
+    : null;
 
   // 編集対象のタブはスクロールしてもヘッダーの直下に残す。張り付いている間だけ見た目を変え、
   // スクロール位置の調整（visibleBounds）でも上を隠すものとして扱う
@@ -138,8 +164,14 @@ export function Editor({
   // ベース・ネガティブ・各キャラごとにスクロール位置を覚え、タブを切り替えたときや他の画面から戻ったときに戻す
   useScrollMemory(selected, shown, tabsRef);
 
+  const { dragging, dropProps } = usePngDrop({
+    enabled: !!onPickPng && !!onReadPng,
+    onDropFile: (source) => onReadPng?.(source),
+    onMultipleFiles: () => notify('PNG を1枚ずつドロップしてください'),
+  });
+
   return (
-    <div className="editor" aria-busy={!loaded}>
+    <div className={`editor${dragging ? ' is-dragging' : ''}`} aria-busy={!loaded} {...dropProps}>
       <PresetBar store={presets} workspace={workspace} dispatch={dispatch} notify={notify} onPickPng={onPickPng} />
 
       <div
@@ -209,6 +241,15 @@ export function Editor({
         </button>
       </div>
 
+      <TagFilterBar
+        filter={tagFilter}
+        matchCount={matchCount}
+        onQueryChange={setTagQuery}
+        onOnlyEnabledChange={setOnlyEnabledTags}
+        onExpandAll={() => saveCategoriesOpen(paneTarget, paneCategories, true)}
+        onCollapseAll={() => saveCategoriesOpen(paneTarget, paneCategories, false)}
+      />
+
       {negativeSelected ? (
         <NegativePane
           tags={workspace.negative}
@@ -221,6 +262,7 @@ export function Editor({
           onRegister={register}
           characterNegative={characterNegative}
           onCharacterNegativeChange={onCharacterNegativeChange}
+          filter={tagFilter}
         />
       ) : active ? (
         <CharacterCard
@@ -235,7 +277,9 @@ export function Editor({
           onCopy={onCopy}
           notify={notify}
           onRegister={register}
+          sharedNegative={characterNegative}
           onPoseAdded={(tag) => void offerPair(active.id, tag)}
+          filter={tagFilter}
         />
       ) : (
         <div className="category-grid editor-pane">
@@ -254,6 +298,7 @@ export function Editor({
               onRegister={register}
               quickPicks={key === 'quality' ? QUALITY_PICKS : undefined}
               quickPicksMode="many"
+              filter={tagFilter}
             />
           ))}
         </div>
@@ -284,6 +329,7 @@ interface NegativePaneProps {
   onRegister: (tag: WorkTag, category: CategoryKey) => void;
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
+  filter: TagFilter;
 }
 
 /** ネガティブはカテゴリに分けず、1つの並びで編集する。 */
@@ -298,6 +344,7 @@ function NegativePane({
   onRegister,
   characterNegative,
   onCharacterNegativeChange,
+  filter,
 }: NegativePaneProps) {
   const id = useId();
   const [characterOpen, setCharacterOpen] = useState(false);
@@ -322,6 +369,7 @@ function NegativePane({
         onCopy={onCopy}
         notify={notify}
         onRegister={onRegister}
+        filter={filter}
       />
       <div className="negative-actions">
         <button type="button" className="btn btn-small" disabled={hasAllDefaults} onClick={addDefaults}>
@@ -345,7 +393,7 @@ function NegativePane({
         </button>
         <div id={`${id}-character`} className="setting" hidden={!characterOpen}>
           <div className="setting-head">
-            <label htmlFor={`${id}-character-text`}>ON のキャラクターすべてに同じ文面を付けます</label>
+            <label htmlFor={`${id}-character-text`}>個別のネガティブを指定していない ON のキャラクターに付けます</label>
             <button
               type="button"
               className="btn btn-small"
