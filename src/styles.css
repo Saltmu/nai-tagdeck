@@ -1780,6 +1780,16 @@ textarea {
   background: var(--accent-soft);
 }
 
+.editor {
+  border-radius: var(--radius);
+}
+
+.editor.is-dragging {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  background: var(--accent-soft);
+}
+
 .prompt-import-dialog {
   width: min(540px, 100vw - 2rem);
   max-height: calc(100dvh - 2rem);

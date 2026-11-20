@@ -47,10 +47,10 @@ async function pick(file: File) {
   await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
 }
 
-async function drop(file: File) {
+async function drop(file: File, target: Element = container.querySelector('.png-drop-zone')!) {
   const event = new Event('drop', { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [file] } });
-  await act(async () => container.querySelector('.png-drop-zone')!.dispatchEvent(event));
+  await act(async () => target.dispatchEvent(event));
   expect(event.defaultPrevented).toBe(true);
 }
 
@@ -181,4 +181,19 @@ it('ignores an older read that completes after cancellation and a new selection'
   await act(async () => finish(imageBytes.buffer));
   await click(button('適用', container.querySelector('dialog')!));
   expect(preview()).toBe('fresh tag');
+});
+
+it('accepts a PNG dropped anywhere on the editor and toggles dragging state', async () => {
+  await click(button('編集'));
+  const editor = container.querySelector('.editor')!;
+  const dragEnter = new Event('dragenter', { bubbles: true, cancelable: true });
+  Object.defineProperty(dragEnter, 'dataTransfer', { value: { types: ['Files'] } });
+  await act(async () => editor.dispatchEvent(dragEnter));
+  expect(editor.classList.contains('is-dragging')).toBe(true);
+
+  await drop(imageFile(pngFixture({ prompt: 'editor dropped tag' }), 'editor.png'), editor);
+  expect(editor.classList.contains('is-dragging')).toBe(false);
+  expect(container.querySelector('dialog')?.textContent).toContain('editor.png');
+  await click(button('適用', container.querySelector('dialog')!));
+  expect(preview()).toBe('editor dropped tag');
 });

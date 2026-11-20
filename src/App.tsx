@@ -197,6 +197,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               notify={show}
               presets={presets}
               onPickPng={pickPng}
+              onReadPng={openPromptImport}
               characterNegative={settings.characterNegativePrompt}
               onCharacterNegativeChange={(characterNegativePrompt) => updateSettings({ characterNegativePrompt })}
               shown={tab === 'editor'}

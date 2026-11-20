@@ -1,5 +1,6 @@
-import { type CSSProperties, type DragEvent, useRef, useState } from 'react';
+import { type CSSProperties, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
+import { usePngDrop } from '../hooks/usePngDrop';
 import { downloadUrl } from '../lib/browser';
 import { ImageViewer, imageFileName } from './ImageViewer';
 import { useDialogs } from './Dialogs';
@@ -41,8 +42,6 @@ export function Gallery({
   const dialogs = useDialogs();
   const [openId, setOpenId] = useState<string | null>(null);
   const [fileError, setFileError] = useState('');
-  const [dragging, setDragging] = useState(false);
-  const dragDepth = useRef(0);
   const openIndex = images.findIndex((img) => img.id === openId);
   const downloadImage = (image: GeneratedImage) => {
     downloadUrl(imageFileName(image), image.url);
@@ -53,7 +52,11 @@ export function Gallery({
     setOpenId(null);
     onReadPng({ blob, name });
   };
-  const isFileDrag = (e: DragEvent) => e.dataTransfer.types.includes('Files');
+  const { dragging, dropProps } = usePngDrop({
+    enabled: !!onPickPng,
+    onDropFile: ({ blob, name }) => openImport(blob, name),
+    onMultipleFiles: () => setFileError('PNG を1枚ずつドロップしてください'),
+  });
 
   return (
     <section className="card gallery" aria-label="生成した画像">
@@ -79,33 +82,7 @@ export function Gallery({
       <p className="hint">画像はこのタブのメモリにだけあり、タブを閉じると消えます。残したい画像はダウンロードしてください。</p>
       <div
         className={`png-drop-zone${dragging ? ' is-dragging' : ''}`}
-        onDragEnter={(e) => {
-          if (!isFileDrag(e)) return;
-          e.preventDefault();
-          if (onPickPng) {
-            dragDepth.current++;
-            setDragging(true);
-          }
-        }}
-        onDragOver={(e) => {
-          if (!isFileDrag(e)) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = onPickPng ? 'copy' : 'none';
-        }}
-        onDragLeave={() => {
-          dragDepth.current = Math.max(0, dragDepth.current - 1);
-          if (dragDepth.current === 0) setDragging(false);
-        }}
-        onDrop={(e) => {
-          if (!isFileDrag(e)) return;
-          e.preventDefault();
-          dragDepth.current = 0;
-          setDragging(false);
-          if (!onPickPng) return;
-          const files = e.dataTransfer.files;
-          if (files.length > 1) setFileError('PNG を1枚ずつドロップしてください');
-          else if (files[0]) openImport(files[0], files[0].name);
-        }}
+        {...dropProps}
       >
         <button type="button" className="btn btn-small" disabled={!onPickPng} onClick={() => {
           setFileError('');
