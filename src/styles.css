@@ -540,6 +540,22 @@ input[type='checkbox'] {
   overflow-wrap: anywhere;
 }
 
+.tag-name mark {
+  background: var(--accent-soft);
+  color: inherit;
+  border-radius: 2px;
+}
+
+.tag-filter {
+  margin-top: 0.75rem;
+}
+
+.tag-filter-count {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
 /* タグ行のピクトは横幅を詰める（高さはタップしやすさのため維持）。 */
 .tag-row > .icon-btn,
 .tag-edit > .icon-btn {
