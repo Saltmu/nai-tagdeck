@@ -4,6 +4,7 @@ import type { WorkspaceAction } from '../lib/workspace';
 import { CHARACTER_CATEGORY_KEYS } from '../lib/categories';
 import { buildPrompt } from '../lib/prompt';
 import { CategorySection } from './CategorySection';
+import { NumberField } from './NumberField';
 import { useDialogs } from './Dialogs';
 
 /** キャラクタープロンプトの先頭に書く種類（人数は付けない）。 */
@@ -20,6 +21,8 @@ interface Props {
   onCopy: (text: string, label: string) => void;
   notify: (message: string) => void;
   onRegister: (tag: WorkTag, category: CategoryKey) => void;
+  /** 個別指定がないキャラに付ける共通ネガティブ。 */
+  sharedNegative: string;
   /** ポーズにタグを追加したとき（キャラ同士の動作なら相手にも付けるか尋ねる）。 */
   onPoseAdded?: (tag: string) => void;
 }
@@ -35,6 +38,7 @@ export function CharacterCard({
   onCopy,
   notify,
   onRegister,
+  sharedNegative,
   onPoseAdded,
 }: Props) {
   const { id, enabled, tags } = character;
@@ -89,6 +93,83 @@ export function CharacterCard({
             ✕
           </button>
         </div>
+      </div>
+
+      <div className="character-extra">
+        <label className="check-line">
+          <input
+            type="checkbox"
+            checked={character.negative !== undefined}
+            onChange={(e) => dispatch({
+              type: 'setCharacterNegative',
+              id,
+              negative: e.target.checked ? sharedNegative : null,
+            })}
+          />
+          個別のネガティブを使う
+        </label>
+        {character.negative !== undefined && (
+          <textarea
+            rows={2}
+            spellCheck={false}
+            autoCapitalize="off"
+            aria-label={`${name} の個別ネガティブ`}
+            value={character.negative}
+            onChange={(e) => dispatch({ type: 'setCharacterNegative', id, negative: e.target.value })}
+          />
+        )}
+        {character.negative !== undefined && (
+          <p className="hint">空欄にすると、このキャラにはネガティブを付けません。チェックを外すと共通の文面に戻します。</p>
+        )}
+        <label className="check-line">
+          <input
+            type="checkbox"
+            checked={character.center !== undefined}
+            onChange={(e) => dispatch({
+              type: 'setCharacterCenter',
+              id,
+              center: e.target.checked ? { x: 0.5, y: 0.5 } : null,
+            })}
+          />
+          位置を指定する
+        </label>
+        {character.center && (
+          <div className="center-grid">
+            <label className="field" htmlFor={`${id}-x`}>
+              <span>横（0 が左、1 が右）</span>
+              <NumberField
+                id={`${id}-x`}
+                value={character.center.x}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(v) => dispatch({
+                  type: 'setCharacterCenter',
+                  id,
+                  center: { x: v ?? character.center!.x, y: character.center!.y },
+                })}
+              />
+            </label>
+            <label className="field" htmlFor={`${id}-y`}>
+              <span>縦（0 が上、1 が下）</span>
+              <NumberField
+                id={`${id}-y`}
+                value={character.center.y}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(v) => dispatch({
+                  type: 'setCharacterCenter',
+                  id,
+                  center: { x: character.center!.x, y: v ?? character.center!.y },
+                })}
+              />
+            </label>
+          </div>
+        )}
+        {character.center && (
+          <p className="hint">位置を指定していないキャラは、この指定があるあいだ中央（0.5, 0.5）で送ります。</p>
+        )}
       </div>
 
       <div className="category-grid">

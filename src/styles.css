@@ -769,6 +769,30 @@ input[type='checkbox'] {
   margin-top: 0.6rem;
 }
 
+.character-extra {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.character-extra .hint {
+  margin: 0;
+}
+
+.check-line {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.center-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
 .icon-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
@@ -1503,11 +1527,23 @@ textarea {
   background: var(--accent-soft);
 }
 
+.free-note {
+  margin: 0.35rem 0 0;
+}
+
 .gen-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.6rem;
   margin-top: 0.75rem;
+}
+
+.gen-advanced {
+  margin-top: 0.75rem;
+}
+
+.gen-advanced .field {
+  width: 100%;
 }
 
 .field-wide {

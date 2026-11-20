@@ -2,6 +2,7 @@ import { useId } from 'react';
 import type { Generator } from '../hooks/useGenerator';
 import type { TokenState } from '../hooks/useToken';
 import {
+  CFG_RESCALE_MAX,
   GENERATION_MODES,
   NOISE_SCHEDULES,
   SAMPLERS,
@@ -41,9 +42,11 @@ export function GeneratePanel({
 
   return (
     <div className="generate">
-      <span className="chip" title={`${FREE_LIMITS.maxSteps} steps 以下・1024×1024 相当以下・1枚`}>
-        V5 / Anlas 消費なしの範囲
-      </span>
+      <span className="chip">V5 / Anlas 消費なしの範囲</span>
+      <p className="hint free-note">
+        この範囲は Opus プランで Anlas を消費しない条件です（{FREE_LIMITS.maxSteps} steps 以下、1024×1024 相当以下、1 枚）。
+        Tablet / Scroll プランでは同じ設定でも Anlas を消費します。
+      </p>
       {!token.token && (
         <p className="notice">
           NovelAI のトークンが未設定です。
@@ -154,6 +157,33 @@ export function GeneratePanel({
           </div>
         </div>
       </div>
+
+      <details className="accordion gen-advanced">
+        <summary>詳細設定</summary>
+        <div className="accordion-body">
+          <label className="field" htmlFor={`${id}-cfg`}>
+            <span>CFG リスケール（0〜{CFG_RESCALE_MAX}）</span>
+            <NumberField
+              id={`${id}-cfg`}
+              value={generation.cfgRescale}
+              min={0}
+              max={CFG_RESCALE_MAX}
+              step={0.01}
+              onChange={(v) => onGenerationChange({ cfgRescale: v ?? generation.cfgRescale })}
+            />
+          </label>
+          <label className="check-line" htmlFor={`${id}-dynamic`}>
+            <input
+              id={`${id}-dynamic`}
+              type="checkbox"
+              checked={generation.dynamicThresholding}
+              onChange={(e) => onGenerationChange({ dynamicThresholding: e.target.checked })}
+            />
+            ダイナミックしきい値
+          </label>
+          <p className="hint">既定は CFG リスケール 0、ダイナミックしきい値オフです。</p>
+        </div>
+      </details>
 
       <div className="gen-actions">
         {generating && (

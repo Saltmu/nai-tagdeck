@@ -105,6 +105,15 @@ describe('buildPrompt', () => {
       { id: c1.id, name: 'キャラ1', prompt: 'girl, red hair' },
     ]);
   });
+  it('個別ネガティブと座標は指定があるキャラだけに載せる', () => {
+    const c = newCharacter(0);
+    c.tags.subject = [tag('girl')];
+    c.negative = '';
+    c.center = { x: 0.2, y: 0.5 };
+    expect(buildCharacterPrompts([c], 'numeric')).toEqual([
+      { id: c.id, name: c.name, prompt: 'girl', negative: '', center: { x: 0.2, y: 0.5 } },
+    ]);
+  });
 });
 
 describe('parseTagList', () => {

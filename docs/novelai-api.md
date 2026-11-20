@@ -42,9 +42,14 @@ V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在し�
   - `ucPresetId: "heavy"` → `negative_prompt` の先頭に heavy の文面（`DEFAULT_NEGATIVE`）が入り、その後ろにユーザーが追加した語が続く。
   - あわせて `tag_hint_qt: 3`、`tag_hint_uc_preset: 2` を送っている（OpenAPI の説明では、モデルにそのまま渡すヒント）。
   - このツールでは品質タグとネガティブをタグ編集画面（ネガティブは専用タブ）で持ち、展開済みの文字列を送る。プリセット ID とヒントは送らない。
-- **キャラクター**: `characterPrompts[]`（`{ prompt, uc, center: {x:0, y:0}, enabled }`）と
+- **キャラクター**: `characterPrompts[]`（`{ prompt, uc, center, enabled }`）と
   `v4_prompt.caption.char_captions[]` / `v4_negative_prompt.caption.char_captions[]` の両方に入れる。
-  座標を使わないとき（`use_coords: false`）は中心を `{x:0, y:0}` で送る。キャラごとのネガティブの既定値は `lowres, aliasing, `。
+  座標を使わないとき（`use_coords: false`）は中心を `{x:0, y:0}` で送る。
+  キャラクターに位置を指定したときは `use_coords: true` とし、指定した中心（左上 0,0、右下 1,1）を両方へ入れる。
+  そのリクエストで位置を指定していないキャラは `{x:0.5, y:0.5}` にする。
+  キャラごとのネガティブの既定値は `lowres, aliasing, `。個別のネガティブがあるキャラだけ、その文面を使う。
+- **CFG リスケールとダイナミックしきい値**: 既定は実装当初の固定値と同じ `cfg_rescale: 0`、`dynamic_thresholding: false`。
+  生成画面の詳細設定で変えた値を送る。
 - **その他の値**: `use_order: true`、`legacy_uc: false`、`deliberate_euler_ancestral_bug: false`、`prefer_brownian: true`、
   `straight_alpha: true`、`add_original_image: true`、`autoSmea: false`、`normalize_reference_strength_multiple: true`。
   `image_format` は公式UIでは `"webp"` だが、このツールでは生成情報が埋め込まれる `"png"` を使う。

@@ -36,7 +36,7 @@ interface Props {
   notify: (message: string) => void;
   presets: PresetStore;
   onPickPng?: () => void;
-  /** キャラクタープロンプトに付けるネガティブ（全キャラ共通の文面）。 */
+  /** 個別指定がないキャラクターに付けるネガティブ。 */
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
   /** 編集画面を開いている（false の間は他の画面を表示している）。 */
@@ -235,6 +235,7 @@ export function Editor({
           onCopy={onCopy}
           notify={notify}
           onRegister={register}
+          sharedNegative={characterNegative}
           onPoseAdded={(tag) => void offerPair(active.id, tag)}
         />
       ) : (
@@ -345,7 +346,7 @@ function NegativePane({
         </button>
         <div id={`${id}-character`} className="setting" hidden={!characterOpen}>
           <div className="setting-head">
-            <label htmlFor={`${id}-character-text`}>ON のキャラクターすべてに同じ文面を付けます</label>
+            <label htmlFor={`${id}-character-text`}>個別のネガティブを指定していない ON のキャラクターに付けます</label>
             <button
               type="button"
               className="btn btn-small"

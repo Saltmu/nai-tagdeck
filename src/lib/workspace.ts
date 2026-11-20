@@ -35,6 +35,10 @@ export type WorkspaceAction =
   | { type: 'addCharacter' }
   | { type: 'removeCharacter'; id: string }
   | { type: 'renameCharacter'; id: string; name: string }
+  /** null は個別指定を消し、共通のネガティブに戻す。 */
+  | { type: 'setCharacterNegative'; id: string; negative: string | null }
+  /** null は位置指定を消す。 */
+  | { type: 'setCharacterCenter'; id: string; center: { x: number; y: number } | null }
   | { type: 'toggleCharacter'; id: string }
   | { type: 'moveCharacter'; id: string; delta: -1 | 1 }
   | { type: 'replace'; workspace: Workspace }
@@ -68,6 +72,16 @@ export function emptyWorkspace(): Workspace {
 
 export function newCharacter(index: number): Character {
   return { id: newId(), name: `キャラ${index + 1}`, enabled: true, tags: emptyGroups() };
+}
+
+/** 座標は 0〜1。範囲外は端に寄せ、小数第 2 位までにする。 */
+export function normalizeCenter(raw: unknown): { x: number; y: number } | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const point = raw as Record<string, unknown>;
+  if (typeof point.x !== 'number' || typeof point.y !== 'number') return undefined;
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return undefined;
+  const clamp = (n: number) => Math.round(Math.min(1, Math.max(0, n)) * 100) / 100;
+  return { x: clamp(point.x), y: clamp(point.y) };
 }
 
 // ---- 保存データの読み込み ----
@@ -130,12 +144,15 @@ export function normalizeWorkspace(raw: unknown, fallbackNegative?: readonly Wor
     ? obj.characters.flatMap((item, i): Character[] => {
         if (!item || typeof item !== 'object') return [];
         const c = item as Record<string, unknown>;
+        const center = normalizeCenter(c.center);
         return [
           {
             id: storedId(c.id),
             name: typeof c.name === 'string' && c.name.trim() ? c.name : `キャラ${i + 1}`,
             enabled: c.enabled !== false,
             tags: normalizeGroups(c.tags),
+            ...(typeof c.negative === 'string' ? { negative: c.negative } : {}),
+            ...(center ? { center } : {}),
           },
         ];
       })
@@ -249,6 +266,26 @@ export function workspaceReducer(state: Workspace, action: WorkspaceAction): Wor
       return { ...state, characters: state.characters.filter((c) => c.id !== action.id) };
     case 'renameCharacter':
       return updateCharacter(state, action.id, (c) => ({ ...c, name: action.name }));
+    case 'setCharacterNegative':
+      return updateCharacter(state, action.id, (c) => {
+        if (action.negative === null) {
+          if (c.negative === undefined) return c;
+          const { negative: _negative, ...rest } = c;
+          return rest;
+        }
+        return c.negative === action.negative ? c : { ...c, negative: action.negative };
+      });
+    case 'setCharacterCenter':
+      return updateCharacter(state, action.id, (c) => {
+        if (action.center === null) {
+          if (!c.center) return c;
+          const { center: _center, ...rest } = c;
+          return rest;
+        }
+        const center = normalizeCenter(action.center);
+        if (!center || (c.center?.x === center.x && c.center?.y === center.y)) return c;
+        return { ...c, center };
+      });
     case 'toggleCharacter':
       if (state.characters.some((c) => c.id === action.id && !c.enabled) &&
           state.characters.filter((c) => c.enabled).length >= MAX_ENABLED_CHARACTERS) return state;

@@ -33,6 +33,9 @@ export interface GenerationParams {
   sampler: string;
   noiseSchedule: string;
   seed: number;
+  /** 0〜1。0 はリスケールなし。 */
+  cfgRescale: number;
+  dynamicThresholding: boolean;
 }
 
 export const DEFAULT_PARAMS: Omit<GenerationParams, 'seed'> = {
@@ -42,6 +45,8 @@ export const DEFAULT_PARAMS: Omit<GenerationParams, 'seed'> = {
   scale: 5,
   sampler: 'k_euler_ancestral',
   noiseSchedule: 'karras',
+  cfgRescale: 0,
+  dynamicThresholding: false,
 };
 
 export function isFreeGeneration(p: Pick<GenerationParams, 'width' | 'height' | 'steps'>): boolean {
@@ -55,6 +60,8 @@ export function randomSeed(): number {
 export interface CharacterInput {
   prompt: string;
   negative: string;
+  /** 未指定のキャラは、誰かが座標を持つときだけ中央 (0.5, 0.5) にする。 */
+  center?: { x: number; y: number };
 }
 
 export type GenerationMode = 'anime' | 'furry';
@@ -86,7 +93,8 @@ export interface GenerateRequest {
   };
 }
 
-// 座標指定はしない（use_coords: false）。そのとき公式UIは中心を (0, 0) で送っている。
+// 誰も位置を持たないときは use_coords: false。そのとき公式UIは中心を (0, 0) で送っている。
+// 誰かが位置を持つときは use_coords: true。指定のないキャラは中央 (0.5, 0.5)。
 const NO_POSITION: Point = { x: 0, y: 0 };
 
 /**
@@ -99,9 +107,11 @@ export function buildGenerateRequest({ prompt, negative, characters, params, mod
   const basePrompt = mode === 'furry' && !/^\s*fur[\s_]+dataset\s*(?:,|$)/i.test(prompt)
     ? `fur dataset${prompt.trim() ? `, ${prompt.trim()}` : ''}`
     : prompt;
-  const caption = (base: string, chars: readonly string[]): V4Caption => ({
+  const useCoords = characters.some((c) => c.center !== undefined);
+  const pointOf = (c: CharacterInput): Point => c.center ?? (useCoords ? { x: 0.5, y: 0.5 } : NO_POSITION);
+  const caption = (base: string, chars: readonly CharacterInput[], text: (c: CharacterInput) => string): V4Caption => ({
     base_caption: base,
-    char_captions: chars.map((c) => ({ char_caption: c, centers: [NO_POSITION] })),
+    char_captions: chars.map((c) => ({ char_caption: text(c), centers: [pointOf(c)] })),
   });
 
   return {
@@ -120,13 +130,13 @@ export function buildGenerateRequest({ prompt, negative, characters, params, mod
       seed: params.seed,
       noise_schedule: params.noiseSchedule,
       autoSmea: false,
-      dynamic_thresholding: false,
+      dynamic_thresholding: params.dynamicThresholding,
       controlnet_strength: 1,
       legacy: false,
       add_original_image: true,
-      cfg_rescale: 0,
+      cfg_rescale: params.cfgRescale,
       legacy_v3_extend: false,
-      use_coords: false,
+      use_coords: useCoords,
       legacy_uc: false,
       normalize_reference_strength_multiple: true,
       deliberate_euler_ancestral_bug: false,
@@ -137,16 +147,16 @@ export function buildGenerateRequest({ prompt, negative, characters, params, mod
       characterPrompts: characters.map((c) => ({
         prompt: c.prompt,
         uc: c.negative,
-        center: NO_POSITION,
+        center: pointOf(c),
         enabled: true,
       })),
       v4_prompt: {
-        caption: caption(basePrompt, characters.map((c) => c.prompt)),
-        use_coords: false,
+        caption: caption(basePrompt, characters, (c) => c.prompt),
+        use_coords: useCoords,
         use_order: true,
       },
       v4_negative_prompt: {
-        caption: caption(negative, characters.map((c) => c.negative)),
+        caption: caption(negative, characters, (c) => c.negative),
         legacy_uc: false,
       },
       negative_prompt: negative,
