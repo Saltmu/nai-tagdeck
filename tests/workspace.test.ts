@@ -254,6 +254,40 @@ describe('normalizeWorkspace', () => {
     expect(empty.negative.map((t) => t.tag)).toEqual(emptyWorkspace().negative.map((t) => t.tag));
   });
 
+  it('空の ID は読み込み時に振り直す', () => {
+    const ws = normalizeWorkspace({
+      base: { quality: [{ id: '', tag: 'a' }, { id: '   ', tag: 'b' }, { id: 'keep', tag: 'c' }] },
+      characters: [{ id: '', name: 'n', tags: { subject: [{ id: '', tag: 'girl' }] } }],
+    });
+    const ids = [
+      ws.base.quality[0]!.id,
+      ws.base.quality[1]!.id,
+      ws.characters[0]!.id,
+      ws.characters[0]!.tags.subject[0]!.id,
+    ];
+    expect(ws.base.quality[2]!.id).toBe('keep');
+    expect(ids.every((id) => id.trim() !== '')).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('未分類から移すとき、移動先にある同じタグは重複させない', () => {
+    const start = run(
+      emptyWorkspace(),
+      { type: 'add', target: BASE, category: 'outfit', tag: 'hat' },
+      { type: 'add', target: BASE, category: 'unclassified', tag: 'Hat' },
+      { type: 'add', target: BASE, category: 'unclassified', tag: 'scarf' },
+    );
+    const hat = start.base.unclassified[0]!;
+    const scarf = start.base.unclassified[1]!;
+    const moved = workspaceReducer(start, { type: 'moveFromUnclassified', target: BASE, id: hat.id, to: 'outfit' });
+    expect(moved.base.outfit.map((t) => t.tag)).toEqual(['hat']);
+    expect(moved.base.outfit[0]).toBe(start.base.outfit[0]);
+    expect(moved.base.unclassified.map((t) => t.tag)).toEqual(['scarf']);
+    const movedScarf = workspaceReducer(moved, { type: 'moveFromUnclassified', target: BASE, id: scarf.id, to: 'outfit' });
+    expect(movedScarf.base.outfit.map((t) => t.tag)).toEqual(['hat', 'scarf']);
+    expect(movedScarf.base.unclassified).toEqual([]);
+  });
+
   it('キャラクター対応前の保存形式はベースとして読む', () => {
     const ws = normalizeWorkspace({ quality: [{ tag: 'masterpiece' }] });
     expect(ws.base.quality[0]!.tag).toBe('masterpiece');

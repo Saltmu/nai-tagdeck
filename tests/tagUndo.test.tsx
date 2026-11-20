@@ -96,9 +96,9 @@ it('undoes weight changes, reordering, bulk toggle, quick picks, moves and repla
   focusField();
   await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.4 }));
   await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.6 }));
-  expect(ws.base.appearance.find((t) => t.tag === 'b')?.weight).toBe(1.6);
+  expect(weightOf('b')).toBe(1.6);
   await run(() => api.undo());
-  expect(ws.base.appearance.find((t) => t.tag === 'b')?.weight).toBe(1);
+  expect(weightOf('b')).toBe(1);
 
   await run(() => api.dispatch({ type: 'move', target: BASE, category: 'appearance', id: idOf('c'), delta: -1 }));
   expect(names()).toEqual(['a', 'c', 'b', 'd']);
@@ -145,6 +145,7 @@ it('collapses consecutive character renames into one step', async () => {
   await run(() => api.dispatch({ type: 'addCharacter' }));
   focusField();
   const id = ws.characters[0]!.id;
+  focusField();
   await run(() => api.dispatch({ type: 'renameCharacter', id, name: 'あ' }));
   await run(() => api.dispatch({ type: 'renameCharacter', id, name: 'あい' }));
   expect(ws.characters[0]!.name).toBe('あい');
@@ -152,6 +153,42 @@ it('collapses consecutive character renames into one step', async () => {
   expect(ws.characters[0]!.name).toBe('キャラ1');
   await run(() => api.undo());
   expect(ws.characters).toEqual([]);
+});
+
+it('keeps a later weight edit when the previous one went idle', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+  try {
+    focusField();
+    await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.2 }));
+    vi.setSystemTime(new Date('2026-01-01T00:01:00Z'));
+    await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.3 }));
+    await run(() => api.undo());
+    expect(weightOf('b')).toBe(1.2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('keeps a later rename when the name field was left', async () => {
+  await run(() => api.dispatch({ type: 'addCharacter' }));
+  const id = ws.characters[0]!.id;
+  const field = focusField();
+  await run(() => api.dispatch({ type: 'renameCharacter', id, name: 'あ' }));
+  await run(() => field.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+  field.focus();
+  await run(() => api.dispatch({ type: 'renameCharacter', id, name: 'あい' }));
+  await run(() => api.undo());
+  expect(ws.characters[0]!.name).toBe('あ');
+});
+
+it('starts a new weight step after dismissing the bar', async () => {
+  focusField();
+  await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.2 }));
+  await run(() => api.dismiss());
+  await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.3 }));
+  await run(() => api.undo());
+  expect(weightOf('b')).toBe(1.2);
 });
 
 it('tracks removals that do not pass the legacy undo flag', async () => {

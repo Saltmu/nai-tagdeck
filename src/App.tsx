@@ -139,7 +139,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const showWorkbench = tab === 'editor' || tab === 'generate';
 
   return (
-    <div className={`app${showLatest ? ' has-latest' : ''}`}>
+    <div className="app">
       <header className="app-header" data-occludes>
         <h1 className="app-title" aria-label="nai-tagdeck">
           <img className="brand-icon" src={`${import.meta.env.BASE_URL}brand/icon.svg`} width="24" height="24" alt="" />
@@ -288,19 +288,18 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         <LatestPreview image={latest} onOpen={() => setTab('generate')} onDismiss={dismiss} />
       )}
 
-      <div className="bottom-notices">
-        <div className="toast" role="status" aria-live="polite">
-          {message}
-        </div>
-        <UndoBar
-          open={tagUndo.barOpen}
-          label={tagUndo.label}
-          canUndo={tagUndo.canUndo}
-          canRedo={tagUndo.canRedo}
-          onUndo={tagUndo.undo}
-          onRedo={tagUndo.redo}
-          onDismiss={tagUndo.dismiss}
-        />
+      <UndoBar
+        open={tagUndo.barOpen}
+        label={tagUndo.label}
+        canUndo={tagUndo.canUndo}
+        canRedo={tagUndo.canRedo}
+        onUndo={tagUndo.undo}
+        onRedo={tagUndo.redo}
+        onDismiss={tagUndo.dismiss}
+      />
+
+      <div className="toast" role="status" aria-live="polite">
+        {message}
       </div>
     </div>
   );
