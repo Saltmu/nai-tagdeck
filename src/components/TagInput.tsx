@@ -186,6 +186,7 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
               if (chosen) pick(chosen.entry);
               else addRaw();
             } else if (e.key === 'Escape') {
+              if (expanded) e.preventDefault();
               setOpen(false);
             }
           }}
@@ -215,7 +216,7 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
               閉じる ✕
             </button>
           </div>
-          <ul ref={listRef} id={listId} role="listbox" className="suggestions">
+          <ul ref={listRef} id={listId} role="listbox" aria-label={`${label}のタグ候補`} className="suggestions">
             {suggestions.map(({ entry }, i) => (
               <li
                 key={entry.id}

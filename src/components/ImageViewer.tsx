@@ -282,8 +282,14 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
         if (e.target === e.currentTarget) dialog.current?.close();
       }}
       onKeyDown={(e) => {
-        if (e.key === 'ArrowLeft' && hasPrev) onPrev();
-        if (e.key === 'ArrowRight' && hasNext) onNext();
+        if (e.key === 'ArrowLeft' && hasPrev) {
+          e.preventDefault();
+          onPrev();
+        }
+        if (e.key === 'ArrowRight' && hasNext) {
+          e.preventDefault();
+          onNext();
+        }
       }}
     >
       <div className="viewer-body">
@@ -339,6 +345,9 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
             <button type="button" className="icon-btn" onClick={() => dialog.current?.close()} aria-label="閉じる" title="閉じる">
               <CloseIcon />
             </button>
+            <span className="visually-hidden" role="status" aria-live="polite">
+              {removeArmed && removeReady ? '削除の準備ができました。もう一度押すと削除します' : ''}
+            </span>
           </div>
           <dl className="viewer-meta">
             <div>

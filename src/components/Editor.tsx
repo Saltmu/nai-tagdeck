@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace, WorkspaceCategoryKey } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import {
@@ -178,6 +178,25 @@ export function Editor({
   // ベース・ネガティブ・各キャラごとにスクロール位置を覚え、タブを切り替えたときや他の画面から戻ったときに戻す
   useScrollMemory(selected, shown, tabsRef);
 
+  const id = useId();
+  const tabRefs = useRef(new Map<string, HTMLButtonElement | null>());
+  const tabKeys = useMemo(() => [BASE, NEGATIVE, ...characters.map((c) => c.id)], [characters]);
+  const panelId = `${id}-panel`;
+  const onTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const index = tabKeys.indexOf(paneTarget);
+    if (index < 0) return;
+    let nextIndex: number | null = null;
+    if (e.key === 'ArrowRight') nextIndex = (index + 1) % tabKeys.length;
+    else if (e.key === 'ArrowLeft') nextIndex = (index - 1 + tabKeys.length) % tabKeys.length;
+    else if (e.key === 'Home') nextIndex = 0;
+    else if (e.key === 'End') nextIndex = tabKeys.length - 1;
+    if (nextIndex === null) return;
+    e.preventDefault();
+    const nextKey = tabKeys[nextIndex]!;
+    select(nextKey);
+    tabRefs.current.get(nextKey)?.focus();
+  };
+
   const { dragging, dropProps } = usePngDrop({
     enabled: !!onPickPng && !!onReadPng,
     onDropFile: (source) => onReadPng?.(source),
@@ -191,58 +210,71 @@ export function Editor({
       <div
         ref={tabsRef}
         className={`editor-tabs${tabsStuck ? ' is-stuck' : ''}`}
-        role="tablist"
-        aria-label="編集対象"
         data-occludes={tabsStuck ? '' : undefined}
       >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={!active && !negativeSelected}
-          className="editor-tab"
-          onClick={() => select(BASE)}
-        >
-          ベース
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={negativeSelected}
-          className="editor-tab editor-tab-negative"
-          onClick={() => select(NEGATIVE)}
-        >
-          ネガティブ
-        </button>
-        {characters.map((c, i) => {
-          const name = c.name.trim() || `キャラ${i + 1}`;
-          const locked = !c.enabled && enabledCount >= MAX_ENABLED_CHARACTERS;
-          return (
-            <div key={c.id} className="editor-tab-wrap" role="presentation">
-              <input
-                type="checkbox"
-                className="editor-tab-check"
-                checked={c.enabled}
-                disabled={locked}
-                aria-label={`${name} を生成に含める`}
-                title={
-                  locked
-                    ? `生成対象は最大${MAX_ENABLED_CHARACTERS}人です。他のキャラクターのチェックを外してください`
-                    : 'OFF にすると出力・生成から外します'
-                }
-                onChange={() => dispatch({ type: 'toggleCharacter', id: c.id })}
-              />
-              <button
-                type="button"
-                role="tab"
-                aria-selected={c.id === active?.id}
-                className={`editor-tab editor-tab-character${c.enabled ? '' : ' is-off'}`}
-                onClick={() => select(c.id)}
-              >
-                {name}
-              </button>
-            </div>
-          );
-        })}
+        <div className="editor-tablist" role="tablist" aria-label="編集対象" onKeyDown={onTabKeyDown}>
+          <button
+            ref={(el) => { tabRefs.current.set(BASE, el); }}
+            type="button"
+            role="tab"
+            id={`${id}-tab-${BASE}`}
+            tabIndex={paneTarget === BASE ? 0 : -1}
+            aria-selected={!active && !negativeSelected}
+            aria-controls={paneTarget === BASE ? panelId : undefined}
+            className="editor-tab"
+            onClick={() => select(BASE)}
+          >
+            ベース
+          </button>
+          <button
+            ref={(el) => { tabRefs.current.set(NEGATIVE, el); }}
+            type="button"
+            role="tab"
+            id={`${id}-tab-${NEGATIVE}`}
+            tabIndex={paneTarget === NEGATIVE ? 0 : -1}
+            aria-selected={negativeSelected}
+            aria-controls={paneTarget === NEGATIVE ? panelId : undefined}
+            className="editor-tab editor-tab-negative"
+            onClick={() => select(NEGATIVE)}
+          >
+            ネガティブ
+          </button>
+          {characters.map((c, i) => {
+            const name = c.name.trim() || `キャラ${i + 1}`;
+            const locked = !c.enabled && enabledCount >= MAX_ENABLED_CHARACTERS;
+            const isSelected = c.id === active?.id;
+            return (
+              <div key={c.id} className="editor-tab-wrap" role="presentation">
+                <input
+                  type="checkbox"
+                  className="editor-tab-check"
+                  checked={c.enabled}
+                  disabled={locked}
+                  aria-label={`${name} を生成に含める`}
+                  title={
+                    locked
+                      ? `生成対象は最大${MAX_ENABLED_CHARACTERS}人です。他のキャラクターのチェックを外してください`
+                      : 'OFF にすると出力・生成から外します'
+                  }
+                  onChange={() => dispatch({ type: 'toggleCharacter', id: c.id })}
+                />
+                <button
+                  ref={(el) => { tabRefs.current.set(c.id, el); }}
+                  type="button"
+                  role="tab"
+                  id={`${id}-tab-${c.id}`}
+                  tabIndex={isSelected ? 0 : -1}
+                  aria-selected={isSelected}
+                  aria-controls={isSelected ? panelId : undefined}
+                  className={`editor-tab editor-tab-character${c.enabled ? '' : ' is-off'}`}
+                  onClick={() => select(c.id)}
+                >
+                  {name}
+                </button>
+              </div>
+            );
+          })}
+        </div>
         <button
           type="button"
           className="editor-tab editor-tab-add"
@@ -264,59 +296,61 @@ export function Editor({
         onCollapseAll={() => saveCategoriesOpen(paneTarget, paneCategories, false)}
       />
 
-      {negativeSelected ? (
-        <NegativePane
-          tags={workspace.negative}
-          dispatch={dispatch}
-          entries={dictionary.entries}
-          syntax={syntax}
-          isKnown={isKnown}
-          onCopy={onCopy}
-          notify={notify}
-          onRegister={register}
-          characterNegative={characterNegative}
-          onCharacterNegativeChange={onCharacterNegativeChange}
-          filter={tagFilter}
-        />
-      ) : active ? (
-        <CharacterCard
-          key={active.id}
-          character={active}
-          index={activeIndex}
-          count={characters.length}
-          dispatch={dispatch}
-          entries={dictionary.entries}
-          syntax={syntax}
-          isKnown={isKnown}
-          onCopy={onCopy}
-          notify={notify}
-          onRegister={register}
-          sharedNegative={characterNegative}
-          onPoseAdded={handlePoseAdded}
-          filter={tagFilter}
-        />
-      ) : (
-        <div className="category-grid editor-pane">
-          {PROMPT_CATEGORY_KEYS.map((key) => (
-            <CategorySection
-              key={key}
-              target={BASE}
-              category={key}
-              tags={workspace.base[key]}
-              dispatch={dispatch}
-              entries={dictionary.entries}
-              syntax={syntax}
-              isKnown={isKnown}
-              onCopy={onCopy}
-              notify={notify}
-              onRegister={register}
-              quickPicks={key === 'quality' ? QUALITY_PICKS : undefined}
-              quickPicksMode="many"
-              filter={tagFilter}
-            />
-          ))}
-        </div>
-      )}
+      <div id={panelId} role="tabpanel" aria-labelledby={`${id}-tab-${paneTarget}`}>
+        {negativeSelected ? (
+          <NegativePane
+            tags={workspace.negative}
+            dispatch={dispatch}
+            entries={dictionary.entries}
+            syntax={syntax}
+            isKnown={isKnown}
+            onCopy={onCopy}
+            notify={notify}
+            onRegister={register}
+            characterNegative={characterNegative}
+            onCharacterNegativeChange={onCharacterNegativeChange}
+            filter={tagFilter}
+          />
+        ) : active ? (
+          <CharacterCard
+            key={active.id}
+            character={active}
+            index={activeIndex}
+            count={characters.length}
+            dispatch={dispatch}
+            entries={dictionary.entries}
+            syntax={syntax}
+            isKnown={isKnown}
+            onCopy={onCopy}
+            notify={notify}
+            onRegister={register}
+            sharedNegative={characterNegative}
+            onPoseAdded={handlePoseAdded}
+            filter={tagFilter}
+          />
+        ) : (
+          <div className="category-grid editor-pane">
+            {PROMPT_CATEGORY_KEYS.map((key) => (
+              <CategorySection
+                key={key}
+                target={BASE}
+                category={key}
+                tags={workspace.base[key]}
+                dispatch={dispatch}
+                entries={dictionary.entries}
+                syntax={syntax}
+                isKnown={isKnown}
+                onCopy={onCopy}
+                notify={notify}
+                onRegister={register}
+                quickPicks={key === 'quality' ? QUALITY_PICKS : undefined}
+                quickPicksMode="many"
+                filter={tagFilter}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       <p className="hint">
         複数のキャラクターを描くときは、タブ右端の「＋」でキャラクターを追加し、キャラクターごとにタグを分けて登録します（V4 以降のキャラクタープロンプト）。

@@ -1,4 +1,4 @@
-import { type PointerEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 
 type DockTab = 'prompt' | 'generate';
 
@@ -19,6 +19,7 @@ interface Props {
 export function GenerateDock({ collapseSignal, generating, error, onDismissError, promptPanel, generatePanel }: Props) {
   const id = useId();
   const dockRef = useRef<HTMLElement>(null);
+  const tabRefs = useRef<Record<DockTab, HTMLButtonElement | null>>({ prompt: null, generate: null });
   const [tab, setTab] = useState<DockTab>('prompt');
   const [open, setOpen] = useState(false);
 
@@ -76,6 +77,21 @@ export function GenerateDock({ collapseSignal, generating, error, onDismissError
     { key: 'generate', label: '生成' },
   ];
 
+  const onTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const index = tabs.findIndex((t) => t.key === tab);
+    let nextIndex: number | null = null;
+    if (e.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') nextIndex = 0;
+    else if (e.key === 'End') nextIndex = tabs.length - 1;
+    if (nextIndex === null) return;
+    e.preventDefault();
+    const nextKey = tabs[nextIndex]!.key;
+    setTab(nextKey);
+    setOpen(true);
+    tabRefs.current[nextKey]?.focus();
+  };
+
   return (
     <section ref={dockRef} className={`dock${open ? ' is-open' : ''}`} aria-label="プロンプトと生成設定">
       {/* 閉じていてもエラーは見えるようにする */}
@@ -88,20 +104,27 @@ export function GenerateDock({ collapseSignal, generating, error, onDismissError
         </div>
       )}
       <div className="dock-bar" onPointerDown={onBarPointerDown} onPointerUp={onBarPointerUp} onPointerCancel={() => { dragStart.current = null; }}>
-        <div className="dock-tabs" role="tablist" aria-label="ドックの切り替え">
+        <div className="dock-tabs" role="tablist" aria-label="ドックの切り替え" onKeyDown={onTabKeyDown}>
           {tabs.map((t) => (
             <button
               key={t.key}
+              ref={(el) => { tabRefs.current[t.key] = el; }}
               type="button"
               role="tab"
               id={`${id}-tab-${t.key}`}
+              tabIndex={tab === t.key ? 0 : -1}
               aria-selected={open && tab === t.key}
               aria-controls={`${id}-panel-${t.key}`}
               className="dock-tab"
               onClick={() => select(t.key)}
             >
               {t.label}
-              {t.key === 'generate' && generating && <span className="spinner spinner-small" aria-label="生成中" />}
+              {t.key === 'generate' && generating && (
+                <>
+                  <span className="spinner spinner-small" aria-hidden="true" />
+                  <span className="visually-hidden">（生成中）</span>
+                </>
+              )}
             </button>
           ))}
         </div>

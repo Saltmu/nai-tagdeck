@@ -246,7 +246,7 @@ function PresetSearch({ inputId, presets, active, onPick }: SearchProps) {
             閉じる ✕
           </button>
         </div>
-        <ul ref={listRef} id={listId} role="listbox" className="suggestions preset-suggestions">
+        <ul ref={listRef} id={listId} role="listbox" aria-label="プリセット候補" className="suggestions preset-suggestions">
           {matches.map((p, i) => (
             <li
               key={p.id}
