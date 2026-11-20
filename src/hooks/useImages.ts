@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { newId } from '../lib/id';
+import {
+  applyImageRetention,
+  createThumbnailUrl,
+  DEFAULT_IMAGE_HISTORY_LIMITS,
+  type ImageHistoryLimits,
+} from '../lib/imageHistory';
 
 /** 生成画像はメモリ（Blob URL）にだけ置き、タブを閉じたら消える。 */
 export interface GeneratedImage {
   id: string;
   url: string;
+  thumbUrl?: string;
   blob: Blob;
   seed: number;
   width: number;
@@ -15,45 +22,107 @@ export interface GeneratedImage {
   downloaded: boolean;
 }
 
-export type NewImage = Omit<GeneratedImage, 'id' | 'url' | 'downloaded'>;
+export type NewImage = Omit<GeneratedImage, 'id' | 'url' | 'thumbUrl' | 'downloaded'>;
 
 export interface ImageStore {
   images: GeneratedImage[];
+  evictedCount: number;
   add: (images: NewImage[]) => void;
   remove: (id: string) => void;
   clear: () => void;
   markDownloaded: (id: string) => void;
+  dismissEviction: () => void;
 }
 
-export function useImages(): ImageStore {
+export interface UseImagesOptions {
+  limits?: ImageHistoryLimits;
+  onEvict?: (count: number) => void;
+}
+
+function revokeImageUrls(img: Pick<GeneratedImage, 'url' | 'thumbUrl'>): void {
+  URL.revokeObjectURL(img.url);
+  if (img.thumbUrl) URL.revokeObjectURL(img.thumbUrl);
+}
+
+export function useImages(options?: UseImagesOptions): ImageStore {
   const [images, setImages] = useState<GeneratedImage[]>([]);
-  const latest = useRef(images);
-  latest.current = images;
-  useEffect(() => () => {
-    for (const img of latest.current) URL.revokeObjectURL(img.url);
+  const [evictedCount, setEvictedCount] = useState(0);
+  const imagesRef = useRef<GeneratedImage[]>([]);
+  const mountedRef = useRef(true);
+  const limitsRef = useRef(options?.limits ?? DEFAULT_IMAGE_HISTORY_LIMITS);
+  limitsRef.current = options?.limits ?? DEFAULT_IMAGE_HISTORY_LIMITS;
+  const onEvictRef = useRef(options?.onEvict);
+  onEvictRef.current = options?.onEvict;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      for (const img of imagesRef.current) revokeImageUrls(img);
+    };
   }, []);
 
   const add = useCallback((list: NewImage[]) => {
-    const created = list.map((img) => ({ ...img, id: newId(), url: URL.createObjectURL(img.blob), downloaded: false }));
-    setImages((prev) => [...created, ...prev]);
+    if (list.length === 0) return;
+    const created: GeneratedImage[] = list.map((img) => ({
+      ...img,
+      id: newId(),
+      url: URL.createObjectURL(img.blob),
+      downloaded: false,
+    }));
+    const { retained, evicted } = applyImageRetention(
+      [...created, ...imagesRef.current],
+      limitsRef.current,
+    );
+    imagesRef.current = retained;
+    setImages(retained);
+
+    for (const img of evicted) revokeImageUrls(img);
+    if (evicted.length > 0) {
+      // <a download> では保存完了を確認できないため、downloaded の有無に関わらず破棄を通知する
+      setEvictedCount((prev) => prev + evicted.length);
+      onEvictRef.current?.(evicted.length);
+    }
+
+    const retainedIds = new Set(retained.map((img) => img.id));
+    for (const img of created) {
+      if (!retainedIds.has(img.id)) continue;
+      void createThumbnailUrl(img.blob, img.width, img.height).then((thumbUrl) => {
+        if (!thumbUrl) return;
+        if (!mountedRef.current || !imagesRef.current.some((item) => item.id === img.id)) {
+          URL.revokeObjectURL(thumbUrl);
+          return;
+        }
+        const next = imagesRef.current.map((item) => {
+          if (item.id !== img.id) return item;
+          if (item.thumbUrl && item.thumbUrl !== thumbUrl) URL.revokeObjectURL(item.thumbUrl);
+          return { ...item, thumbUrl };
+        });
+        imagesRef.current = next;
+        setImages(next);
+      });
+    }
   }, []);
 
   const remove = useCallback((id: string) => {
-    setImages((prev) => {
-      const target = prev.find((img) => img.id === id);
-      if (target) URL.revokeObjectURL(target.url);
-      return prev.filter((img) => img.id !== id);
-    });
+    const target = imagesRef.current.find((img) => img.id === id);
+    if (!target) return;
+    const next = imagesRef.current.filter((img) => img.id !== id);
+    imagesRef.current = next;
+    setImages(next);
+    revokeImageUrls(target);
   }, []);
 
   const clear = useCallback(() => {
-    setImages((prev) => {
-      for (const img of prev) URL.revokeObjectURL(img.url);
-      return [];
-    });
+    const prev = imagesRef.current;
+    setEvictedCount(0);
+    if (prev.length === 0) return;
+    imagesRef.current = [];
+    setImages([]);
+    for (const img of prev) revokeImageUrls(img);
   }, []);
 
-  // 画像があるときだけ、閉じる・再読み込みの前に確認を出す（unload では確認を出せない）
+  // <a download> では保存完了（キャンセル含む）を確認できないため、画像がある間は常に離脱確認を出す
   const hasImages = images.length > 0;
   useEffect(() => {
     if (!hasImages) return;
@@ -66,8 +135,13 @@ export function useImages(): ImageStore {
   }, [hasImages]);
 
   const markDownloaded = useCallback((id: string) => {
-    setImages((prev) => prev.map((img) => img.id === id ? { ...img, downloaded: true } : img));
+    if (!imagesRef.current.some((img) => img.id === id && !img.downloaded)) return;
+    const next = imagesRef.current.map((img) => (img.id === id ? { ...img, downloaded: true } : img));
+    imagesRef.current = next;
+    setImages(next);
   }, []);
 
-  return { images, add, remove, clear, markDownloaded };
+  const dismissEviction = useCallback(() => setEvictedCount(0), []);
+
+  return { images, evictedCount, add, remove, clear, markDownloaded, dismissEviction };
 }

@@ -1,6 +1,6 @@
 import { type CSSProperties, type DragEvent, useRef, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
-import { downloadBlob } from '../lib/browser';
+import { downloadUrl } from '../lib/browser';
 import { ImageViewer, imageFileName } from './ImageViewer';
 import { useDialogs } from './Dialogs';
 import type { PromptSource } from './PromptImportDialog';
@@ -10,6 +10,8 @@ interface Props {
   generating: boolean;
   /** 生成中のプレースホルダーの縦横比に使う。 */
   pendingSize: { width: number; height: number };
+  evictedCount?: number;
+  onDismissEviction?: () => void;
   onRemove: (id: string) => void;
   onClear: () => void;
   onUseSeed: (seed: number) => void;
@@ -23,7 +25,19 @@ function thumbStyle(width: number, height: number): CSSProperties {
   return { aspectRatio: `${width} / ${height}`, '--ar': width / height } as CSSProperties;
 }
 
-export function Gallery({ images, generating, pendingSize, onRemove, onClear, onUseSeed, onDownloaded, onPickPng, onReadPng }: Props) {
+export function Gallery({
+  images,
+  generating,
+  pendingSize,
+  evictedCount = 0,
+  onDismissEviction,
+  onRemove,
+  onClear,
+  onUseSeed,
+  onDownloaded,
+  onPickPng,
+  onReadPng,
+}: Props) {
   const dialogs = useDialogs();
   const [openId, setOpenId] = useState<string | null>(null);
   const [fileError, setFileError] = useState('');
@@ -31,7 +45,7 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
   const dragDepth = useRef(0);
   const openIndex = images.findIndex((img) => img.id === openId);
   const downloadImage = (image: GeneratedImage) => {
-    downloadBlob(imageFileName(image), image.blob);
+    downloadUrl(imageFileName(image), image.url);
     onDownloaded(image.id);
   };
   const openImport = (blob: Blob, name: string) => {
@@ -102,6 +116,16 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
         <span className="hint">または NovelAI の PNG をここにドロップ</span>
       </div>
       {fileError && <p className="error-banner" role="alert">{fileError}</p>}
+      {evictedCount > 0 && (
+        <div className="notice" role="status">
+          <span>履歴上限のため、古い画像 {evictedCount}枚を削除しました。残したい画像はダウンロードしてください。</span>
+          {onDismissEviction && (
+            <button type="button" className="btn btn-small" onClick={onDismissEviction}>
+              閉じる
+            </button>
+          )}
+        </div>
+      )}
 
       {images.length === 0 && !generating ? null : (
         <ul className="thumbs">
@@ -114,7 +138,7 @@ export function Gallery({ images, generating, pendingSize, onRemove, onClear, on
           {images.map((img, i) => (
             <li key={img.id} className="thumb" style={thumbStyle(img.width, img.height)}>
               <button type="button" className="thumb-btn" onClick={() => setOpenId(img.id)}>
-                <img src={img.url} alt={`生成画像 ${images.length - i}（シード ${img.seed}）`} loading="lazy" />
+                <img src={i === 0 ? img.url : (img.thumbUrl ?? img.url)} alt={`生成画像 ${images.length - i}（シード ${img.seed}）`} loading="lazy" />
               </button>
               <button
                 type="button"

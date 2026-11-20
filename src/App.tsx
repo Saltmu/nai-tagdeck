@@ -47,7 +47,10 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const [generation, updateGeneration, generationPersistence] = useGenerationSettings();
   const token = useToken();
   const presets = usePresets();
-  const imageStore = useImages();
+  const { message, show } = useToast();
+  const imageStore = useImages({
+    onEvict: (count) => show(`履歴上限のため、古い画像 ${count}枚を削除しました`, 6000),
+  });
   const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
   const [promptSource, setPromptSource] = useState<PromptSource | null>(null);
@@ -58,7 +61,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     if ((e.target as Element).closest('.dock')) return;
     if (window.matchMedia?.('(min-width: 1100px)').matches) setDockCollapse((n) => n + 1);
   };
-  const { message, show } = useToast();
   const tagUndo = useTagUndo(workspace, rawDispatch, show);
   const dispatch = tagUndo.dispatch;
   const openEditor = useCallback(() => setTab('editor'), []);
@@ -204,6 +206,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               images={imageStore.images}
               generating={generator.generating}
               pendingSize={sizeOf(generation.size)}
+              evictedCount={imageStore.evictedCount}
+              onDismissEviction={imageStore.dismissEviction}
               onRemove={imageStore.remove}
               onClear={imageStore.clear}
               onUseSeed={applySeed}
