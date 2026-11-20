@@ -1,5 +1,12 @@
 import { clearAllData } from './db';
 
+let pendingWrites = new AbortController();
+
+/** リセット前の画面から予約された書き込みを無効にするためのシグナル。 */
+export function getDataResetSignal(): AbortSignal {
+  return pendingWrites.signal;
+}
+
 /** このアプリが保存したキーだけを削除し、同じサイトの他のデータは保持する。 */
 export function clearAppStorage(storage: Pick<Storage, 'length' | 'key' | 'removeItem'>): void {
   const keys: string[] = [];
@@ -10,8 +17,10 @@ export function clearAppStorage(storage: Pick<Storage, 'length' | 'key' | 'remov
   for (const key of keys) storage.removeItem(key);
 }
 
-/** 自動保存を行う画面をアンマウントしてから呼ぶ。 */
+/** 旧画面の書き込みを無効にしてから、先行する書き込みと同じストアを消去する。 */
 export async function resetAppData(): Promise<void> {
+  pendingWrites.abort();
+  pendingWrites = new AbortController();
   clearAppStorage(window.localStorage);
   clearAppStorage(window.sessionStorage);
   await clearAllData();

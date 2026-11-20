@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getKV, setKV } from '../lib/db';
+import { getDataResetSignal } from '../lib/reset';
 
 export interface PersistenceState {
   loaded: boolean;
@@ -16,10 +17,11 @@ const INITIAL: PersistenceState = { loaded: false, status: 'loading', error: nul
 export function usePersistence<T>(
   key: string,
   value: T,
-  onLoad: (raw: unknown) => Promise<void> | void,
+  onLoad: (raw: unknown, isCurrent: () => boolean) => Promise<void> | void,
   delayMs = 300,
 ): PersistenceState {
   const [state, setState] = useState({ key, ...INITIAL });
+  const [resetSignal] = useState(getDataResetSignal);
   const writes = useRef(Promise.resolve());
   const synced = useRef<{ key: string; value: T; inFlight: number } | null>(null);
   const current = state.key === key ? state : INITIAL;
@@ -30,25 +32,26 @@ export function usePersistence<T>(
 
   useEffect(() => {
     let active = true;
+    const isCurrent = () => active && !resetSignal.aborted;
     synced.current = null;
     setState({ key, ...INITIAL });
     getKV<unknown>(key)
       .then(async (raw) => {
-        if (!active) return;
+        if (!isCurrent()) return;
         if (raw !== undefined) {
-          const result = onLoadRef.current(raw);
+          const result = onLoadRef.current(raw, isCurrent);
           if (result && typeof (result as PromiseLike<void>).then === 'function') {
             await result;
           }
         }
-        if (!active) return;
+        if (!isCurrent()) return;
         setState({ key, loaded: true, status: 'idle', error: null });
       })
       .catch((error: unknown) => {
-        if (active) setState({ key, loaded: false, status: 'error', error: `保存データを読み込めません (${key}): ${String(error)}` });
+        if (isCurrent()) setState({ key, loaded: false, status: 'error', error: `保存データを読み込めません (${key}): ${String(error)}` });
       });
     return () => { active = false; };
-  }, [key]);
+  }, [key, resetSignal]);
 
   useEffect(() => {
     if (!current.loaded) return;
@@ -71,7 +74,7 @@ export function usePersistence<T>(
       // 遅い保存が新しい値を上書きしないよう、順番に書き込む。
       writes.current = writes.current.then(async () => {
         try {
-          if (!force && !active) return;
+          if (resetSignal.aborted || (!force && !active)) return;
           await setKV(key, value);
           tracker.value = value;
           if (active && (stateRef.current.status !== 'idle' || stateRef.current.error !== null)) {
@@ -100,7 +103,7 @@ export function usePersistence<T>(
       window.removeEventListener('pagehide', onPageHide);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [key, value, current.loaded, delayMs]);
+  }, [key, value, current.loaded, delayMs, resetSignal]);
 
   return current;
 }

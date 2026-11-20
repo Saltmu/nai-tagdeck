@@ -3,9 +3,10 @@ import { act, StrictMode, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePersistence, type PersistenceState } from '../src/hooks/usePersistence';
-import { getKV, setKV } from '../src/lib/db';
+import { clearAllData, getKV, setKV } from '../src/lib/db';
+import { resetAppData } from '../src/lib/reset';
 
-vi.mock('../src/lib/db', () => ({ getKV: vi.fn(), setKV: vi.fn() }));
+vi.mock('../src/lib/db', () => ({ clearAllData: vi.fn(), getKV: vi.fn(), setKV: vi.fn() }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root;
 let state: PersistenceState;
@@ -183,5 +184,30 @@ describe('persistent state', () => {
     expect(setKV).toHaveBeenCalledTimes(2);
     expect(setKV).toHaveBeenNthCalledWith(1, 'workspace', 'B');
     expect(setKV).toHaveBeenNthCalledWith(2, 'workspace', 'A');
+  });
+
+  it('discards a queued visibility flush when app data is reset', async () => {
+    let finishWrite!: () => void;
+    vi.mocked(getKV).mockResolvedValue('saved');
+    vi.mocked(setKV).mockImplementationOnce(() => new Promise<void>((resolve) => { finishWrite = resolve; }));
+
+    await act(async () => root.render(<Harness />));
+    await act(async () => change('first edit'));
+    await tick();
+    await act(async () => change('queued edit'));
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    await act(async () => root.unmount());
+    root = createRoot(document.createElement('div'));
+    await resetAppData();
+    expect(clearAllData).toHaveBeenCalledOnce();
+    await act(async () => finishWrite());
+
+    expect(setKV).toHaveBeenCalledExactlyOnceWith('workspace', 'first edit');
+    await act(async () => root.render(<Harness />));
+    await act(async () => change('new edit'));
+    await tick();
+    expect(setKV).toHaveBeenLastCalledWith('workspace', 'new edit');
   });
 });

@@ -5,8 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDictionary, type Dictionary } from '../src/hooks/useDictionary';
 import type { DictEntry } from '../src/types';
 import { deleteEntry, listEntries, putEntries, putEntry, replaceAllEntries } from '../src/lib/db';
+import { resetAppData } from '../src/lib/reset';
 
 vi.mock('../src/lib/db', () => ({
+  clearAllData: vi.fn(),
   listEntries: vi.fn(),
   putEntry: vi.fn(),
   putEntries: vi.fn(),
@@ -48,6 +50,24 @@ afterEach(async () => {
 });
 
 describe('useDictionary', () => {
+  it('discards queued dictionary writes when app data is reset', async () => {
+    let finishWrite!: () => void;
+    vi.mocked(putEntry).mockImplementationOnce(() => new Promise<void>((resolve) => { finishWrite = resolve; }));
+    await act(async () => root.render(<Harness />));
+    const first = dict.save(entry('1', 'first'));
+    const queued = dict.save(entry('2', 'queued'));
+    const cancelled = expect(queued).rejects.toMatchObject({ name: 'AbortError' });
+    await Promise.resolve();
+    await act(async () => root.unmount());
+    root = createRoot(document.createElement('div'));
+
+    await resetAppData();
+    finishWrite();
+    await first;
+    await cancelled;
+    expect(putEntry).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps loaded false and sets error when initial load fails', async () => {
     vi.mocked(listEntries).mockRejectedValueOnce(new Error('idb down'));
     await act(async () => root.render(<Harness />));

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DictEntry } from '../types';
 import { deleteEntry, listEntries, putEntry, putEntries, replaceAllEntries } from '../lib/db';
 import { mergeEntries, sortEntries, type ImportMode } from '../lib/io';
+import { getDataResetSignal } from '../lib/reset';
 import { restoreInitialDictionary } from '../lib/sampleDictionary';
 
 export interface Dictionary {
@@ -19,14 +20,18 @@ export function useDictionary(): Dictionary {
   const [entries, setEntries] = useState<DictEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetSignal] = useState(getDataResetSignal);
   const latest = useRef<DictEntry[]>(entries);
   const writes = useRef(Promise.resolve());
 
   const enqueue = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
-    const run = writes.current.then(task);
+    const run = writes.current.then(() => {
+      resetSignal.throwIfAborted();
+      return task();
+    });
     writes.current = run.then(() => undefined, () => undefined);
     return run;
-  }, []);
+  }, [resetSignal]);
 
   useEffect(() => {
     let active = true;

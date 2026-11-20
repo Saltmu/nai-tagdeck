@@ -3,9 +3,10 @@ import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useSettings, useWorkspace } from '../src/hooks/useWorkspace';
-import { getKV, setKV } from '../src/lib/db';
+import { clearAllData, getKV, setKV } from '../src/lib/db';
+import { resetAppData } from '../src/lib/reset';
 
-vi.mock('../src/lib/db', () => ({ getKV: vi.fn(), setKV: vi.fn() }));
+vi.mock('../src/lib/db', () => ({ clearAllData: vi.fn(), getKV: vi.fn(), setKV: vi.fn() }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root;
 let current: ReturnType<typeof useWorkspace>;
@@ -57,6 +58,24 @@ it('keeps a negative already saved in the workspace without reading settings', a
   expect(current.loaded).toBe(true);
   expect(current.workspace.negative.map((t) => t.tag)).toEqual(['blurry']);
   expect(getKV).not.toHaveBeenCalledWith('settings');
+  expect(setKV).not.toHaveBeenCalled();
+});
+
+it('does not write a migrated workspace after resetting during the legacy settings read', async () => {
+  let finishSettingsRead!: (value: unknown) => void;
+  vi.mocked(getKV).mockImplementation((key) => {
+    if (key === 'workspace') return Promise.resolve({ base: { quality: [{ tag: 'old tag' }] } } as never);
+    return new Promise((resolve) => { finishSettingsRead = resolve; }) as never;
+  });
+  await render();
+  expect(current.loaded).toBe(false);
+
+  await act(async () => root.unmount());
+  root = createRoot(document.createElement('div'));
+  await resetAppData();
+  expect(clearAllData).toHaveBeenCalledOnce();
+  await act(async () => finishSettingsRead({ negativePrompt: 'old negative' }));
+
   expect(setKV).not.toHaveBeenCalled();
 });
 
