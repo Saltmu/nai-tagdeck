@@ -96,9 +96,10 @@ export function importedBaseForMode(result: Pick<PromptImport, 'base' | 'furData
   const key = normalize(result.furDataset);
   const exists = Object.values(result.base).some((tags) => tags.some((t) => normalize(t.tag) === key));
   if (exists) return result.base;
+  // 品質カテゴリは PROMPT_CATEGORY_KEYS の先頭なので、分類済みタグがあっても送信時の先頭に保てる
   return {
     ...result.base,
-    unclassified: [{ id: newId(), enabled: true, tag: result.furDataset, weight: 1 }, ...result.base.unclassified],
+    quality: [{ id: newId(), enabled: true, tag: result.furDataset, weight: 1 }, ...result.base.quality],
   };
 }
 

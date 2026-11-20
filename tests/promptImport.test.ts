@@ -210,19 +210,20 @@ describe('NovelAI PNG import', () => {
     expect(result.negative?.map((t) => t.tag)).toEqual(['lowres']);
   });
 
-  it('detects leading fur dataset as furry mode without duplicating it, while keeping it for anime mode', async () => {
-    const furry = await read({ v4_prompt: caption('Fur_Dataset, wolf, 1boy') });
+  it('detects leading fur dataset as furry mode without duplicating it, while keeping it leading for anime mode', async () => {
+    const furry = await read({ v4_prompt: caption('Fur_Dataset, blazer, wolf') }, [entry('blazer', 'outfit')]);
     expect(furry.furDataset).toBe('Fur_Dataset');
-    expect(furry.base.unclassified.map((t) => t.tag)).toEqual(['wolf', '1boy']);
-    expect(importedBaseForMode(furry, 'furry').unclassified.map((t) => t.tag)).toEqual(['wolf', '1boy']);
-    expect(importedBaseForMode(furry, 'anime').unclassified.map((t) => t.tag)).toEqual(['Fur_Dataset', 'wolf', '1boy']);
+    expect(furry.base.outfit.map((t) => t.tag)).toEqual(['blazer']);
+    expect(furry.base.unclassified.map((t) => t.tag)).toEqual(['wolf']);
+    expect(buildPrompt(importedBaseForMode(furry, 'furry'), 'numeric')).toBe('blazer, wolf');
+    expect(buildPrompt(importedBaseForMode(furry, 'anime'), 'numeric')).toBe('Fur_Dataset, blazer, wolf');
     expect(furry.generation.values.mode).toBe('furry');
     expect(furry.generation.labels).toContain('生成モード ケモノ');
     expect(furry.notes).not.toContain('生成モード（アニメ／ケモノ）は現在の設定を使います。');
 
     const charOnly = await read({ v4_prompt: caption('fur dataset', ['wolf']) });
     expect(charOnly.base.unclassified).toEqual([]);
-    expect(importedBaseForMode(charOnly, 'anime').unclassified.map((t) => t.tag)).toEqual(['fur dataset']);
+    expect(buildPrompt(importedBaseForMode(charOnly, 'anime'), 'numeric')).toBe('fur dataset');
     expect(charOnly.characters[0]?.tags.unclassified.map((t) => t.tag)).toEqual(['wolf']);
     expect(charOnly.generation.values.mode).toBe('furry');
 
