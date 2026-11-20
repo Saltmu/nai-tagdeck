@@ -1,0 +1,19 @@
+@media (pointer: coarse) {
+  .icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .tag-row > .icon-btn,
+  .tag-edit > .icon-btn {
+    width: 40px;
+    min-width: 40px;
+    min-height: 44px;
+  }
+
+  .viewer-seed-copy,
+  .latest-close {
+    width: 44px;
+    height: 44px;
+  }
+}

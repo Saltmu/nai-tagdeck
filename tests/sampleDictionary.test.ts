@@ -61,6 +61,19 @@ describe('初期辞書の復元', () => {
   });
 });
 
+describe('初期辞書のタグ', () => {
+  it('カンマ区切りの複合タグを持たず、european と表記する', () => {
+    const entries = sampleDictionary();
+    expect(entries.some((entry) => entry.tag.includes(','))).toBe(false);
+    expect(entries.some((entry) => entry.tag === 'europian')).toBe(false);
+    expect(entries.find((entry) => entry.tag === 'european')).toMatchObject({ category: 'appearance', alias: '白人 はくじん' });
+    expect(entries.find((entry) => entry.tag === 'hetero')?.alias).toContain('だんじょ');
+    for (const tag of ['1girl', '1boy', "adam's apple", 'larynx', 'flat chest', 'male face']) {
+      expect(entries.some((entry) => entry.tag === tag), tag).toBe(true);
+    }
+  });
+});
+
 describe('初期辞書のネガティブ', () => {
   it('既定のネガティブのタグをすべて含む（ネガティブかエフェクトとして）', () => {
     const entries = sampleDictionary();

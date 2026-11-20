@@ -1,0 +1,162 @@
+/* ---- app dialog ---- */
+.app-dialog {
+  width: min(420px, 100vw - 2rem);
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-pop);
+}
+
+.app-dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+.app-dialog-message {
+  margin: 0 0 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.app-dialog-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+/* 説明付きの選択肢。ラベルの下に説明を添えたボタンを縦に並べる */
+.app-dialog-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.app-dialog-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-dialog-choice:hover {
+  border-color: var(--accent);
+}
+
+.app-dialog-choice.is-primary {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.app-dialog-choice-label {
+  font-weight: 700;
+}
+
+.app-dialog-choice.is-primary .app-dialog-choice-label {
+  color: var(--accent);
+}
+
+.app-dialog-choice-desc {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.app-dialog-note {
+  margin: 0 0 0.9rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.app-dialog-input {
+  width: 100%;
+  margin-bottom: 0.9rem;
+}
+
+.app-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.png-drop-zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.75rem 0;
+  padding: 0.65rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.png-drop-zone .hint {
+  margin: 0;
+}
+
+.png-drop-zone.is-dragging {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.editor {
+  border-radius: var(--radius);
+}
+
+.editor.is-dragging {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  background: var(--accent-soft);
+}
+
+.prompt-import-dialog {
+  width: min(540px, 100vw - 2rem);
+  max-height: calc(100dvh - 2rem);
+}
+
+.prompt-import-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.prompt-import-filename,
+.prompt-import-summary {
+  overflow-wrap: anywhere;
+}
+
+.prompt-import-summary {
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin-bottom: 0.75rem;
+}
+
+.prompt-import-summary ul {
+  padding-inline-start: 1.4rem;
+}
+
+.prompt-import-categories {
+  display: block;
+  margin: 0 0 0.25rem;
+}
+
+.prompt-import-summary p:first-child {
+  margin-top: 0;
+}
+
+.prompt-import-settings {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+

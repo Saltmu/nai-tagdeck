@@ -1,0 +1,112 @@
+/* ---- layout ---- */
+.app {
+  min-height: 100dvh;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem max(0.75rem, env(safe-area-inset-right)) 0.5rem max(0.75rem, env(safe-area-inset-left));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-title {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  height: 24px;
+}
+
+.app-title img {
+  display: block;
+  flex: none;
+}
+
+/* ヘッダー内のタブ。狭い画面ではアイコンだけにする */
+.tabbar {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.9rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab[aria-current='page'] {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+@media (max-width: 804px) {
+  .tab {
+    padding: 0.45rem 0.55rem;
+  }
+
+  .tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .tab-count {
+    position: absolute;
+    top: -2px;
+    right: -4px;
+    min-width: 1.3em;
+    padding: 0 0.3em;
+    font-size: 0.65rem;
+    line-height: 1.4;
+  }
+
+  .tab-dictionary .tab-count {
+    display: none;
+  }
+}
+
+.tab-count {
+  min-width: 1.5em;
+  padding: 0 0.4em;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.app-main {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0.75rem max(0.75rem, env(safe-area-inset-right)) 0.75rem max(0.75rem, env(safe-area-inset-left));
+}
+
+.error-banner {
+  margin: 0;
+  padding: 0.6rem 1rem;
+  background: var(--danger);
+  color: var(--accent-text);
+}
+

@@ -1,0 +1,20 @@
+/* ---- interaction prefixes (character pose) ---- */
+.interaction-picks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.interaction-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.interaction-sub {
+  margin-left: 0.3rem;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+

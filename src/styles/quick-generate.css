@@ -1,0 +1,79 @@
+/* ---- header: quick generate ---- */
+.icon {
+  display: block;
+  flex: none;
+}
+
+.quick-generate {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.size-toggle {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+
+.size-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.size-btn:hover {
+  color: var(--text);
+}
+
+.size-btn[aria-checked='true'] {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+.generate-btn {
+  gap: 0.3rem;
+  padding: 0.4rem 0.75rem;
+}
+
+.generate-btn[aria-busy='true'] {
+  cursor: progress;
+}
+
+.generate-btn.is-blocked {
+  opacity: 0.6;
+}
+
+.spinner-on-accent {
+  border-color: rgb(255 255 255 / 0.35);
+  border-top-color: var(--accent-text);
+}
+
+@media (max-width: 519px) {
+  .app-header {
+    gap: 0.4rem;
+  }
+
+  .app-title .brand-wordmark {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .app-title {
+    margin-right: 0.25rem;
+  }
+}
+

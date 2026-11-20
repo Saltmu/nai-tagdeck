@@ -1,0 +1,46 @@
+/* ---- tablet / desktop ---- */
+@media (min-width: 768px) {
+  .app-header {
+    padding: 0.6rem max(1.25rem, env(safe-area-inset-right)) 0.6rem max(1.25rem, env(safe-area-inset-left));
+  }
+
+  .app-title {
+    flex: none;
+  }
+
+  .tabbar {
+    justify-content: flex-start;
+  }
+
+  .app-main {
+    padding: 1rem max(1.25rem, env(safe-area-inset-right)) 2rem max(1.25rem, env(safe-area-inset-left));
+  }
+
+  .entry-form {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 2fr) 6.5rem 6rem;
+    align-items: end;
+  }
+
+  .field-tag,
+  .field-alias {
+    grid-column: auto;
+  }
+
+  .toast {
+    bottom: calc(1.5rem + var(--dock-offset) + var(--latest-offset) + var(--undo-offset));
+  }
+
+  .undo-bar-slot {
+    bottom: calc(1.5rem + var(--dock-offset) + var(--latest-offset));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+

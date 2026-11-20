@@ -3,7 +3,7 @@ import { act, StrictMode, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePersistence, type PersistenceState } from '../src/hooks/usePersistence';
-import { clearAllData, getKV, setKV } from '../src/lib/db';
+import { clearAllData, getKV, setKV, type KVKey } from '../src/lib/db';
 import { resetAppData } from '../src/lib/reset';
 
 vi.mock('../src/lib/db', () => ({ clearAllData: vi.fn(), getKV: vi.fn(), setKV: vi.fn() }));
@@ -14,7 +14,7 @@ let value: unknown;
 let change: (value: unknown) => void;
 let renders = 0;
 
-function Harness({ storageKey = 'workspace', onLoad }: { storageKey?: string; onLoad?: (raw: unknown, apply: (v: unknown) => void) => Promise<void> | void }) {
+function Harness({ storageKey = 'workspace', onLoad }: { storageKey?: KVKey; onLoad?: (raw: unknown, apply: (v: unknown) => void) => Promise<void> | void }) {
   renders += 1;
   const [stored, setStored] = useState<unknown>('initial');
   change = setStored;

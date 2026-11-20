@@ -1,6 +1,6 @@
 import type { WorkTag, Workspace } from '../types';
 import { PROMPT_CATEGORY_KEYS } from './categories';
-import { newId } from './id';
+import { newId, normalizeId } from './id';
 import { normalize } from './suggest';
 import { hasNegative, normalizeWorkspace } from './workspace';
 
@@ -41,7 +41,7 @@ export function normalizePresets(raw: unknown): Preset[] {
       if (!name) return [];
       return [
         {
-          id: typeof p.id === 'string' && p.id ? p.id : newId(),
+          id: normalizeId(p.id),
           name,
           workspace: normalizePresetWorkspace(p.workspace),
           updated_at: typeof p.updated_at === 'string' ? p.updated_at : new Date().toISOString(),

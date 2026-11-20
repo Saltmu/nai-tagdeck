@@ -55,6 +55,10 @@ describe('JSON', () => {
   it('壊れた JSON', () => {
     expect(fromJSON('{').errors).toHaveLength(1);
   });
+  it('先頭の BOM を除いて読む', () => {
+    const entries = [e('1', 'solo')];
+    expect(fromJSON(`\uFEFF${toJSON(entries)}`)).toEqual({ entries, errors: [] });
+  });
 });
 
 describe('CSV', () => {

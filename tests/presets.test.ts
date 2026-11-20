@@ -77,6 +77,8 @@ describe('presets', () => {
     expect(list).toHaveLength(1);
     expect(list[0]!.workspace.base.quality[0]!.tag).toBe('x');
     expect(normalizePresets(null)).toEqual([]);
+    expect(normalizePresets([{ name: 'ok', id: '  kept  ', workspace: {} }])[0]!.id).toBe('kept');
+    expect(normalizePresets([{ name: 'ok', id: '   ', workspace: {} }])[0]!.id.trim()).not.toBe('');
   });
 
   it('sameWorkspace はタグの id を無視し、ON/OFF・重み・順番・キャラ情報を比べる', () => {
@@ -134,15 +136,62 @@ describe('backup', () => {
     expect(parseBackup('{')).toMatchObject({ ok: false });
   });
 
-  it('欠けた項目は既定値で補う', () => {
+  it('欠けた項目は既定値で補い、警告する', () => {
     const parsed = parseBackup('{"kind":"backup"}');
     expect(parsed).toMatchObject({
       ok: true,
       data: { dictionary: [], presets: [], settings: DEFAULT_SETTINGS, generation: DEFAULT_GENERATION },
-      warnings: [],
     });
     if (!parsed.ok) throw new Error('unreachable');
+    expect(parsed.warnings).toEqual([
+      'version がないため、version 1 として読み込みます',
+      'dictionary がないため、空の辞書で補います',
+      'presets がないため、空の一覧で補います',
+      'workspace がないため、空の作業状態で補います',
+      'settings がないため、初期設定で補います',
+      'generation がないため、初期の生成設定で補います',
+    ]);
     expect(parsed.data.workspace.negative.map((t) => t.tag)).toEqual(emptyWorkspace().negative.map((t) => t.tag));
+  });
+
+  it('先頭の BOM を除き、未対応の version は拒否する', () => {
+    expect(parseBackup(`\uFEFF${toBackupJSON(data)}`)).toEqual({ ok: true, data, warnings: [] });
+    expect(parseBackup(toBackupJSON(data).replace('"version": 1', '"version": 2'))).toMatchObject({
+      ok: false,
+      error: 'このアプリが読めるバックアップは version 1 です（ファイルは version 2）',
+    });
+  });
+
+  it('辞書の不正な行は警告にし、JSON へ往復せず読む', () => {
+    const parsed = parseBackup(JSON.stringify({
+      kind: 'backup',
+      version: 1,
+      dictionary: [{ tag: '', category: 'quality' }, { tag: 'smile', category: 'appearance' }],
+      presets: [],
+      workspace: {},
+      settings: {},
+      generation: {},
+    }));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.data.dictionary.map((entry) => entry.tag)).toEqual(['smile']);
+    expect(parsed.warnings).toEqual(['1件目: tag が空です']);
+  });
+
+  it('dictionary が配列でなければ空にして警告する', () => {
+    const parsed = parseBackup(JSON.stringify({
+      kind: 'backup',
+      version: 1,
+      dictionary: { entries: [] },
+      presets: [],
+      workspace: {},
+      settings: {},
+      generation: {},
+    }));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.data.dictionary).toEqual([]);
+    expect(parsed.warnings).toEqual(['dictionary の形式が不正なため、空の辞書で補います']);
   });
 });
 

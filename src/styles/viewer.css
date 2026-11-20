@@ -1,0 +1,170 @@
+/* ---- viewer ---- */
+.viewer {
+  width: min(1200px, 100vw - 1rem);
+  max-width: none;
+  max-height: calc(100dvh - 1rem);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.viewer::backdrop {
+  background: rgb(0 0 0 / 0.75);
+}
+
+.viewer-body {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 1rem - 2px);
+}
+
+.viewer-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  background: var(--surface-2);
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+
+.viewer-stage:active {
+  cursor: grabbing;
+}
+
+.viewer-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: center;
+  will-change: transform;
+  -webkit-user-drag: none;
+}
+
+.viewer-zoom-reset {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.viewer-side {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  overflow: auto;
+}
+
+.viewer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.viewer-meta dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.viewer-meta dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-prompt summary {
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.viewer-prompt p {
+  margin: 0.4rem 0 0;
+  font-family: ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.viewer-seed {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.viewer-seed-copy {
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+}
+
+.viewer-seed-copy .icon {
+  margin: auto;
+  width: 18px;
+  height: 18px;
+}
+
+.viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* ボタンを標準より10%大きく */
+.viewer-toolbar .icon-btn {
+  width: 40px;
+  height: 40px;
+}
+
+.viewer-toolbar .icon {
+  margin: auto;
+  width: 22px;
+  height: 22px;
+}
+
+.viewer-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.45);
+  color: #fff;
+  opacity: 0.7;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.viewer-close:hover {
+  opacity: 1;
+}
+
+.viewer-toolbar-gap {
+  flex: 1;
+}
+
+@media (min-width: 900px) {
+  .viewer-body {
+    flex-direction: row;
+  }
+
+  .viewer-stage {
+    width: auto;
+  }
+
+  .viewer-side {
+    flex: 0 0 320px;
+    align-content: start;
+  }
+}
+
