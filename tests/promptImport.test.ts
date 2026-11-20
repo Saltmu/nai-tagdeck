@@ -116,16 +116,16 @@ describe('NovelAI PNG import', () => {
     expect(result.base.unclassified[0]?.tag).toBe(prompt);
   });
 
-  it('appends moved tags without deduplication and round-trips unclassified tags via presets and backups', async () => {
+  it('moves unclassified tags without duplicating the same tag and round-trips them via presets and backups', async () => {
     const result = await read({ v4_prompt: caption('b, -1::A::, A', ['b']) });
     const before = workspaceReducer(emptyWorkspace(), { type: 'replace', workspace: { ...result, negative: [] } });
     const toggleId = before.base.unclassified[1]!.id;
     const toggled = workspaceReducer(before, { type: 'toggle', target: BASE, category: 'unclassified', id: toggleId });
     const first = workspaceReducer(toggled, { type: 'moveFromUnclassified', target: BASE, to: 'outfit', id: toggleId });
     const moved = workspaceReducer(first, { type: 'moveFromUnclassified', target: BASE, to: 'outfit', id: before.base.unclassified[2]!.id });
-    expect(moved.base.outfit).toEqual([toggled.base.unclassified[1], toggled.base.unclassified[2]]);
+    expect(moved.base.outfit).toEqual([toggled.base.unclassified[1]]);
     expect(moved.base.unclassified).toEqual([before.base.unclassified[0]]);
-    expect(buildPrompt(moved.base, 'numeric')).toBe('A, b');
+    expect(buildPrompt(moved.base, 'numeric')).toBe('b');
     const character = moved.characters[0]!;
     const action = { type: 'moveFromUnclassified', target: character.id, id: character.tags.unclassified[0]!.id } as const;
     expect(workspaceReducer(moved, { ...action, to: 'quality' })).toBe(moved);

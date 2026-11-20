@@ -61,6 +61,8 @@ describe('CSV', () => {
   it('引用符・カンマ・改行を含むセルを往復できる', () => {
     const entries = [e('1', 'a, "b"', { alias: '行1\n行2' })];
     expect(fromCSV(toCSV(entries))).toEqual({ entries, errors: [] });
+    const crlf = [e('1', 'a', { alias: 'line1\r\nline2' })];
+    expect(fromCSV(toCSV(crlf))).toEqual({ entries: crlf, errors: [] });
   });
   it('BOM と CRLF を扱う', () => {
     expect(parseCSVRows('﻿a,b\r\n1,2\r\n')).toEqual([
@@ -75,6 +77,23 @@ describe('CSV', () => {
   });
   it('見出しがなければエラー', () => {
     expect(fromCSV('a,b\n').errors).toHaveLength(1);
+  });
+  it('フィールドの途中の引用符はクォート開始にせず、空行のあとでも元の行番号でエラーにする', () => {
+    expect(parseCSVRows('a"b,c\n')).toEqual([['a"b', 'c']]);
+    expect(parseCSVRows('tag,category\n\n,quality\n')).toEqual([
+      ['tag', 'category'],
+      [''],
+      ['', 'quality'],
+    ]);
+    const imported = fromCSV('tag,category\n\n,quality\nsmile,pose\n');
+    expect(imported.errors).toEqual(['3行目: tag が空です']);
+    expect(imported.entries.map((entry) => [entry.tag, entry.category])).toEqual([['smile', 'pose']]);
+    const afterQuote = fromCSV('tag,category\n"ok\nstill",quality\n,quality\n');
+    expect(afterQuote.errors).toEqual(['4行目: tag が空です']);
+    expect(afterQuote.entries.map((entry) => entry.tag)).toEqual(['ok\nstill']);
+    const quotedCrlf = fromCSV('tag,category\r\n"ok\r\nstill",quality\r\n,quality\r\n');
+    expect(quotedCrlf.errors).toEqual(['4行目: tag が空です']);
+    expect(quotedCrlf.entries.map((entry) => entry.tag)).toEqual(['ok\r\nstill']);
   });
 });
 
@@ -95,6 +114,23 @@ describe('mergeEntries', () => {
   });
   it('replace: 取り込んだ内容だけにする', () => {
     expect(mergeEntries(existing, [e('9', 'z')], 'replace').map((m) => m.id)).toEqual(['9']);
+  });
+  it('merge: id とカテゴリ＋タグが同時に当たっても、後続の同じ id で別の行を消さない', () => {
+    const merged = mergeEntries(
+      [e('1', 'old'), e('2', 'smile')],
+      [
+        e('1', 'smile', { alias: '笑み' }),
+        e('3', 'old'),
+        e('1', 'other', { category: 'pose' }),
+      ],
+      'merge',
+    );
+    expect(merged.map((m) => [m.id, m.tag, m.category])).toEqual([
+      ['3', 'old', 'quality'],
+      ['2', 'smile', 'quality'],
+      ['1', 'other', 'pose'],
+    ]);
+    expect(merged.find((m) => m.id === '2')?.alias).toBe('笑み');
   });
 });
 
