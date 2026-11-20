@@ -1,5 +1,12 @@
-import { useCallback, useState } from 'react';
-import { clearToken, loadToken, saveToken, type StoredToken, type TokenStorage } from '../lib/token';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  TOKEN_STORAGE_KEY,
+  clearToken,
+  loadToken,
+  saveToken,
+  type StoredToken,
+  type TokenStorage,
+} from '../lib/token';
 
 export interface TokenState extends StoredToken {
   save: (token: string, storage: TokenStorage) => boolean;
@@ -8,6 +15,18 @@ export interface TokenState extends StoredToken {
 
 export function useToken(): TokenState {
   const [state, setState] = useState<StoredToken>(loadToken);
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== TOKEN_STORAGE_KEY) return;
+      setState((prev) => {
+        const next = loadToken();
+        return prev.token === next.token && prev.storage === next.storage ? prev : next;
+      });
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   const save = useCallback((token: string, storage: TokenStorage) => {
     const ok = saveToken(token, storage);

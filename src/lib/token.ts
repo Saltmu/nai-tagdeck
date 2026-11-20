@@ -4,7 +4,7 @@
  */
 export type TokenStorage = 'session' | 'local';
 
-const KEY = 'nai-tagdeck.token';
+export const TOKEN_STORAGE_KEY = 'nai-tagdeck.token';
 
 function storage(kind: TokenStorage): Storage | null {
   try {
@@ -16,7 +16,7 @@ function storage(kind: TokenStorage): Storage | null {
 
 function read(kind: TokenStorage): string | null {
   try {
-    return storage(kind)?.getItem(KEY) || null;
+    return storage(kind)?.getItem(TOKEN_STORAGE_KEY) || null;
   } catch {
     return null;
   }
@@ -38,7 +38,7 @@ export function loadToken(): StoredToken {
 export function clearToken(): void {
   for (const kind of ['session', 'local'] as const) {
     try {
-      storage(kind)?.removeItem(KEY);
+      storage(kind)?.removeItem(TOKEN_STORAGE_KEY);
     } catch {
       // 保存できない環境では何もしない
     }
@@ -49,7 +49,7 @@ export function clearToken(): void {
 export function saveToken(token: string, kind: TokenStorage): boolean {
   clearToken();
   try {
-    storage(kind)?.setItem(KEY, token);
+    storage(kind)?.setItem(TOKEN_STORAGE_KEY, token);
     return read(kind) === token;
   } catch {
     return false;
@@ -59,6 +59,20 @@ export function saveToken(token: string, kind: TokenStorage): boolean {
 /** 貼り付けたときの前後の空白や「Bearer 」を取り除く。 */
 export function normalizeToken(input: string): string {
   return input.trim().replace(/^Bearer\s+/i, '').trim();
+}
+
+/** Authorization ヘッダーに安全に入れられる印字可能 ASCII 文字だけか検証する。 */
+export function validateToken(token: string): string | null {
+  if (!token) return 'トークンを入力してください';
+  if (/[\r\n]/.test(token)) return 'トークンに改行が含まれています。改行を取り除いてください';
+  if (!/^[\x21-\x7e]+$/.test(token)) {
+    return 'トークンに半角英数字・記号以外の文字（空白や全角文字など）が含まれています';
+  }
+  return null;
+}
+
+export function isValidToken(token: string): boolean {
+  return validateToken(token) === null;
 }
 
 export function maskToken(token: string): string {
