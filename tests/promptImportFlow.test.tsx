@@ -218,3 +218,18 @@ it('preserves fur dataset at the start even with classified tags when generation
     input: 'fur dataset, blazer, wolf',
   }), expect.anything());
 });
+
+it('allows generating after importing a fur-dataset-only base with character tags and applying furry mode', async () => {
+  const charOnlyFurryBytes = pngFixture({ v4_prompt: caption('fur dataset', ['wolf']) });
+  await drop(imageFile(charOnlyFurryBytes, 'char-furry.png'));
+  const dialog = container.querySelector('dialog')!;
+  await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await click(button('適用', dialog));
+  await click(button('生成する（Ctrl+Enter）'));
+  expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
+    input: 'fur dataset',
+    parameters: expect.objectContaining({
+      characterPrompts: [expect.objectContaining({ prompt: 'wolf' })],
+    }),
+  }), expect.anything());
+});

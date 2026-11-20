@@ -20,9 +20,11 @@ interface Args {
 export function useGenerationControls({ generator, token, basePrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings }: Args) {
   const { generating, generate, error } = generator;
   // ---- 生成（ヘッダー・生成パネル・Ctrl+Enter の共通処理） ----
+  // ケモノモードは先頭に fur dataset を補えるため、キャラに ON のタグがあればベースが空でも生成できる
+  const missingPrompt = !basePrompt && !(generation.mode === 'furry' && characterPrompts.length > 0);
   const blocker = !token
     ? 'トークンが未設定です'
-    : !basePrompt
+    : missingPrompt
       ? 'ベースに ON のタグがありません'
       : null;
 
@@ -33,7 +35,7 @@ export function useGenerationControls({ generator, token, basePrompt, characterP
       onOpenSettings();
       return;
     }
-    if (!basePrompt) {
+    if (missingPrompt) {
       show('ベースに ON のタグがありません', 3000);
       return;
     }
