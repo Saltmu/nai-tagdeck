@@ -66,7 +66,9 @@ describe('NovelAI PNG import', () => {
       width: 1000, height: 1000, seed: 123, steps: 50, scale: 5.01, noise_schedule: 'karras',
     });
     expect(result.characterNegative).toBeUndefined();
+    expect(result.characters.map((c) => c.negative)).toEqual(['lowres', '']);
     expect(result.notes).toEqual(expect.arrayContaining([
+      expect.stringContaining('個別欄'),
       expect.stringContaining('4 から 3'), expect.stringContaining('1.234 から 1.23'),
       expect.stringContaining('lowres'), expect.stringContaining('（空欄）'),
     ]));
@@ -79,8 +81,47 @@ describe('NovelAI PNG import', () => {
     negative.caption.char_captions[0]!.centers[0]!.x = 0.5;
     const result = await read({ v4_prompt: { ...caption('2girls', ['girl']), use_coords: true }, v4_negative_prompt: negative });
     expect(result.characterNegative).toBeUndefined();
-    expect(result.notes.join('\n')).toContain('座標は反映できません');
+    expect(result.characters[0]).toMatchObject({ negative: 'lowres', center: { x: 0, y: 0 } });
+    expect(result.notes.join('\n')).toContain('位置が正のプロンプトと違うため、各キャラの個別欄に入れました');
+    expect(result.notes.join('\n')).not.toContain('座標は反映できません');
     expect((await read({ v4_prompt: caption('', ['girl']), v4_negative_prompt: caption('', ['']) })).characterNegative).toBe('');
+  });
+
+  it('stores a usable center and reports when none can be read', async () => {
+    const positive = caption('2girls', ['girl']);
+    positive.use_coords = true;
+    positive.caption.char_captions[0]!.centers = [{ x: 0.254, y: 1.4 }];
+    const placed = await read({ v4_prompt: positive, v4_negative_prompt: caption('', ['lowres']) });
+    expect(placed.characters[0]?.center).toEqual({ x: 0.25, y: 1 });
+    expect(placed.characterNegative).toBeUndefined();
+    expect(placed.characters[0]?.negative).toBe('lowres');
+
+    const missing = caption('2girls', ['girl']);
+    missing.use_coords = true;
+    missing.caption.char_captions[0]!.centers = [];
+    const unread = await read({ v4_prompt: missing });
+    expect(unread.characters[0]?.center).toBeUndefined();
+    expect(unread.notes.join('\n')).toContain('座標は反映できません');
+
+    const partial = caption('2girls', ['girl', 'boy']);
+    partial.use_coords = true;
+    partial.caption.char_captions[0]!.centers = [{ x: 0.2, y: 0.3 }];
+    partial.caption.char_captions[1]!.centers = [];
+    const mixed = await read({ v4_prompt: partial });
+    expect(mixed.characters[0]?.center).toEqual({ x: 0.2, y: 0.3 });
+    expect(mixed.characters[1]?.center).toBeUndefined();
+    expect(mixed.notes.join('\n')).toContain('キャラ2 の座標は読み取れませんでした。再生成では中央（0.5, 0.5）になります。');
+    expect(mixed.notes.join('\n')).not.toContain('座標は反映できません');
+  });
+
+  it('imports cfg rescale and dynamic thresholding only when the image records them', async () => {
+    const recorded = await read({ prompt: 'standing', cfg_rescale: 0.456, dynamic_thresholding: true });
+    expect(recorded.generation.values).toMatchObject({ cfgRescale: 0.46, dynamicThresholding: true });
+    expect(recorded.generation.skipped).not.toEqual(expect.arrayContaining(['CFGリスケール', 'ダイナミックしきい値']));
+    const absent = await read({ prompt: 'standing' });
+    expect(absent.generation.values).not.toHaveProperty('cfgRescale');
+    expect(absent.generation.values).not.toHaveProperty('dynamicThresholding');
+    expect(absent.generation.skipped).not.toEqual(expect.arrayContaining(['CFGリスケール', 'ダイナミックしきい値']));
   });
 
   it('supports the verified base-only fields and keeps missing values absent', async () => {

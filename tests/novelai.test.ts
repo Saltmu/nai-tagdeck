@@ -71,6 +71,29 @@ describe('buildGenerateRequest (V5)', () => {
       { char_caption: 'girl, blue hair', centers: [{ x: 0, y: 0 }] },
     ]);
     expect(p.v4_negative_prompt.caption.char_captions.map((c) => c.char_caption)).toEqual(['lowres, ', '']);
+    expect(p.use_coords).toBe(false);
+    expect(p.cfg_rescale).toBe(0);
+    expect(p.dynamic_thresholding).toBe(false);
+  });
+
+  it('位置を指定したキャラがいるときだけ座標を有効にし、詳細設定を送る', () => {
+    const p = buildGenerateRequest({
+      prompt: '2girls',
+      negative: '',
+      characters: [
+        { prompt: 'girl, red hair', negative: 'blurry', center: { x: 0.2, y: 0.8 } },
+        { prompt: 'girl, blue hair', negative: '' },
+      ],
+      params: { ...params, cfgRescale: 0.3, dynamicThresholding: true },
+    }).parameters;
+    expect(p.use_coords).toBe(true);
+    expect(p.v4_prompt.use_coords).toBe(true);
+    expect(p.cfg_rescale).toBe(0.3);
+    expect(p.dynamic_thresholding).toBe(true);
+    expect(p.characterPrompts.map((c) => c.center)).toEqual([{ x: 0.2, y: 0.8 }, { x: 0.5, y: 0.5 }]);
+    expect(p.v4_prompt.caption.char_captions.map((c) => c.centers)).toEqual([[{ x: 0.2, y: 0.8 }], [{ x: 0.5, y: 0.5 }]]);
+    expect(p.v4_negative_prompt.caption.char_captions.map((c) => c.centers)).toEqual([[{ x: 0.2, y: 0.8 }], [{ x: 0.5, y: 0.5 }]]);
+    expect(p.v4_negative_prompt.caption.char_captions.map((c) => c.char_caption)).toEqual(['blurry', '']);
   });
 
   it('1枚・PNG で、公式UIと同じサンプラー関連の値を送る', () => {

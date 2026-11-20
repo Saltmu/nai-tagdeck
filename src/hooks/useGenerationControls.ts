@@ -41,7 +41,11 @@ export function useGenerationControls({ generator, token, basePrompt, characterP
       token,
       prompt: basePrompt,
       negative: negativePrompt,
-      characters: characterPrompts.map((c) => ({ prompt: c.prompt, negative: settings.characterNegativePrompt })),
+      characters: characterPrompts.map((c) => ({
+        prompt: c.prompt,
+        negative: c.negative !== undefined ? c.negative : settings.characterNegativePrompt,
+        ...(c.center ? { center: c.center } : {}),
+      })),
       settings: generation,
     });
   }, [generating, generate, token, basePrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings]);

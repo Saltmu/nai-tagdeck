@@ -62,6 +62,8 @@ export interface CharacterPrompt {
   id: string;
   name: string;
   prompt: string;
+  negative?: string;
+  center?: { x: number; y: number };
 }
 
 /** ON のキャラクターのうち、出力するタグがあるものだけを返す。 */
@@ -72,7 +74,15 @@ export function buildCharacterPrompts(
 ): CharacterPrompt[] {
   return characters.filter((c) => c.enabled).slice(0, MAX_ENABLED_CHARACTERS).flatMap((c) => {
     const prompt = buildPrompt(c.tags, syntax, keys);
-    return prompt ? [{ id: c.id, name: c.name, prompt }] : [];
+    return prompt
+      ? [{
+          id: c.id,
+          name: c.name,
+          prompt,
+          ...(c.negative !== undefined ? { negative: c.negative } : {}),
+          ...(c.center ? { center: { ...c.center } } : {}),
+        }]
+      : [];
   });
 }
 
