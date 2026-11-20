@@ -1,42 +1,61 @@
-import { useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import type { WorkTag } from '../types';
+import { memo, useCallback, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import type { PromptCategoryKey, WorkTag } from '../types';
+import { categoryLabel } from '../lib/categories';
 import { WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP, clampWeight } from '../lib/prompt';
 import { WeightInput } from './WeightInput';
 import { BookPlusIcon, CheckIcon, CloseIcon, EditIcon } from './icons';
 
 interface Props {
   tag: WorkTag;
-  onToggle: () => void;
-  onWeight: (weight: number) => void;
-  onEdit: (tag: string) => string | null;
-  onRemove: () => void;
-  /** 辞書にないタグのときだけ渡す。 */
-  onRegister?: () => void;
-  categoryMove?: ReactNode;
-  /** 並べ替えモードのときだけ渡す（null は端で動かせない）。 */
-  sorting?: {
-    onUp: (() => void) | null;
-    onDown: (() => void) | null;
-    /** 「||」をつかんで動かしている間、ポインターの縦位置を渡す。 */
-    onDrag: (clientY: number) => void;
-  };
+  onToggle: (id: string) => void;
+  onWeight: (id: string, weight: number) => void;
+  onEdit: (id: string, tag: string) => string | null;
+  onRemove: (id: string) => void;
+  /** 辞書にないタグのときだけ true。 */
+  canRegister?: boolean;
+  onRegister?: (tag: WorkTag) => void;
+  /** 未分類カテゴリからの移動先一覧。 */
+  moveDestinations?: readonly PromptCategoryKey[];
+  onMoveCategory?: (id: string, to: PromptCategoryKey) => void;
+  /** 並べ替えモード。 */
+  sorting?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMove?: (id: string, delta: -1 | 1) => void;
+  /** 「||」をつかんで動かしている間、ポインターの縦位置を渡す。 */
+  onDrag?: (id: string, clientY: number) => void;
 }
 
-export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, categoryMove, sorting }: Props) {
+export const TagRow = memo(function TagRow({
+  tag,
+  onToggle,
+  onWeight,
+  onEdit,
+  onRemove,
+  canRegister,
+  onRegister,
+  moveDestinations,
+  onMoveCategory,
+  sorting = false,
+  canMoveUp = false,
+  canMoveDown = false,
+  onMove,
+  onDrag,
+}: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(tag.tag);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const errorId = useId();
   // ドラッグ中は行の DOM が動いてポインターのキャプチャが外れる（上へ動かすとき）ので、window で追う。
-  // 並びが変わるたびに onDrag の中身（自分の位置）が変わるため、最新のものを ref 経由で呼ぶ
-  const onDragRef = useRef(sorting?.onDrag);
-  onDragRef.current = sorting?.onDrag;
+  const onDragRef = useRef(onDrag);
+  onDragRef.current = onDrag;
   const startDrag = (e: ReactPointerEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
     setDragging(true);
-    const move = (ev: PointerEvent) => onDragRef.current?.(ev.clientY);
+    const id = tag.id;
+    const move = (ev: PointerEvent) => onDragRef.current?.(id, ev.clientY);
     const end = () => {
       setDragging(false);
       window.removeEventListener('pointermove', move);
@@ -47,9 +66,10 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
   };
-  const step = (delta: number) => onWeight(clampWeight(tag.weight + delta));
+  const handleWeightChange = useCallback((weight: number) => onWeight(tag.id, weight), [onWeight, tag.id]);
+  const step = (delta: number) => onWeight(tag.id, clampWeight(tag.weight + delta));
   const commit = () => {
-    const result = onEdit(draft);
+    const result = onEdit(tag.id, draft);
     setError(result);
     if (!result) setEditing(false);
   };
@@ -93,7 +113,7 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
         </span>
       ) : (
         <label className="tag-check">
-          <input type="checkbox" checked={tag.enabled} onChange={onToggle} />
+          <input type="checkbox" checked={tag.enabled} onChange={() => onToggle(tag.id)} />
           <span className="tag-name">{tag.tag}</span>
         </label>
       )}
@@ -104,8 +124,8 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
             type="button"
             className="icon-btn"
             aria-label={`${tag.tag} を上へ`}
-            disabled={!sorting.onUp}
-            onClick={sorting.onUp ?? undefined}
+            disabled={!canMoveUp}
+            onClick={canMoveUp && onMove ? () => onMove(tag.id, -1) : undefined}
           >
             ↑
           </button>
@@ -113,28 +133,41 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
             type="button"
             className="icon-btn"
             aria-label={`${tag.tag} を下へ`}
-            disabled={!sorting.onDown}
-            onClick={sorting.onDown ?? undefined}
+            disabled={!canMoveDown}
+            onClick={canMoveDown && onMove ? () => onMove(tag.id, 1) : undefined}
           >
             ↓
           </button>
         </div>
       ) : (
         <>
-          {!editing && categoryMove}
+          {!editing && moveDestinations && onMoveCategory && (
+            <select
+              className="tag-category-move"
+              aria-label={`${tag.tag} の移動先カテゴリ`}
+              value=""
+              onChange={(e) => {
+                const to = moveDestinations.find((key) => key === e.target.value);
+                if (to) onMoveCategory(tag.id, to);
+              }}
+            >
+              <option value="" disabled>移動先</option>
+              {moveDestinations.map((key) => <option key={key} value={key}>{categoryLabel(key)}</option>)}
+            </select>
+          )}
           {!editing && (
             <button type="button" className="icon-btn" aria-label={`${tag.tag} を編集`} title="このタグを編集"
               onClick={() => { setDraft(tag.tag); setError(null); setEditing(true); }}>
               <EditIcon />
             </button>
           )}
-          {onRegister && !editing && (
+          {canRegister && onRegister && !editing && (
             <button
               type="button"
               className="icon-btn"
               aria-label={`${tag.tag} を辞書に登録`}
               title="このタグを辞書に登録"
-              onClick={onRegister}
+              onClick={() => onRegister(tag)}
             >
               <BookPlusIcon />
             </button>
@@ -150,7 +183,7 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
             >
               −
             </button>
-            <WeightInput value={tag.weight} label={`${tag.tag} の重み`} onChange={onWeight} />
+            <WeightInput value={tag.weight} label={`${tag.tag} の重み`} onChange={handleWeightChange} />
             <button
               type="button"
               className="step-btn"
@@ -166,7 +199,7 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
             type="button"
             className="icon-btn icon-btn-danger"
             aria-label={`${tag.tag} を削除`}
-            onClick={onRemove}
+            onClick={() => onRemove(tag.id)}
           >
             ✕
           </button>
@@ -174,4 +207,4 @@ export function TagRow({ tag, onToggle, onWeight, onEdit, onRemove, onRegister, 
       )}
     </li>
   );
-}
+});

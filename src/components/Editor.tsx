@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type Dispatch } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import {
@@ -86,26 +86,33 @@ export function Editor({
 
   const { characters } = workspace;
   const dialogs = useDialogs();
+  const charactersRef = useRef(characters);
+  useLayoutEffect(() => {
+    charactersRef.current = characters;
+  });
 
   /** キャラ同士の動作を追加したら、まだ対のタグを持っていない相手に付けるか尋ねる。 */
-  const offerPair = async (fromId: string, tag: string) => {
-    const pair = pairedInteraction(tag);
-    if (!pair) return;
-    const key = normalize(pair);
-    const others = characters
-      .map((c, i) => ({ c, name: c.name.trim() || `キャラ${i + 1}` }))
-      .filter(({ c }) => c.id !== fromId && !c.tags.pose.some((t) => normalize(t.tag) === key))
-      // 生成対象のキャラを先に並べる
-      .sort((a, b) => Number(b.c.enabled) - Number(a.c.enabled));
-    if (others.length === 0) return;
-    const target = await dialogs.choose(
-      `相手のキャラクターのポーズに「${pair}」を追加しますか？`,
-      others.map(({ c, name }, i) => ({ value: c.id, label: `${name}に追加`, primary: i === 0 })),
-    );
-    if (!target) return;
-    dispatch({ type: 'add', target, category: 'pose', tag: pair });
-    notify(`${others.find(({ c }) => c.id === target)!.name}に「${pair}」を追加しました`);
-  };
+  const offerPair = useCallback(
+    async (fromId: string, tag: string) => {
+      const pair = pairedInteraction(tag);
+      if (!pair) return;
+      const key = normalize(pair);
+      const others = charactersRef.current
+        .map((c, i) => ({ c, name: c.name.trim() || `キャラ${i + 1}` }))
+        .filter(({ c }) => c.id !== fromId && !c.tags.pose.some((t) => normalize(t.tag) === key))
+        // 生成対象のキャラを先に並べる
+        .sort((a, b) => Number(b.c.enabled) - Number(a.c.enabled));
+      if (others.length === 0) return;
+      const target = await dialogs.choose(
+        `相手のキャラクターのポーズに「${pair}」を追加しますか？`,
+        others.map(({ c, name }, i) => ({ value: c.id, label: `${name}に追加`, primary: i === 0 })),
+      );
+      if (!target) return;
+      dispatch({ type: 'add', target, category: 'pose', tag: pair });
+      notify(`${others.find(({ c }) => c.id === target)!.name}に「${pair}」を追加しました`);
+    },
+    [dialogs, dispatch, notify],
+  );
 
   const enabledCount = characters.filter((c) => c.enabled).length;
 
@@ -113,6 +120,13 @@ export function Editor({
   const negativeSelected = selected === NEGATIVE;
   const activeIndex = characters.findIndex((c) => c.id === selected);
   const active = activeIndex >= 0 ? characters[activeIndex] : undefined;
+  const activeId = active?.id;
+  const handlePoseAdded = useCallback(
+    (tag: string) => {
+      if (activeId) void offerPair(activeId, tag);
+    },
+    [activeId, offerPair],
+  );
 
   // 編集対象のタブはスクロールしてもヘッダーの直下に残す。張り付いている間だけ見た目を変え、
   // スクロール位置の調整（visibleBounds）でも上を隠すものとして扱う
@@ -245,7 +259,7 @@ export function Editor({
           onCopy={onCopy}
           notify={notify}
           onRegister={register}
-          onPoseAdded={(tag) => void offerPair(active.id, tag)}
+          onPoseAdded={handlePoseAdded}
         />
       ) : (
         <div className="category-grid editor-pane">

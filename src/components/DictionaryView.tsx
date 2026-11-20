@@ -4,7 +4,7 @@ import type { Dictionary } from '../hooks/useDictionary';
 import { CATEGORIES, categoryLabel, isCategoryKey } from '../lib/categories';
 import { findDuplicate, parseImportFile, toCSV, toJSON, type ImportMode, type ImportResult } from '../lib/io';
 import { formatWeight, isNeutralWeight } from '../lib/prompt';
-import { matchesFilter, normalize } from '../lib/suggest';
+import { filterEntries, normalize } from '../lib/suggest';
 import { dateStamp, downloadText } from '../lib/browser';
 import { newId } from '../lib/id';
 import { EntryForm } from './EntryForm';
@@ -33,10 +33,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
   const [restoring, setRestoring] = useState(false);
 
   const filtered = useMemo(
-    () =>
-      entries.filter(
-        (e) => (filterCategory === 'all' || e.category === filterCategory) && matchesFilter(e, query),
-      ),
+    () => filterEntries(entries, query, filterCategory),
     [entries, filterCategory, query],
   );
   const shown = filtered.slice(0, MAX_SHOWN);

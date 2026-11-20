@@ -54,6 +54,18 @@ export const DEFAULT_GENERATION: GenerationSettings = {
   seed: null,
 };
 
+export function isDefaultGeneration(g: GenerationSettings): boolean {
+  return (
+    g.mode === DEFAULT_GENERATION.mode &&
+    g.size === DEFAULT_GENERATION.size &&
+    g.steps === DEFAULT_GENERATION.steps &&
+    g.scale === DEFAULT_GENERATION.scale &&
+    g.sampler === DEFAULT_GENERATION.sampler &&
+    g.noiseSchedule === DEFAULT_GENERATION.noiseSchedule &&
+    g.seed === DEFAULT_GENERATION.seed
+  );
+}
+
 function clamp(n: unknown, min: number, max: number, fallback: number): number {
   return typeof n === 'number' && Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 }

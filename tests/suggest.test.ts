@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchesFilter, normalize, suggest } from '../src/lib/suggest';
+import { filterEntries, matchesFilter, normalize, suggest } from '../src/lib/suggest';
 import type { CategoryKey, DictEntry } from '../src/types';
 
 const entry = (tag: string, alias = '', category: CategoryKey = 'appearance', sort_order = 0): DictEntry => ({
@@ -87,5 +87,22 @@ describe('suggest: exact match', () => {
   it('puts the tag typed exactly first, then finds prefixed tags by the part after #', () => {
     const entries = [entry('hugging own legs', '', 'pose', 0), entry('hug', '', 'pose', 5), entry('source#hug', '', 'pose', 6)];
     expect(suggest(entries, 'hug').map((s) => s.entry.tag)).toEqual(['hug', 'hugging own legs', 'source#hug']);
+  });
+
+  it('reuses cached index across queries and does not leak mutable category arrays', () => {
+    const entries = [entry('long hair', 'ロングヘア', 'appearance', 1), entry('blue eyes', '青い目', 'appearance', 0)];
+    const first = suggest(entries, '', { category: 'appearance', showCategoryOnEmpty: true });
+    first.pop();
+    const second = suggest(entries, '', { category: 'appearance', showCategoryOnEmpty: true });
+    expect(second.map((s) => s.entry.tag)).toEqual(['blue eyes', 'long hair']);
+    expect(suggest(entries, 'ろんぐ').map((s) => s.entry.tag)).toEqual(['long hair']);
+  });
+});
+
+describe('filterEntries', () => {
+  it('filters by category and normalized tag or alias', () => {
+    expect(filterEntries(dict, 'へあ', 'all').map((e) => e.tag)).toEqual(['long hair']);
+    expect(filterEntries(dict, 'bl', 'subject').map((e) => e.tag)).toEqual(['Blue_Archive']);
+    expect(filterEntries(dict, '', 'pose').map((e) => e.tag)).toEqual(['looking at viewer']);
   });
 });
