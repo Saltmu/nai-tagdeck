@@ -1,58 +1,261 @@
-import { useCallback, useRef, useState, type Dispatch } from 'react';
-import type { TargetId, WorkTag, Workspace, WorkspaceCategoryKey } from '../types';
-import { tagsOf, type WorkspaceAction } from '../lib/workspace';
+import { useCallback, useEffect, useRef, useState, type Dispatch } from 'react';
+import type { Workspace } from '../types';
+import { tagsOf, workspaceReducer, type WorkspaceAction } from '../lib/workspace';
 
-/** 削除したタグと、元の所属・位置。 */
-export interface RemovedTag {
-  target: TargetId;
-  category: WorkspaceCategoryKey;
-  tag: WorkTag;
-  index: number;
+const HISTORY_LIMIT = 100;
+/** ドラッグ中の moveTo は連続するので、この間隔以内なら 1 ステップにまとめる。 */
+const DRAG_MERGE_MS = 500;
+/** 重み入力とキャラクター名は、この間隔を空けるか欄を離れたら別のステップにする。 */
+const EDIT_MERGE_MS = 3000;
+
+interface PastStep {
+  before: Workspace;
+  label: string;
+}
+
+interface FutureStep {
+  state: Workspace;
+  label: string;
+}
+
+function isTextEntry(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  if (target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return true;
+  if (target.tagName !== 'INPUT') return false;
+  const type = (target as HTMLInputElement).type;
+  return !['button', 'checkbox', 'radio', 'range', 'file', 'color', 'submit', 'reset', 'image', 'hidden'].includes(type);
+}
+
+function tagText(state: Workspace, action: WorkspaceAction): string | undefined {
+  if (action.type === 'moveFromUnclassified') {
+    return tagsOf(state, action.target, 'unclassified')?.find((tag) => tag.id === action.id)?.tag;
+  }
+  if (!('target' in action) || !('category' in action)) return undefined;
+  const tags = tagsOf(state, action.target, action.category);
+  if (!tags) return undefined;
+  if (action.type === 'add') return action.tag.trim();
+  if (action.type === 'pickOne') return action.tag ?? undefined;
+  if ('id' in action) return tags.find((tag) => tag.id === action.id)?.tag;
+  return undefined;
+}
+
+function actionLabel(before: Workspace, action: WorkspaceAction): string {
+  const tag = tagText(before, action);
+  const quoted = tag ? `「${tag}」` : 'タグ';
+  switch (action.type) {
+    case 'add':
+      return `${quoted}を追加しました`;
+    case 'toggle':
+      return `${quoted}のON/OFFを切り替えました`;
+    case 'setWeight':
+      return `${quoted}の重みを変更しました`;
+    case 'setTag':
+      return `${quoted}の名前を変更しました`;
+    case 'remove':
+      return `${quoted}を削除しました`;
+    case 'restore':
+      return `${quoted}を元に戻しました`;
+    case 'move':
+    case 'moveTo':
+      return `${quoted}の順番を変更しました`;
+    case 'setAll':
+      return action.enabled ? 'タグをすべてONにしました' : 'タグをすべてOFFにしました';
+    case 'pickOne':
+      return action.tag === null ? 'よく使うタグを解除しました' : `${quoted}を選びました`;
+    case 'moveFromUnclassified':
+      return `${quoted}を移動しました`;
+    case 'addCharacter':
+      return 'キャラクターを追加しました';
+    case 'removeCharacter':
+      return 'キャラクターを削除しました';
+    case 'renameCharacter':
+      return 'キャラクター名を変更しました';
+    case 'toggleCharacter':
+      return 'キャラクターのON/OFFを切り替えました';
+    case 'moveCharacter':
+      return 'キャラクターの順番を変更しました';
+    case 'replace':
+    case 'commit':
+      return '作業内容を置き換えました';
+  }
+}
+
+function sameTag(a: WorkspaceAction, b: WorkspaceAction): boolean {
+  if (a.type === 'moveFromUnclassified' || b.type === 'moveFromUnclassified') return false;
+  if (!('id' in a) || !('id' in b) || !('target' in a) || !('target' in b)) return false;
+  if (!('category' in a) || !('category' in b)) return false;
+  return a.id === b.id && a.target === b.target && a.category === b.category;
 }
 
 /**
- * タグ行の削除を取り消せるようにする。削除は今までどおり即座に反映し、削除したタグを溜めておく。
- * 溜めたタグは、プリセット読み込み・新規作成・バックアップ復元などの置き換えと、元のキャラの削除で破棄する。
+ * ワークスペース操作を 1 ステップずつ取り消す・やり直す。
+ * 入力中の重み変更とキャラクター名、ドラッグ中の並び替えだけを 1 ステップにまとめる。
+ * 欄を離れる、通知を閉じる、または 3 秒空くと、そのまとまりは終わる。
+ * テキスト入力中の Ctrl/Cmd+Z は入力欄に任せ、ダイアログ表示中は反応しない。
+ * 永続化の読み込みなど、この dispatch を通らない置換は履歴を捨てる。
  */
 export function useTagUndo(
   workspace: Workspace,
   dispatch: Dispatch<WorkspaceAction>,
   notify: (message: string) => void,
 ) {
-  const [removed, setRemoved] = useState<RemovedTag[]>([]);
-  const workspaceRef = useRef(workspace);
-  workspaceRef.current = workspace;
+  const [past, setPast] = useState<PastStep[]>([]);
+  const [future, setFuture] = useState<FutureStep[]>([]);
+  const [barHidden, setBarHidden] = useState(false);
+  const pastRef = useRef(past);
+  const futureRef = useRef(future);
+  const ownedRef = useRef(workspace);
+  const lastActionRef = useRef<WorkspaceAction | null>(null);
+  const lastAtRef = useRef(0);
+  pastRef.current = past;
+  futureRef.current = future;
+
+  // 永続化の読み込みなど、このフックを通らない更新は履歴と対応しないので捨てる。
+  if (workspace !== ownedRef.current) {
+    ownedRef.current = workspace;
+    lastActionRef.current = null;
+    if (pastRef.current.length > 0 || futureRef.current.length > 0) {
+      pastRef.current = [];
+      futureRef.current = [];
+      setPast([]);
+      setFuture([]);
+    }
+  }
+
+  const apply = useCallback(
+    (snapshot: Workspace) => {
+      ownedRef.current = snapshot;
+      dispatch({ type: 'commit', workspace: snapshot });
+    },
+    [dispatch],
+  );
 
   const trackedDispatch = useCallback<Dispatch<WorkspaceAction>>(
     (action) => {
-      if (action.type === 'remove' && action.undo) {
-        const tags = tagsOf(workspaceRef.current, action.target, action.category);
-        const index = tags?.findIndex((t) => t.id === action.id) ?? -1;
-        if (tags && index >= 0) {
-          const item: RemovedTag = { target: action.target, category: action.category, tag: tags[index]!, index };
-          setRemoved((prev) => (prev.some((r) => r.tag.id === item.tag.id) ? prev : [...prev, item]));
-        }
-      } else if (action.type === 'replace') {
-        setRemoved([]);
-      } else if (action.type === 'removeCharacter') {
-        setRemoved((prev) => (prev.some((r) => r.target === action.id) ? prev.filter((r) => r.target !== action.id) : prev));
+      const before = ownedRef.current;
+      const after = workspaceReducer(before, action);
+      if (after === before) {
+        dispatch(action);
+        return;
       }
-      dispatch(action);
+      const now = Date.now();
+      const previous = lastActionRef.current;
+      const editing = isTextEntry(document.activeElement);
+      const merge =
+        previous !== null &&
+        previous.type === action.type &&
+        ((action.type === 'renameCharacter' &&
+          previous.type === 'renameCharacter' &&
+          previous.id === action.id &&
+          editing &&
+          now - lastAtRef.current < EDIT_MERGE_MS) ||
+          (action.type === 'setWeight' &&
+            previous.type === 'setWeight' &&
+            sameTag(previous, action) &&
+            editing &&
+            now - lastAtRef.current < EDIT_MERGE_MS) ||
+          (action.type === 'moveTo' &&
+            previous.type === 'moveTo' &&
+            sameTag(previous, action) &&
+            now - lastAtRef.current < DRAG_MERGE_MS));
+      lastActionRef.current = action;
+      lastAtRef.current = now;
+      if (!merge || pastRef.current.length === 0) {
+        const next = [...pastRef.current, { before, label: actionLabel(before, action) }];
+        if (next.length > HISTORY_LIMIT) next.shift();
+        pastRef.current = next;
+        setPast(next);
+      }
+      if (futureRef.current.length > 0) {
+        futureRef.current = [];
+        setFuture([]);
+      }
+      setBarHidden(false);
+      ownedRef.current = after;
+      dispatch({ type: 'commit', workspace: after });
     },
     [dispatch],
   );
 
   const undo = useCallback(() => {
-    if (removed.length === 0) return;
-    // 消した順の逆に戻すと、記録した位置がそのまま合う
-    for (const r of [...removed].reverse()) {
-      dispatch({ type: 'restore', target: r.target, category: r.category, tag: r.tag, index: r.index });
-    }
-    notify(removed.length === 1 ? `「${removed[0]!.tag.tag}」を元に戻しました` : `${removed.length}件のタグを元に戻しました`);
-    setRemoved([]);
-  }, [removed, dispatch, notify]);
+    const step = pastRef.current.at(-1);
+    if (!step) return;
+    const current = ownedRef.current;
+    const nextPast = pastRef.current.slice(0, -1);
+    pastRef.current = nextPast;
+    setPast(nextPast);
+    const nextFuture = [...futureRef.current, { state: current, label: step.label }];
+    futureRef.current = nextFuture;
+    setFuture(nextFuture);
+    lastActionRef.current = null;
+    setBarHidden(false);
+    apply(step.before);
+    notify('元に戻しました');
+  }, [apply, notify]);
 
-  const dismiss = useCallback(() => setRemoved([]), []);
+  const redo = useCallback(() => {
+    const step = futureRef.current.at(-1);
+    if (!step) return;
+    const current = ownedRef.current;
+    const nextFuture = futureRef.current.slice(0, -1);
+    futureRef.current = nextFuture;
+    setFuture(nextFuture);
+    const nextPast = [...pastRef.current, { before: current, label: step.label }];
+    pastRef.current = nextPast;
+    setPast(nextPast);
+    lastActionRef.current = null;
+    setBarHidden(false);
+    apply(step.state);
+    notify('やり直しました');
+  }, [apply, notify]);
 
-  return { removed, dispatch: trackedDispatch, undo, dismiss };
+  const dismiss = useCallback(() => {
+    lastActionRef.current = null;
+    setBarHidden(true);
+  }, []);
+
+  const undoRef = useRef(undo);
+  const redoRef = useRef(redo);
+  undoRef.current = undo;
+  redoRef.current = redo;
+
+  useEffect(() => {
+    const onFocusOut = (event: FocusEvent) => {
+      if (isTextEntry(event.target)) lastActionRef.current = null;
+    };
+    document.addEventListener('focusout', onFocusOut);
+    return () => document.removeEventListener('focusout', onFocusOut);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.altKey) return;
+      if (document.querySelector('dialog[open]')) return;
+      if (isTextEntry(event.target)) return;
+      if (!event.ctrlKey && !event.metaKey) return;
+      const key = event.key.toLowerCase();
+      const redoKey = key === 'y' || (key === 'z' && event.shiftKey);
+      const undoKey = key === 'z' && !event.shiftKey;
+      if (!redoKey && !undoKey) return;
+      event.preventDefault();
+      if (redoKey) redoRef.current();
+      else undoRef.current();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  const canUndo = past.length > 0;
+  const canRedo = future.length > 0;
+  return {
+    dispatch: trackedDispatch,
+    undo,
+    redo,
+    dismiss,
+    canUndo,
+    canRedo,
+    label: past.at(-1)?.label ?? null,
+    barOpen: !barHidden && (canUndo || canRedo),
+  };
 }
