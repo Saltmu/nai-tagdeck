@@ -3,18 +3,20 @@ import { act, useReducer } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useTagUndo } from '../src/hooks/useTagUndo';
-import { BASE, emptyWorkspace, newCharacter, workspaceReducer } from '../src/lib/workspace';
+import { BASE, emptyWorkspace, newCharacter, workspaceReducer, type WorkspaceAction } from '../src/lib/workspace';
 import type { Workspace } from '../src/types';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root;
 let api: ReturnType<typeof useTagUndo>;
+let rawDispatch: (action: WorkspaceAction) => void;
 let ws: Workspace;
 const notify = vi.fn();
 
 function Harness({ initial }: { initial: Workspace }) {
   const [workspace, dispatch] = useReducer(workspaceReducer, initial);
   ws = workspace;
+  rawDispatch = dispatch;
   api = useTagUndo(workspace, dispatch, notify);
   return null;
 }
@@ -24,6 +26,11 @@ const names = () => ws.base.appearance.map((t) => t.tag);
 const idOf = (tag: string) => ws.base.appearance.find((t) => t.tag === tag)!.id;
 const removeTag = (tag: string) =>
   run(() => api.dispatch({ type: 'remove', target: BASE, category: 'appearance', id: idOf(tag), undo: true }));
+const key = (init: KeyboardEventInit, target?: EventTarget) =>
+  run(() => {
+    const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+    (target ?? window).dispatchEvent(event);
+  });
 
 beforeEach(async () => {
   notify.mockClear();
@@ -35,54 +42,173 @@ beforeEach(async () => {
   w = workspaceReducer(w, { type: 'toggle', target: BASE, category: 'appearance', id: w.base.appearance[0]!.id });
   await mount(w);
 });
-afterEach(async () => { await act(async () => root.unmount()); });
+afterEach(async () => {
+  document.body.textContent = '';
+  await act(async () => root.unmount());
+});
 
 it('restores a removed tag with its weight, state and position', async () => {
   await removeTag('a');
   expect(names()).toEqual(['b', 'c', 'd']);
+  expect(api.label).toBe('「a」を削除しました');
+  expect(api.barOpen).toBe(true);
   await run(() => api.undo());
   expect(ws.base.appearance[0]).toMatchObject({ tag: 'a', weight: 1.2, enabled: false });
   expect(names()).toEqual(['a', 'b', 'c', 'd']);
-  expect(api.removed).toEqual([]);
+  expect(api.canUndo).toBe(false);
+  expect(api.canRedo).toBe(true);
+  expect(notify).toHaveBeenCalledWith('元に戻しました');
 });
 
-it('groups consecutive removals and restores all of them in order', async () => {
+it('undoes one removal at a time and redoes it', async () => {
   await removeTag('b');
   await removeTag('a');
   await removeTag('d');
-  expect(api.removed).toHaveLength(3);
+  await run(() => api.undo());
+  expect(names()).toEqual(['c', 'd']);
+  await run(() => api.redo());
+  expect(names()).toEqual(['c']);
+  expect(notify).toHaveBeenLastCalledWith('やり直しました');
+  await run(() => api.undo());
+  await run(() => api.undo());
+  expect(names()).toEqual(['a', 'c', 'd']);
+});
+
+it('drops the redo stack when a new action is recorded', async () => {
+  await removeTag('b');
+  await run(() => api.undo());
+  await run(() => api.dispatch({ type: 'add', target: BASE, category: 'appearance', tag: 'e' }));
+  expect(api.canRedo).toBe(false);
+  await run(() => api.redo());
+  expect(names()).toEqual(['a', 'b', 'c', 'd', 'e']);
   await run(() => api.undo());
   expect(names()).toEqual(['a', 'b', 'c', 'd']);
 });
 
-it('prefers the current tag when the same tag was added again', async () => {
-  await removeTag('b');
-  await run(() => api.dispatch({ type: 'add', target: BASE, category: 'appearance', tag: 'b', weight: 2 }));
+it('undoes weight changes, reordering, bulk toggle, quick picks, moves and replacement', async () => {
+  await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.4 }));
+  await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.6 }));
+  expect(ws.base.appearance.find((t) => t.tag === 'b')?.weight).toBe(1.6);
   await run(() => api.undo());
-  expect(names()).toEqual(['a', 'c', 'd', 'b']);
-  expect(ws.base.appearance.at(-1)?.weight).toBe(2);
+  expect(ws.base.appearance.find((t) => t.tag === 'b')?.weight).toBe(1);
+
+  await run(() => api.dispatch({ type: 'move', target: BASE, category: 'appearance', id: idOf('c'), delta: -1 }));
+  expect(names()).toEqual(['a', 'c', 'b', 'd']);
+  await run(() => api.undo());
+  expect(names()).toEqual(['a', 'b', 'c', 'd']);
+
+  await run(() => api.dispatch({ type: 'setAll', target: BASE, category: 'appearance', enabled: false }));
+  expect(ws.base.appearance.every((t) => !t.enabled)).toBe(true);
+  await run(() => api.undo());
+  expect(ws.base.appearance[0]!.enabled).toBe(false);
+  expect(ws.base.appearance[1]!.enabled).toBe(true);
+
+  await run(() => api.dispatch({
+    type: 'pickOne', target: BASE, category: 'appearance', group: ['a', 'b'], tag: null,
+  }));
+  expect(names()).toEqual(['c', 'd']);
+  await run(() => api.undo());
+  expect(names()).toEqual(['a', 'b', 'c', 'd']);
+
+  await run(() => api.dispatch({ type: 'add', target: BASE, category: 'unclassified', tag: 'loose' }));
+  const loose = ws.base.unclassified[0]!.id;
+  await run(() => api.dispatch({ type: 'moveFromUnclassified', target: BASE, id: loose, to: 'outfit' }));
+  expect(ws.base.outfit.map((t) => t.tag)).toEqual(['loose']);
+  await run(() => api.undo());
+  expect(ws.base.unclassified.map((t) => t.tag)).toEqual(['loose']);
+
+  const replaced = emptyWorkspace();
+  await run(() => api.dispatch({ type: 'replace', workspace: replaced }));
+  expect(ws.base.appearance).toEqual([]);
+  await run(() => api.undo());
+  expect(names()).toEqual(['a', 'b', 'c', 'd']);
 });
 
-it('discards pending removals when the workspace is replaced', async () => {
-  await removeTag('a');
-  await run(() => api.dispatch({ type: 'replace', workspace: emptyWorkspace() }));
-  expect(api.removed).toEqual([]);
+it('treats a drag of the same tag as one step', async () => {
+  await run(() => api.dispatch({ type: 'moveTo', target: BASE, category: 'appearance', id: idOf('a'), index: 2 }));
+  await run(() => api.dispatch({ type: 'moveTo', target: BASE, category: 'appearance', id: idOf('a'), index: 3 }));
+  expect(names()).toEqual(['b', 'c', 'd', 'a']);
+  await run(() => api.undo());
+  expect(names()).toEqual(['a', 'b', 'c', 'd']);
+  expect(api.canUndo).toBe(false);
 });
 
-it('drops removals of a deleted character and keeps the others', async () => {
-  const character = newCharacter(0);
-  await run(() => api.dispatch({ type: 'replace', workspace: { ...emptyWorkspace(), characters: [character] } }));
-  await run(() => api.dispatch({ type: 'add', target: character.id, category: 'pose', tag: 'sit' }));
-  const id = ws.characters[0]!.tags.pose[0]!.id;
-  await run(() => api.dispatch({ type: 'remove', target: character.id, category: 'pose', id, undo: true }));
-  await run(() => api.dispatch({ type: 'add', target: BASE, category: 'appearance', tag: 'x' }));
-  await removeTag('x');
-  expect(api.removed).toHaveLength(2);
-  await run(() => api.dispatch({ type: 'removeCharacter', id: character.id }));
-  expect(api.removed.map((r) => r.tag.tag)).toEqual(['x']);
+it('collapses consecutive character renames into one step', async () => {
+  await run(() => api.dispatch({ type: 'addCharacter' }));
+  const id = ws.characters[0]!.id;
+  await run(() => api.dispatch({ type: 'renameCharacter', id, name: 'あ' }));
+  await run(() => api.dispatch({ type: 'renameCharacter', id, name: 'あい' }));
+  expect(ws.characters[0]!.name).toBe('あい');
+  await run(() => api.undo());
+  expect(ws.characters[0]!.name).toBe('キャラ1');
+  await run(() => api.undo());
+  expect(ws.characters).toEqual([]);
 });
 
-it('does not track removals without the undo flag', async () => {
+it('tracks removals that do not pass the legacy undo flag', async () => {
   await run(() => api.dispatch({ type: 'remove', target: BASE, category: 'appearance', id: idOf('a') }));
-  expect(api.removed).toEqual([]);
+  expect(api.canUndo).toBe(true);
+  await run(() => api.undo());
+  expect(names()).toEqual(['a', 'b', 'c', 'd']);
+});
+
+it('restores a removed character as its own step', async () => {
+  const character = newCharacter(0);
+  await run(() => api.dispatch({ type: 'replace', workspace: { ...ws, characters: [character] } }));
+  await run(() => api.dispatch({ type: 'removeCharacter', id: character.id }));
+  expect(ws.characters).toEqual([]);
+  await run(() => api.undo());
+  expect(ws.characters.map((c) => c.id)).toEqual([character.id]);
+});
+
+it('discards history when the workspace is replaced outside the tracked dispatch', async () => {
+  await removeTag('a');
+  expect(api.canUndo).toBe(true);
+  await run(() => rawDispatch({ type: 'replace', workspace: emptyWorkspace() }));
+  expect(api.canUndo).toBe(false);
+  expect(api.canRedo).toBe(false);
+  expect(ws.base.appearance).toEqual([]);
+});
+
+it('hides the bar without dropping history', async () => {
+  await removeTag('a');
+  await run(() => api.dismiss());
+  expect(api.barOpen).toBe(false);
+  expect(api.canUndo).toBe(true);
+  await run(() => api.undo());
+  expect(names()[0]).toBe('a');
+});
+
+it('undoes and redoes from Ctrl, Cmd, Shift and Y shortcuts', async () => {
+  await removeTag('c');
+  await key({ key: 'z', ctrlKey: true });
+  expect(names()).toEqual(['a', 'b', 'c', 'd']);
+  await key({ key: 'Z', ctrlKey: true, shiftKey: true });
+  expect(names()).toEqual(['a', 'b', 'd']);
+  await key({ key: 'z', metaKey: true });
+  expect(names()).toEqual(['a', 'b', 'c', 'd']);
+  await key({ key: 'y', ctrlKey: true });
+  expect(names()).toEqual(['a', 'b', 'd']);
+});
+
+it('leaves text entry, composition and open dialogs to the browser', async () => {
+  await removeTag('c');
+  const input = document.createElement('input');
+  document.body.append(input);
+  await key({ key: 'z', ctrlKey: true }, input);
+  expect(names()).toEqual(['a', 'b', 'd']);
+
+  await key({ key: 'z', ctrlKey: true, isComposing: true });
+  expect(names()).toEqual(['a', 'b', 'd']);
+
+  const dialog = document.createElement('dialog');
+  dialog.open = true;
+  document.body.append(dialog);
+  await key({ key: 'z', metaKey: true });
+  expect(names()).toEqual(['a', 'b', 'd']);
+});
+
+it('does not record an action that changes nothing', async () => {
+  await run(() => api.dispatch({ type: 'move', target: BASE, category: 'appearance', id: idOf('d'), delta: 1 }));
+  expect(api.canUndo).toBe(false);
 });

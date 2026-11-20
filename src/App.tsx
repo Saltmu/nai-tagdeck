@@ -114,6 +114,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   });
   const latest = imageStore.images[0];
   const { unseenId, dismiss } = useLatestImageNotice(latest?.id, tab === 'generate');
+  const showLatest = tab === 'editor' && !!latest && unseenId === latest.id;
   const pickPng = firstRunReady ? () => pngInput.current?.click() : undefined;
   const openPromptImport = (source: PromptSource) => {
     if (firstRunReady) setPromptSource(source);
@@ -135,7 +136,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const showWorkbench = tab === 'editor' || tab === 'generate';
 
   return (
-    <div className="app">
+    <div className={`app${showLatest ? ' has-latest' : ''}`}>
       <header className="app-header" data-occludes>
         <h1 className="app-title" aria-label="nai-tagdeck">
           <img className="brand-icon" src={`${import.meta.env.BASE_URL}brand/icon.svg`} width="24" height="24" alt="" />
@@ -279,13 +280,21 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         />
       )}
 
-      {tab === 'editor' && latest && unseenId === latest.id && (
+      {showLatest && latest && (
         <LatestPreview image={latest} onOpen={() => setTab('generate')} onDismiss={dismiss} />
       )}
 
-      <UndoBar removed={tagUndo.removed} onUndo={tagUndo.undo} onDismiss={tagUndo.dismiss} />
+      <UndoBar
+        open={tagUndo.barOpen}
+        label={tagUndo.label}
+        canUndo={tagUndo.canUndo}
+        canRedo={tagUndo.canRedo}
+        onUndo={tagUndo.undo}
+        onRedo={tagUndo.redo}
+        onDismiss={tagUndo.dismiss}
+      />
 
-      <div className={`toast${tagUndo.removed.length > 0 ? ' toast-raised' : ''}${tab === 'generate' ? ' toast-above-dock' : ''}`} role="status" aria-live="polite">
+      <div className={`toast${tagUndo.barOpen ? ' toast-raised' : ''}`} role="status" aria-live="polite">
         {message}
       </div>
     </div>

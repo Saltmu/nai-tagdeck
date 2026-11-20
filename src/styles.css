@@ -38,6 +38,8 @@
   --z-toast: 70;
   --z-undo-bar: 80;
   --z-gesture-shield: 90; /* 候補の外を押したあと、その押下が下の要素に届かないよう一時的に覆う透明な板 */
+  /* 狭い画面で下端に固定した生成ドックの高さ。広い画面と非表示のときは 0 */
+  --dock-offset: 0px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1159,7 +1161,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  bottom: calc(env(safe-area-inset-bottom) + 12px + var(--dock-offset));
   z-index: var(--z-toast);
   max-width: calc(100vw - 2rem);
   padding: 0.55rem 1rem;
@@ -1180,7 +1182,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
 .undo-bar-slot {
   position: fixed;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  bottom: calc(env(safe-area-inset-bottom) + 12px + var(--dock-offset));
   z-index: var(--z-undo-bar);
   width: max-content;
   max-width: calc(100vw - 1.5rem);
@@ -1211,7 +1213,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
 }
 
 .toast-raised {
-  bottom: calc(env(safe-area-inset-bottom) + 64px);
+  bottom: calc(env(safe-area-inset-bottom) + 64px + var(--dock-offset));
 }
 
 /* ---- tablet / desktop ---- */
@@ -1243,15 +1245,15 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   }
 
   .toast {
-    bottom: 1.5rem;
+    bottom: calc(1.5rem + var(--dock-offset));
   }
 
   .undo-bar-slot {
-    bottom: 1.5rem;
+    bottom: calc(1.5rem + var(--dock-offset));
   }
 
   .toast-raised {
-    bottom: 4.5rem;
+    bottom: calc(4.5rem + var(--dock-offset));
   }
 }
 
@@ -1439,8 +1441,12 @@ textarea {
     padding-top: 0.9rem;
   }
 
-  .toast-above-dock {
-    bottom: calc(env(safe-area-inset-bottom) + 72px);
+  /* 未読のプレビューは右下。取り消しとトーストは左に寄せて重ならないようにする */
+  .has-latest .undo-bar-slot,
+  .has-latest .toast {
+    left: max(0.75rem, env(safe-area-inset-left));
+    transform: none;
+    max-width: calc(100vw - 10.25rem - env(safe-area-inset-left) - env(safe-area-inset-right));
   }
 }
 
@@ -2259,7 +2265,7 @@ textarea {
 .latest-preview {
   position: fixed;
   right: max(0.75rem, env(safe-area-inset-right));
-  bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
+  bottom: calc(env(safe-area-inset-bottom) + 0.75rem + var(--dock-offset));
   z-index: var(--z-latest-preview);
   display: flex;
   align-items: flex-start;

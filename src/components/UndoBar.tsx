@@ -1,23 +1,30 @@
-import type { RemovedTag } from '../hooks/useTagUndo';
-
 interface Props {
-  removed: RemovedTag[];
+  open: boolean;
+  label: string | null;
+  canUndo: boolean;
+  canRedo: boolean;
   onUndo: () => void;
+  onRedo: () => void;
   onDismiss: () => void;
 }
 
-/** タグを削除した後の取り消し通知。自動では消えず、続けて消したタグは1つにまとめる。 */
-export function UndoBar({ removed, onUndo, onDismiss }: Props) {
+/** 直前のワークスペース操作を 1 件ずつ取り消す・やり直す。 */
+export function UndoBar({ open, label, canUndo, canRedo, onUndo, onRedo, onDismiss }: Props) {
   return (
-    <div className="undo-bar-slot" role="status" aria-live="polite">
-      {removed.length > 0 && (
-        <div className="undo-bar">
-          <span className="undo-bar-text">
-            {removed.length === 1 ? `「${removed[0]!.tag.tag}」を削除しました` : `${removed.length}件のタグを削除しました`}
-          </span>
-          <button type="button" className="btn btn-small btn-primary" onClick={onUndo}>
-            元に戻す
-          </button>
+    <div className="undo-bar-slot">
+      {open && (
+        <div className="undo-bar" role="status" aria-live="polite">
+          <span className="undo-bar-text">{canUndo ? label : '操作を取り消しました'}</span>
+          {canUndo && (
+            <button type="button" className="btn btn-small btn-primary" onClick={onUndo} title="Ctrl+Z または ⌘Z">
+              元に戻す
+            </button>
+          )}
+          {canRedo && (
+            <button type="button" className="btn btn-small" onClick={onRedo} title="Ctrl+Shift+Z または ⌘Shift+Z">
+              やり直す
+            </button>
+          )}
           <button type="button" className="btn btn-small btn-ghost" onClick={onDismiss}>
             閉じる
           </button>
