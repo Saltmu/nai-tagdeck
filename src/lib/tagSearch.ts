@@ -68,10 +68,35 @@ function nfkcUnits(text: string): NormUnit[] {
   return units;
 }
 
-/** NFKC の後に normalize と同じ大小文字・かな・アンダースコアの規則を適用する。 */
-function foldUnit(unit: NormUnit): NormUnit[] {
+/**
+ * 文字列全体の toLowerCase を、各文字の元の位置へ割り当てる。
+ * 語末の Σ は全体では ς になり、1文字ずつだと σ になる。
+ * 長さが一致しない変換には対応できない。
+ */
+function lowerUnits(units: NormUnit[]): NormUnit[] | null {
+  const text = units.map((unit) => unit.ch).join('');
+  const lower = text.toLowerCase();
+  const perChar: NormUnit[] = [];
+  for (const unit of units) {
+    const folded = unit.ch.toLowerCase();
+    for (let offset = 0; offset < folded.length; ) {
+      const charEnd = codePointEnd(folded, offset);
+      perChar.push({ start: unit.start, end: unit.end, ch: folded.slice(offset, charEnd) });
+      offset = charEnd;
+    }
+  }
+  if (perChar.map((unit) => unit.ch).join('').length !== lower.length) return null;
+  let offset = 0;
+  return perChar.map((unit) => {
+    const ch = lower.slice(offset, offset + unit.ch.length);
+    offset += unit.ch.length;
+    return ch === unit.ch ? unit : { ...unit, ch };
+  });
+}
+
+/** 小文字化のあと、normalize と同じかなとアンダースコアの規則を適用する。 */
+function foldKanaAndUnderscore(unit: NormUnit): NormUnit[] {
   const folded = unit.ch
-    .toLowerCase()
     .replace(/[ァ-ヶ]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60))
     .replace(/_/g, ' ');
   const units: NormUnit[] = [];
@@ -97,7 +122,9 @@ function normalizedUnits(tag: string): NormUnit[] | null {
     pending = null;
   };
 
-  for (const unit of nfkcUnits(tag).flatMap(foldUnit)) {
+  const lowered = lowerUnits(nfkcUnits(tag));
+  if (!lowered) return null;
+  for (const unit of lowered.flatMap(foldKanaAndUnderscore)) {
     if (/\s/u.test(unit.ch)) {
       pending = pending ? { start: pending.start, end: unit.end } : { start: unit.start, end: unit.end };
     } else {

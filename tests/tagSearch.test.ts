@@ -52,5 +52,13 @@ describe('タグ検索', () => {
       { text: '花', match: true },
       { text: '束', match: false },
     ]);
+    expect(highlightTag('ΟΣ flower', 'ος')).toEqual([
+      { text: 'ΟΣ', match: true },
+      { text: ' flower', match: false },
+    ]);
+    expect(highlightTag('xΣ', 'ς')).toEqual([
+      { text: 'x', match: false },
+      { text: 'Σ', match: true },
+    ]);
   });
 });
