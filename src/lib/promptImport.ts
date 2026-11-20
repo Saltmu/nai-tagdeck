@@ -191,14 +191,17 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
   const model = typeof comment.model_name === 'string' ? comment.model_name : metadata.Source;
   if (model) notes.push(`画像のモデルは ${model} です。生成時はこのアプリのモデルを使います。`);
   if (useCoordinates) {
-    let applied = false;
+    const missed: string[] = [];
     characters.forEach((character, i) => {
       const center = readCenter(positiveChars[i]?.centers);
-      if (!center) return;
-      character.center = center;
-      applied = true;
+      if (center) character.center = center;
+      else missed.push(character.name);
     });
-    if (!applied) notes.push('画像に記録されたキャラクターの座標は反映できません。');
+    if (characters.length === 0 || missed.length === characters.length) {
+      notes.push('画像に記録されたキャラクターの座標は反映できません。');
+    } else if (missed.length > 0) {
+      notes.push(`${missed.join('、')} の座標は読み取れませんでした。再生成では中央（0.5, 0.5）になります。`);
+    }
   }
   notes.push('生成モード（アニメ／ケモノ）は現在の設定を使います。');
 

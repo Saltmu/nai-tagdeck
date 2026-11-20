@@ -102,6 +102,16 @@ describe('NovelAI PNG import', () => {
     const unread = await read({ v4_prompt: missing });
     expect(unread.characters[0]?.center).toBeUndefined();
     expect(unread.notes.join('\n')).toContain('座標は反映できません');
+
+    const partial = caption('2girls', ['girl', 'boy']);
+    partial.use_coords = true;
+    partial.caption.char_captions[0]!.centers = [{ x: 0.2, y: 0.3 }];
+    partial.caption.char_captions[1]!.centers = [];
+    const mixed = await read({ v4_prompt: partial });
+    expect(mixed.characters[0]?.center).toEqual({ x: 0.2, y: 0.3 });
+    expect(mixed.characters[1]?.center).toBeUndefined();
+    expect(mixed.notes.join('\n')).toContain('キャラ2 の座標は読み取れませんでした。再生成では中央（0.5, 0.5）になります。');
+    expect(mixed.notes.join('\n')).not.toContain('座標は反映できません');
   });
 
   it('imports cfg rescale and dynamic thresholding only when the image records them', async () => {
