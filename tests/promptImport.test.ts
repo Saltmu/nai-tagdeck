@@ -211,7 +211,7 @@ describe('NovelAI PNG import', () => {
   });
 
   it('detects leading fur dataset as furry mode without duplicating it, while keeping it leading for anime mode', async () => {
-    const furry = await read({ v4_prompt: caption('Fur_Dataset, blazer, wolf') }, [entry('blazer', 'outfit')]);
+    const furry = await read({ v4_prompt: caption('Fur_Dataset, blazer, fur dataset, wolf') }, [entry('blazer', 'outfit')]);
     expect(furry.furDataset).toBe('Fur_Dataset');
     expect(furry.base.outfit.map((t) => t.tag)).toEqual(['blazer']);
     expect(furry.base.unclassified.map((t) => t.tag)).toEqual(['wolf']);

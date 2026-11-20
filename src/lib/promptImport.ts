@@ -155,8 +155,8 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
   const normalizedBaseText = isFurry ? baseText.replace(FUR_DATASET_PREFIX, '') : baseText;
   const notes: string[] = [];
   const byTag = dictionaryCategories(entries);
-  const readTags = (text: string, scope: string): WorkTag[] => {
-    const seen = new Set<string>();
+  const readTags = (text: string, scope: string, initialSeen?: readonly string[]): WorkTag[] => {
+    const seen = new Set<string>(initialSeen);
     const tags: WorkTag[] = [];
     for (const { tag, weight } of parseTagList(
       text,
@@ -179,7 +179,7 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
     }
     return groups;
   };
-  const baseTags = readTags(normalizedBaseText, 'ベース');
+  const baseTags = readTags(normalizedBaseText, 'ベース', furDataset ? [normalize(furDataset)] : undefined);
   const characterTags = positiveChars.map(({ text }, i) => readTags(text, `キャラ${i + 1}`));
   if (baseTags.length === 0 && characterTags.every((tags) => tags.length === 0)) {
     throw new Error('適用できる正のプロンプトがありません');
