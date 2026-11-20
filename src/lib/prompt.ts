@@ -85,10 +85,19 @@ export interface ParsedTag {
  * カンマ・改行区切りのプロンプトをタグに分解する。公式UIから貼り付けたときのため、
  * `1.2::a, b::` のような重みのグループと `{a}` / `[[b]]` の括弧も読み取る。
  */
+type OpenBrace = '{' | '[';
+
+function braceDepthOf(stack: readonly OpenBrace[]): number {
+  let depth = 0;
+  for (const brace of stack) depth += brace === '{' ? 1 : -1;
+  return depth;
+}
+
 export function parseTagList(text: string, onWeightAdjusted?: (tag: string, weight: number, adjusted: number) => void): ParsedTag[] {
   const out: ParsedTag[] = [];
   let groupWeight: number | null = null;
-  let braceDepth = 0;
+  // `{` と `[` は重みの符号が逆なので、差分が 0 でも対応する開きが残ることがある。
+  const openBraces: OpenBrace[] = [];
 
   for (const raw of text.split(/[,\n]/)) {
     let s = raw.trim();
@@ -96,20 +105,17 @@ export function parseTagList(text: string, onWeightAdjusted?: (tag: string, weig
 
     let base: number = groupWeight ?? 1;
     let closesGroup = false;
-    // 閉じ括弧は、いま開いている段だけを戻す。余った `}` / `]` は後続タグへ波及させない。
-    let pending = 0;
+    // 末尾から外した閉じ括弧。配列の末尾がタグに近い側なので、適用も末尾から行う。
+    const closers: Array<'}' | ']'> = [];
 
     while (s) {
       const before = s;
       while (s.startsWith('{') || s.startsWith('[')) {
-        braceDepth += s.startsWith('{') ? 1 : -1;
+        openBraces.push(s.startsWith('{') ? '{' : '[');
         s = s.slice(1).trimStart();
       }
       while (s.endsWith('}') || s.endsWith(']')) {
-        const curly = s.endsWith('}');
-        const projected = braceDepth + pending;
-        if (curly && projected > 0) pending -= 1;
-        else if (!curly && projected < 0) pending += 1;
+        closers.push(s.endsWith('}') ? '}' : ']');
         s = s.slice(0, -1).trimEnd();
       }
       const open = /^(-?\d+(?:\.\d+)?)::(.*)$/.exec(s);
@@ -125,8 +131,11 @@ export function parseTagList(text: string, onWeightAdjusted?: (tag: string, weig
       if (s === before) break;
     }
 
-    const weight = base * Math.pow(BRACE_RATIO, braceDepth);
-    braceDepth += pending;
+    const weight = base * Math.pow(BRACE_RATIO, braceDepthOf(openBraces));
+    for (let i = closers.length - 1; i >= 0; i--) {
+      const want: OpenBrace = closers[i] === '}' ? '{' : '[';
+      if (openBraces[openBraces.length - 1] === want) openBraces.pop();
+    }
     if (closesGroup) groupWeight = null;
     if (s) {
       const adjusted = clampWeight(weight);

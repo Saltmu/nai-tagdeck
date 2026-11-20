@@ -153,8 +153,12 @@ function parseCSVRecords(text: string): CsvRecord[] {
       } else {
         cell += ch;
         if (ch === '\n' || ch === '\r') {
+          // CRLF は 1 行として数える。セルの値からは LF を落とさない。
           line++;
-          if (ch === '\r' && src[i + 1] === '\n') i++;
+          if (ch === '\r' && src[i + 1] === '\n') {
+            cell += src[i + 1];
+            i++;
+          }
         }
       }
     } else if (ch === '"' && cell === '') {

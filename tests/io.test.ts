@@ -61,6 +61,8 @@ describe('CSV', () => {
   it('引用符・カンマ・改行を含むセルを往復できる', () => {
     const entries = [e('1', 'a, "b"', { alias: '行1\n行2' })];
     expect(fromCSV(toCSV(entries))).toEqual({ entries, errors: [] });
+    const crlf = [e('1', 'a', { alias: 'line1\r\nline2' })];
+    expect(fromCSV(toCSV(crlf))).toEqual({ entries: crlf, errors: [] });
   });
   it('BOM と CRLF を扱う', () => {
     expect(parseCSVRows('﻿a,b\r\n1,2\r\n')).toEqual([
@@ -89,6 +91,9 @@ describe('CSV', () => {
     const afterQuote = fromCSV('tag,category\n"ok\nstill",quality\n,quality\n');
     expect(afterQuote.errors).toEqual(['4行目: tag が空です']);
     expect(afterQuote.entries.map((entry) => entry.tag)).toEqual(['ok\nstill']);
+    const quotedCrlf = fromCSV('tag,category\r\n"ok\r\nstill",quality\r\n,quality\r\n');
+    expect(quotedCrlf.errors).toEqual(['4行目: tag が空です']);
+    expect(quotedCrlf.entries.map((entry) => entry.tag)).toEqual(['ok\r\nstill']);
   });
 });
 

@@ -153,6 +153,22 @@ describe('parseTagList', () => {
       { tag: 'b', weight: 1.26 },
     ]);
   });
+  it('向きの違う括弧を入れ子にしても、外側の重みを後続タグへ残す', () => {
+    expect(parseTagList('{[a], b}, c')).toEqual([
+      { tag: 'a', weight: 1 },
+      { tag: 'b', weight: 1.05 },
+      { tag: 'c', weight: 1 },
+    ]);
+    expect(parseTagList('[{a}, b], c')).toEqual([
+      { tag: 'a', weight: 1 },
+      { tag: 'b', weight: 0.95 },
+      { tag: 'c', weight: 1 },
+    ]);
+    expect(parseTagList('{[a]}, b')).toEqual([
+      { tag: 'a', weight: 1 },
+      { tag: 'b', weight: 1 },
+    ]);
+  });
   it('余った閉じ括弧は後続のタグへ重みを波及させない', () => {
     expect(parseTagList('foo}, bar')).toEqual([
       { tag: 'foo', weight: 1 },
