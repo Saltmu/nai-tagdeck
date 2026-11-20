@@ -1,23 +1,25 @@
-import { useReducer, useState, type Dispatch } from 'react';
+import { useMemo, useReducer, useState, type Dispatch } from 'react';
 import type { Settings, Workspace } from '../types';
 import { emptyWorkspace, hasNegative, normalizeWorkspace, workspaceReducer, type WorkspaceAction } from '../lib/workspace';
 import { migrateNegative } from '../lib/backup';
-import { getKV } from '../lib/db';
-import { DEFAULT_SETTINGS, normalizeSettings } from '../lib/settings';
+import { getKV, setKV } from '../lib/db';
+import { DEFAULT_SETTINGS, legacyNegativePrompt, normalizeSettings } from '../lib/settings';
 import { DEFAULT_GENERATION, normalizeGeneration, type GenerationSettings } from '../lib/generation';
 import { usePersistence, type PersistenceState } from './usePersistence';
 
 export function useWorkspace(): { workspace: Workspace; dispatch: Dispatch<WorkspaceAction>; loaded: boolean; persistence: PersistenceState } {
   const [workspace, dispatch] = useReducer(workspaceReducer, undefined, emptyWorkspace);
-  const persistence = usePersistence('workspace', workspace, (raw) => {
+  const persistence = usePersistence('workspace', workspace, async (raw, isCurrent) => {
     if (hasNegative(raw)) {
       dispatch({ type: 'replace', workspace: normalizeWorkspace(raw) });
       return;
     }
-    // ネガティブ対応前のデータ: 設定に残っている文字列のネガティブを移す（設定は読み込み後に書き直されて消える）
-    void getKV<unknown>('settings')
-      .catch(() => undefined)
-      .then((settings) => dispatch({ type: 'replace', workspace: migrateNegative(raw, settings) }));
+    // ネガティブ対応前のデータ: 設定に残っている文字列のネガティブを移し、移行済みデータを保存する
+    const settings = await getKV<unknown>('settings');
+    if (!isCurrent()) return;
+    const migrated = migrateNegative(raw, settings);
+    await setKV('workspace', migrated);
+    if (isCurrent()) dispatch({ type: 'replace', workspace: migrated });
   });
   return { workspace, dispatch, loaded: persistence.loaded, persistence };
 }
@@ -28,9 +30,17 @@ export function useGenerationSettings(): [GenerationSettings, (patch: Partial<Ge
   return [settings, (patch) => setSettings((prev) => normalizeGeneration({ ...prev, ...patch })), persistence];
 }
 
-export function useSettings(): [Settings, (patch: Partial<Settings>) => void, PersistenceState] {
+export function useSettings(workspaceLoaded = true): [Settings, (patch: Partial<Settings>) => void, PersistenceState] {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const persistence = usePersistence('settings', settings, (raw) => setSettings(normalizeSettings(raw)));
+  const [legacyNegative, setLegacyNegative] = useState<string | null>(null);
+  const stored = useMemo(
+    () => (legacyNegative !== null && !workspaceLoaded ? { ...settings, negativePrompt: legacyNegative } : settings),
+    [settings, legacyNegative, workspaceLoaded],
+  );
+  const persistence = usePersistence('settings', stored, (raw) => {
+    setLegacyNegative(legacyNegativePrompt(raw));
+    setSettings(normalizeSettings(raw));
+  });
   return [settings, (patch) => setSettings((prev) => ({ ...prev, ...patch })), persistence];
 }
 

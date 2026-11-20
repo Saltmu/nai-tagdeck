@@ -15,12 +15,32 @@ const DB_NAME = 'nai-tagdeck';
 let dbPromise: Promise<IDBPDatabase<TagDeckDB>> | null = null;
 
 function getDB(): Promise<IDBPDatabase<TagDeckDB>> {
-  dbPromise ??= openDB<TagDeckDB>(DB_NAME, 1, {
-    upgrade(db) {
-      db.createObjectStore('dictionary', { keyPath: 'id' });
-      db.createObjectStore('kv');
-    },
-  });
+  if (!dbPromise) {
+    let opened: IDBPDatabase<TagDeckDB> | null = null;
+    const promise = openDB<TagDeckDB>(DB_NAME, 1, {
+      upgrade(db) {
+        db.createObjectStore('dictionary', { keyPath: 'id' });
+        db.createObjectStore('kv');
+      },
+      blocking(_currentVersion, _blockedVersion, event) {
+        if (dbPromise === promise) dbPromise = null;
+        if (opened) opened.close();
+        else (event?.target as { close?: () => void } | null)?.close?.();
+      },
+      terminated() {
+        if (dbPromise === promise) dbPromise = null;
+      },
+    })
+      .then((db) => {
+        opened = db;
+        return db;
+      })
+      .catch((error) => {
+        if (dbPromise === promise) dbPromise = null;
+        throw error;
+      });
+    dbPromise = promise;
+  }
   return dbPromise;
 }
 

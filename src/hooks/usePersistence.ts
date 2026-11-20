@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { getKV, setKV } from '../lib/db';
+import { getDataResetSignal } from '../lib/reset';
 
 export interface PersistenceState {
   loaded: boolean;
-  status: 'loading' | 'idle' | 'saving' | 'error';
+  status: 'loading' | 'idle' | 'error';
   error: string | null;
 }
 
@@ -16,48 +17,93 @@ const INITIAL: PersistenceState = { loaded: false, status: 'loading', error: nul
 export function usePersistence<T>(
   key: string,
   value: T,
-  onLoad: (raw: unknown) => void,
+  onLoad: (raw: unknown, isCurrent: () => boolean) => Promise<void> | void,
   delayMs = 300,
 ): PersistenceState {
   const [state, setState] = useState({ key, ...INITIAL });
+  const [resetSignal] = useState(getDataResetSignal);
   const writes = useRef(Promise.resolve());
+  const synced = useRef<{ key: string; value: T; inFlight: number } | null>(null);
   const current = state.key === key ? state : INITIAL;
+  const stateRef = useRef(current);
+  stateRef.current = current;
   const onLoadRef = useRef(onLoad);
   onLoadRef.current = onLoad;
 
   useEffect(() => {
     let active = true;
+    const isCurrent = () => active && !resetSignal.aborted;
+    synced.current = null;
     setState({ key, ...INITIAL });
     getKV<unknown>(key)
-      .then((raw) => {
-        if (!active) return;
-        if (raw !== undefined) onLoadRef.current(raw);
+      .then(async (raw) => {
+        if (!isCurrent()) return;
+        if (raw !== undefined) {
+          const result = onLoadRef.current(raw, isCurrent);
+          if (result && typeof (result as PromiseLike<void>).then === 'function') {
+            await result;
+          }
+        }
+        if (!isCurrent()) return;
         setState({ key, loaded: true, status: 'idle', error: null });
       })
       .catch((error: unknown) => {
-        if (active) setState({ key, loaded: false, status: 'error', error: `保存データを読み込めません (${key}): ${String(error)}` });
+        if (isCurrent()) setState({ key, loaded: false, status: 'error', error: `保存データを読み込めません (${key}): ${String(error)}` });
       });
     return () => { active = false; };
-  }, [key]);
+  }, [key, resetSignal]);
 
   useEffect(() => {
     if (!current.loaded) return;
+    if (synced.current?.key !== key) {
+      synced.current = { key, value, inFlight: 0 };
+      return;
+    }
+    const tracker = synced.current;
+    if (tracker.inFlight === 0 && Object.is(tracker.value, value)) return;
+
     let active = true;
-    const timer = setTimeout(() => {
-      setState({ key, loaded: true, status: 'saving', error: null });
+    let pending = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const enqueueWrite = (force: boolean) => {
+      if (!pending) return;
+      pending = false;
+      clearTimeout(timer);
+      tracker.inFlight += 1;
       // 遅い保存が新しい値を上書きしないよう、順番に書き込む。
       writes.current = writes.current.then(async () => {
-        if (!active) return;
         try {
+          if (resetSignal.aborted || (!force && !active)) return;
           await setKV(key, value);
-          if (active) setState({ key, loaded: true, status: 'idle', error: null });
+          tracker.value = value;
+          if (active && (stateRef.current.status !== 'idle' || stateRef.current.error !== null)) {
+            setState({ key, loaded: true, status: 'idle', error: null });
+          }
         } catch (error) {
           if (active) setState({ key, loaded: true, status: 'error', error: `変更を保存できません (${key}): ${String(error)}` });
+        } finally {
+          tracker.inFlight -= 1;
         }
       });
-    }, delayMs);
-    return () => { active = false; clearTimeout(timer); };
-  }, [key, value, current.loaded, delayMs]);
+    };
+
+    const onPageHide = () => enqueueWrite(true);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') enqueueWrite(true);
+    };
+
+    timer = setTimeout(() => enqueueWrite(false), delayMs);
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      active = false;
+      pending = false;
+      clearTimeout(timer);
+      window.removeEventListener('pagehide', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [key, value, current.loaded, delayMs, resetSignal]);
 
   return current;
 }
