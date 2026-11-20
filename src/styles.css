@@ -664,6 +664,13 @@ input[type='checkbox'] {
   box-shadow: 0 6px 10px -6px rgb(15 20 30 / 0.25);
 }
 
+.editor-tablist {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .editor-tab {
   flex: 0 0 auto;
   max-width: 10rem;
@@ -2367,4 +2374,24 @@ textarea {
   margin-top: 0.75rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--border);
+}
+
+@media (pointer: coarse) {
+  .icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .tag-row > .icon-btn,
+  .tag-edit > .icon-btn {
+    width: 40px;
+    min-width: 40px;
+    min-height: 44px;
+  }
+
+  .viewer-seed-copy,
+  .latest-close {
+    width: 44px;
+    height: 44px;
+  }
 }

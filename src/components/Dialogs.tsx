@@ -88,6 +88,7 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const primary = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
   const [value, setValue] = useState(request.kind === 'prompt' ? request.defaultValue : '');
   const settled = useRef(false);
   const id = useId();
@@ -97,8 +98,9 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
     if (d && !d.open) d.showModal();
     // autoFocus は showModal より先に効いてしまい、先頭の「キャンセル」にフォーカスが移るので、開いた後で当て直す
     if (request.kind === 'prompt') input.current?.select();
+    else if (request.kind === 'confirm' && request.danger) cancel.current?.focus();
     else primary.current?.focus();
-  }, [request.kind]);
+  }, [request]);
 
   // choice: choose で押されたボタンの値（Enter で主ボタンを押したときは省略）
   const settle = (ok: boolean, choice?: string) => {
@@ -180,7 +182,7 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
         {request.kind === 'choose' && request.note && <p className="hint app-dialog-note">{request.note}</p>}
         <div className="app-dialog-actions">
           {request.kind !== 'alert' && (
-            <button type="button" className="btn" onClick={() => settle(false)}>
+            <button ref={cancel} type="button" className="btn" onClick={() => settle(false)}>
               キャンセル
             </button>
           )}

@@ -151,7 +151,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               key={t.key}
               type="button"
               className={`tab tab-${t.key}`}
-              aria-label={t.label}
               title={t.label}
               aria-current={tab === t.key ? 'page' : undefined}
               onClick={() => setTab(t.key)}
@@ -160,11 +159,24 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               <span className="tab-label">{t.label}</span>
               {t.key === 'generate' &&
                 (generator.generating ? (
-                  <span className="spinner spinner-small" aria-label="生成中" />
+                  <>
+                    <span className="spinner spinner-small" aria-hidden="true" />
+                    <span className="visually-hidden">（生成中）</span>
+                  </>
                 ) : (
-                  imageStore.images.length > 0 && <span className="tab-count">{imageStore.images.length}</span>
+                  imageStore.images.length > 0 && (
+                    <span className="tab-count">
+                      {imageStore.images.length}
+                      <span className="visually-hidden">枚</span>
+                    </span>
+                  )
                 ))}
-              {t.key === 'dictionary' && <span className="tab-count">{dictionary.entries.length}</span>}
+              {t.key === 'dictionary' && (
+                <span className="tab-count">
+                  {dictionary.entries.length}
+                  <span className="visually-hidden">件</span>
+                </span>
+              )}
             </button>
           ))}
         </nav>
