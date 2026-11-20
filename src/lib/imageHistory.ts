@@ -15,6 +15,8 @@ export const DEFAULT_IMAGE_HISTORY_LIMITS: ImageHistoryLimits = {
 export interface RetainableImage {
   blob: Blob;
   downloaded: boolean;
+  /** 保存ダイアログのキャンセル等がなく、保存完了が明示的に確認された場合のみ true */
+  saveConfirmed?: boolean;
 }
 
 export interface RetentionResult<T extends RetainableImage> {
@@ -25,7 +27,7 @@ export interface RetentionResult<T extends RetainableImage> {
 
 /**
  * 新しい画像を先頭に含む配列に対し、枚数・総バイト数の上限に収まるよう古い画像から破棄する。
- * ダウンロード済み画像を優先して破棄し、それでも上限を超える場合のみ未ダウンロード画像を破棄する。
+ * 保存完了が確認された画像（saveConfirmed）を優先して破棄し、未確認の画像は同じ優先度で古い順に破棄する。
  */
 export function applyImageRetention<T extends RetainableImage>(
   images: T[],
@@ -37,7 +39,7 @@ export function applyImageRetention<T extends RetainableImage>(
 
   const pickEvictIndex = (): number => {
     for (let i = retained.length - 1; i >= 0; i--) {
-      if (retained[i]!.downloaded) return i;
+      if (retained[i]!.saveConfirmed) return i;
     }
     return retained.length - 1;
   };

@@ -90,7 +90,7 @@ it('revokes each Object URL exactly once on remove and clear under StrictMode', 
   expect(revokedUrls).toEqual([firstUrl, ...remainingUrls]);
 });
 
-it('enforces retention limits, prioritizes downloaded images, and keeps eviction notice until dismissed', async () => {
+it('enforces retention limits oldest-first even when newer image has markDownloaded, and keeps eviction notice until dismissed', async () => {
   const onEvict = vi.fn();
   await renderHook({
     limits: { maxCount: 2, maxBytes: 1000 },
@@ -103,15 +103,14 @@ it('enforces retention limits, prioritizes downloaded images, and keeps eviction
   await act(async () => {
     store.add([makeNewImage(2)]);
   });
-  // Mark the older image (seed 1) as downloaded
-  const olderId = store.images.find((img) => img.seed === 1)!.id;
+  // Mark the newer image (seed 2) as downloaded (e.g. user clicked download and cancelled Save As)
   const olderUrl = store.images.find((img) => img.seed === 1)!.url;
+  const newerId = store.images.find((img) => img.seed === 2)!.id;
   await act(async () => {
-    store.markDownloaded(olderId);
+    store.markDownloaded(newerId);
   });
 
-  // Adding seed 3 exceeds maxCount=2; downloaded seed 1 is evicted first, and eviction is still notified
-  // because <a download> cannot confirm save completion
+  // Adding seed 3 exceeds maxCount=2; oldest image (seed 1) must be evicted, NOT newer seed 2
   await act(async () => {
     store.add([makeNewImage(3)]);
   });

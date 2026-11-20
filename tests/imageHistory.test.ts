@@ -2,11 +2,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyImageRetention, createThumbnailUrl } from '../src/lib/imageHistory';
 
-function makeItem(id: string, bytes: number, downloaded = false) {
+function makeItem(id: string, bytes: number, downloaded = false, saveConfirmed = false) {
   return {
     id,
     blob: new Blob([new Uint8Array(bytes)], { type: 'image/png' }),
     downloaded,
+    saveConfirmed,
   };
 }
 
@@ -19,17 +20,29 @@ describe('applyImageRetention', () => {
     expect(res.evictedUndownloadedCount).toBe(0);
   });
 
-  it('prioritizes evicting oldest downloaded images over undownloaded ones', () => {
-    // newest: n1, then u1 (undownloaded), d1 (downloaded), u2 (oldest, undownloaded)
+  it('evicts unconfirmed images oldest-first even if downloaded is true', () => {
+    // newest: n1, then d1 (downloaded via <a download>, not saveConfirmed), u2 (oldest)
     const items = [
-      makeItem('n1', 100, false),
-      makeItem('u1', 100, false),
-      makeItem('d1', 100, true),
-      makeItem('u2', 100, false),
+      makeItem('n1', 100, false, false),
+      makeItem('d1', 100, true, false),
+      makeItem('u2', 100, false, false),
+    ];
+    const res = applyImageRetention(items, { maxCount: 2, maxBytes: 1000 });
+    expect(res.retained.map((x) => x.id)).toEqual(['n1', 'd1']);
+    expect(res.evicted.map((x) => x.id)).toEqual(['u2']);
+  });
+
+  it('prioritizes evicting oldest saveConfirmed images over unconfirmed ones', () => {
+    // newest: n1, then u1 (unconfirmed), s1 (saveConfirmed), u2 (oldest, unconfirmed)
+    const items = [
+      makeItem('n1', 100, false, false),
+      makeItem('u1', 100, false, false),
+      makeItem('s1', 100, true, true),
+      makeItem('u2', 100, false, false),
     ];
     const res = applyImageRetention(items, { maxCount: 3, maxBytes: 1000 });
     expect(res.retained.map((x) => x.id)).toEqual(['n1', 'u1', 'u2']);
-    expect(res.evicted.map((x) => x.id)).toEqual(['d1']);
+    expect(res.evicted.map((x) => x.id)).toEqual(['s1']);
     expect(res.evictedUndownloadedCount).toBe(0);
   });
 
