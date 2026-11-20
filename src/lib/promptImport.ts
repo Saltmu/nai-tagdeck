@@ -2,7 +2,8 @@ import type { CategoryKey, DictEntry, PromptCategoryKey, TagGroups, Workspace, W
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from './categories';
 import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
 import {
-  NOISE_SCHEDULES, SAMPLERS, SIZE_PRESETS, normalizeScale, normalizeSeed, normalizeSteps, type GenerationSettings,
+  NOISE_SCHEDULES, SAMPLERS, SCALE_MAX, SCALE_MIN, SIZE_PRESETS, normalizeScale, normalizeSeed, normalizeSteps,
+  type GenerationSettings,
 } from './generation';
 import { newId } from './id';
 import { readPngMetadata } from './pngMetadata';
@@ -35,7 +36,9 @@ function sameCenters(a: unknown, b: unknown): boolean {
   });
 }
 
-function generationFrom(comment: Fields) {
+const FUR_DATASET_PREFIX = /^\s*fur[\s_]+dataset(?:\s*[,\n]+\s*|\s*$)/i;
+
+function generationFrom(comment: Fields, isFurry: boolean) {
   const values: Partial<GenerationSettings> = {};
   const labels: string[] = [];
   const skipped: string[] = [];
@@ -48,16 +51,20 @@ function generationFrom(comment: Fields) {
       labels.push(`${label} ${formatted ?? value}`);
     }
   };
+  if (isFurry) add('mode', '生成モード', 'furry', 'ケモノ');
   const size = SIZE_PRESETS.find((s) => s.width === comment.width && s.height === comment.height);
   const seed = normalizeSeed(comment.seed);
   const steps = normalizeSteps(comment.steps);
-  const scale = normalizeScale(comment.scale);
+  const scale = typeof comment.scale === 'number' && Number.isFinite(comment.scale) &&
+    comment.scale >= SCALE_MIN && comment.scale <= SCALE_MAX
+    ? normalizeScale(comment.scale)
+    : undefined;
   const sampler = SAMPLERS.find((s) => s.value === comment.sampler);
   const schedule = NOISE_SCHEDULES.find((s) => s === comment.noise_schedule);
   add('seed', 'シード', seed !== null && seed === comment.seed ? seed : undefined);
   add('size', 'サイズ', size?.key, size?.label);
   add('steps', 'ステップ', steps === comment.steps ? steps : undefined);
-  add('scale', 'ガイダンス', scale === comment.scale ? scale : undefined);
+  add('scale', 'ガイダンス', scale);
   add('sampler', 'サンプラー', sampler?.value, sampler?.label);
   add('noiseSchedule', 'ノイズスケジュール', schedule);
   return { values, labels, skipped };
@@ -119,22 +126,35 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
     throw new Error(`画像のキャラクター数が保存上限（${MAX_CHARACTERS}人）を超えています`);
   }
 
+  const isFurry = FUR_DATASET_PREFIX.test(baseText);
+  const normalizedBaseText = isFurry ? baseText.replace(FUR_DATASET_PREFIX, '') : baseText;
   const notes: string[] = [];
   const byTag = dictionaryCategories(entries);
-  const readTags = (text: string, scope: string): WorkTag[] =>
-    parseTagList(text, (tag, weight, adjusted) => notes.push(`${scope}「${tag}」の重みを ${weight} から ${adjusted} に調整します。`))
-      .map(({ tag, weight }) => ({ id: newId(), enabled: true, tag, weight }));
+  const readTags = (text: string, scope: string): WorkTag[] => {
+    const seen = new Set<string>();
+    const tags: WorkTag[] = [];
+    for (const { tag, weight } of parseTagList(
+      text,
+      (t, w, adjusted) => notes.push(`${scope}「${t}」の重みを ${w} から ${adjusted} に調整します。`),
+    )) {
+      const key = normalize(tag);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      tags.push({ id: newId(), enabled: true, tag, weight });
+    }
+    return tags;
+  };
   const group = (tags: WorkTag[], allowed: readonly PromptCategoryKey[]): TagGroups => {
     const groups = emptyGroups();
     for (const tag of tags) {
       const matches = byTag.get(normalize(tag.tag));
-      const category = matches?.size === 1 ? matches.values().next().value : undefined;
-      const key = allowed.find((key) => key === category) ?? 'unclassified';
+      const candidates = matches ? allowed.filter((key) => key !== 'unclassified' && matches.has(key)) : [];
+      const key = candidates.length === 1 ? candidates[0]! : 'unclassified';
       groups[key].push(tag);
     }
     return groups;
   };
-  const baseTags = readTags(baseText, 'ベース');
+  const baseTags = readTags(normalizedBaseText, 'ベース');
   const characterTags = positiveChars.map(({ text }, i) => readTags(text, `キャラ${i + 1}`));
   if (baseTags.length === 0 && characterTags.every((tags) => tags.length === 0)) {
     throw new Error('適用できる正のプロンプトがありません');
@@ -170,7 +190,7 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
   const model = typeof comment.model_name === 'string' ? comment.model_name : metadata.Source;
   if (model) notes.push(`画像のモデルは ${model} です。生成時はこのアプリのモデルを使います。`);
   if (useCoordinates) notes.push('画像に記録されたキャラクターの座標は反映できません。');
-  notes.push('生成モード（アニメ／ケモノ）は現在の設定を使います。');
+  if (!isFurry) notes.push('生成モード（アニメ／ケモノ）は現在の設定を使います。');
 
-  return { base, characters, negative, characterNegative, generation: generationFrom(comment), notes };
+  return { base, characters, negative, characterNegative, generation: generationFrom(comment, isFurry), notes };
 }

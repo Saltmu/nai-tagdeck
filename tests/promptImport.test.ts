@@ -46,9 +46,8 @@ describe('NovelAI PNG import', () => {
     const result = await readPromptImport(blob, entries);
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes);
     expect(entries).toEqual(dict);
-    expect(result.base.outfit.map((t) => [t.tag, t.weight, t.enabled])).toEqual([['blazer', 1, true], ['BLAZER', 1, true]]);
-    expect(new Set(result.base.outfit.map((t) => t.id)).size).toBe(2);
-    expect(buildPrompt(result.base, 'numeric')).toBe('blazer, BLAZER, standing, -1.2::custom tag::, ambiguous, alias');
+    expect(result.base.outfit.map((t) => [t.tag, t.weight, t.enabled])).toEqual([['blazer', 1, true]]);
+    expect(buildPrompt(result.base, 'numeric')).toBe('blazer, standing, -1.2::custom tag::, ambiguous, alias');
     expect(buildCharacterPrompts(result.characters, 'numeric').map((c) => c.prompt))
       .toEqual(['1.05::red hair::, oil painting, source#hug', 'standing']);
     expect(result.characters[0]?.tags.unclassified.map((t) => t.tag)).toEqual(['oil painting', 'source#hug']);
@@ -63,7 +62,7 @@ describe('NovelAI PNG import', () => {
     const result = await read({
       v4_prompt: caption('4::hat::, 1.234::shirt::', ['girl', 'boy']),
       v4_negative_prompt: caption('', ['lowres', '']),
-      width: 1000, height: 1000, seed: 123, steps: 50, scale: 5.01, noise_schedule: 'karras',
+      width: 1000, height: 1000, seed: 123, steps: 50, scale: 12, noise_schedule: 'karras',
     });
     expect(result.characterNegative).toBeUndefined();
     expect(result.notes).toEqual(expect.arrayContaining([
@@ -117,14 +116,19 @@ describe('NovelAI PNG import', () => {
   });
 
   it('moves unclassified tags without duplicating the same tag and round-trips them via presets and backups', async () => {
-    const result = await read({ v4_prompt: caption('b, -1::A::, A', ['b']) });
+    const result = await read({ v4_prompt: caption('b, -1::A::', ['b']) });
     const before = workspaceReducer(emptyWorkspace(), { type: 'replace', workspace: { ...result, negative: [] } });
     const toggleId = before.base.unclassified[1]!.id;
     const toggled = workspaceReducer(before, { type: 'toggle', target: BASE, category: 'unclassified', id: toggleId });
-    const first = workspaceReducer(toggled, { type: 'moveFromUnclassified', target: BASE, to: 'outfit', id: toggleId });
-    const moved = workspaceReducer(first, { type: 'moveFromUnclassified', target: BASE, to: 'outfit', id: before.base.unclassified[2]!.id });
+    const moved = workspaceReducer(toggled, { type: 'moveFromUnclassified', target: BASE, to: 'outfit', id: toggleId });
     expect(moved.base.outfit).toEqual([toggled.base.unclassified[1]]);
     expect(moved.base.unclassified).toEqual([before.base.unclassified[0]]);
+    const duplicate = normalizeWorkspace({
+      ...moved,
+      base: { ...moved.base, unclassified: [...moved.base.unclassified, { id: 'dup', tag: 'a', weight: 1, enabled: true }] },
+    });
+    expect(workspaceReducer(duplicate, { type: 'moveFromUnclassified', target: BASE, to: 'outfit', id: 'dup' }).base.outfit)
+      .toEqual(moved.base.outfit);
     expect(buildPrompt(moved.base, 'numeric')).toBe('b');
     const character = moved.characters[0]!;
     const action = { type: 'moveFromUnclassified', target: character.id, id: character.tags.unclassified[0]!.id } as const;
@@ -140,5 +144,56 @@ describe('NovelAI PNG import', () => {
     }));
     expect(backup.ok && backup.data.workspace).toEqual(moved);
     expect(normalizeWorkspace(JSON.parse(JSON.stringify(moved)))).toEqual(moved);
+  });
+
+  it('filters dictionary categories by allowed scope before falling back to unclassified', async () => {
+    const entries = [
+      entry('glow', 'effect'),
+      entry('glow', 'negative'),
+      entry('dynamic', 'effect'),
+      entry('dynamic', 'pose'),
+    ];
+    const result = await read({ v4_prompt: caption('glow, dynamic', ['dynamic']) }, entries);
+    expect(result.base.effect.map((t) => t.tag)).toEqual(['glow']);
+    expect(result.base.unclassified.map((t) => t.tag)).toEqual(['dynamic']);
+    expect(result.characters[0]?.tags.pose.map((t) => t.tag)).toEqual(['dynamic']);
+  });
+
+  it('deduplicates normalized tags within each scope while keeping the first occurrence', async () => {
+    const result = await read({
+      v4_prompt: caption('red_hair, 1.2::red hair::, BLUE_EYES, blue eyes', ['red hair, RED_HAIR']),
+      v4_negative_prompt: caption('lowres, LOWRES'),
+    });
+    expect(result.base.unclassified.map((t) => [t.tag, t.weight])).toEqual([['red_hair', 1], ['BLUE_EYES', 1]]);
+    expect(result.characters[0]?.tags.unclassified.map((t) => t.tag)).toEqual(['red hair']);
+    expect(result.negative?.map((t) => t.tag)).toEqual(['lowres']);
+  });
+
+  it('detects leading fur dataset as furry mode without importing it as a tag', async () => {
+    const furry = await read({ v4_prompt: caption('Fur_Dataset, wolf, 1boy') });
+    expect(furry.base.unclassified.map((t) => t.tag)).toEqual(['wolf', '1boy']);
+    expect(furry.generation.values.mode).toBe('furry');
+    expect(furry.generation.labels).toContain('生成モード ケモノ');
+    expect(furry.notes).not.toContain('生成モード（アニメ／ケモノ）は現在の設定を使います。');
+
+    const charOnly = await read({ v4_prompt: caption('fur dataset', ['wolf']) });
+    expect(charOnly.base.unclassified).toEqual([]);
+    expect(charOnly.characters[0]?.tags.unclassified.map((t) => t.tag)).toEqual(['wolf']);
+    expect(charOnly.generation.values.mode).toBe('furry');
+
+    await expect(read({ v4_prompt: caption('fur dataset') })).rejects.toThrow('適用できる正');
+
+    const nonLeading = await read({ prompt: 'wolf, fur dataset' });
+    expect(nonLeading.base.unclassified.map((t) => t.tag)).toEqual(['wolf', 'fur dataset']);
+    expect(nonLeading.generation.values.mode).toBeUndefined();
+  });
+
+  it('rounds in-range scale values to one decimal place and skips out-of-range values', async () => {
+    expect((await read({ prompt: 'a', scale: 5.01 })).generation.values.scale).toBe(5);
+    expect((await read({ prompt: 'a', scale: 5.26 })).generation.values.scale).toBe(5.3);
+    expect((await read({ prompt: 'a', scale: 0 })).generation.values.scale).toBe(0);
+    expect((await read({ prompt: 'a', scale: 10 })).generation.values.scale).toBe(10);
+    expect((await read({ prompt: 'a', scale: -0.1 })).generation.skipped).toContain('ガイダンス');
+    expect((await read({ prompt: 'a', scale: 10.1 })).generation.skipped).toContain('ガイダンス');
   });
 });
