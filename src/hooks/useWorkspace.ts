@@ -1,4 +1,4 @@
-import { useMemo, useReducer, useState, type Dispatch } from 'react';
+import { useCallback, useMemo, useReducer, useState, type Dispatch } from 'react';
 import type { Settings, Workspace } from '../types';
 import { emptyWorkspace, hasNegative, normalizeWorkspace, workspaceReducer, type WorkspaceAction } from '../lib/workspace';
 import { migrateNegative } from '../lib/backup';
@@ -27,7 +27,10 @@ export function useWorkspace(): { workspace: Workspace; dispatch: Dispatch<Works
 export function useGenerationSettings(): [GenerationSettings, (patch: Partial<GenerationSettings>) => void, PersistenceState] {
   const [settings, setSettings] = useState<GenerationSettings>(DEFAULT_GENERATION);
   const persistence = usePersistence('generation', settings, (raw) => setSettings(normalizeGeneration(raw)));
-  return [settings, (patch) => setSettings((prev) => normalizeGeneration({ ...prev, ...patch })), persistence];
+  const update = useCallback((patch: Partial<GenerationSettings>) => {
+    setSettings((prev) => normalizeGeneration({ ...prev, ...patch }));
+  }, []);
+  return [settings, update, persistence];
 }
 
 export function useSettings(workspaceLoaded = true): [Settings, (patch: Partial<Settings>) => void, PersistenceState] {
@@ -41,6 +44,9 @@ export function useSettings(workspaceLoaded = true): [Settings, (patch: Partial<
     setLegacyNegative(legacyNegativePrompt(raw));
     setSettings(normalizeSettings(raw));
   });
-  return [settings, (patch) => setSettings((prev) => ({ ...prev, ...patch })), persistence];
+  const update = useCallback((patch: Partial<Settings>) => {
+    setSettings((prev) => ({ ...prev, ...patch }));
+  }, []);
+  return [settings, update, persistence];
 }
 

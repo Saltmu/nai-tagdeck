@@ -11,7 +11,7 @@ import { LatestPreview } from './components/LatestPreview';
 import { PromptImportDialog, type PromptSource } from './components/PromptImportDialog';
 import { useDictionary } from './hooks/useDictionary';
 import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWorkspace';
-import { useToast } from './hooks/useToast';
+import { Toast, type ToastHandle } from './components/Toast';
 import { useToken } from './hooks/useToken';
 import { useTagUndo } from './hooks/useTagUndo';
 import { UndoBar } from './components/UndoBar';
@@ -23,13 +23,13 @@ import { useGenerationControls } from './hooks/useGenerationControls';
 import { useLatestImageNotice } from './hooks/useLatestImageNotice';
 import { useFirstRun } from './hooks/useFirstRun';
 import { isEmptyWorkspace } from './lib/presets';
-import { DEFAULT_SETTINGS } from './lib/settings';
-import { DEFAULT_GENERATION } from './lib/generation';
+import { isDefaultSettings } from './lib/settings';
+import { isDefaultGeneration, sizeOf, type SizeKey } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
-import { sizeOf } from './lib/generation';
 import { copyText } from './lib/browser';
 import type { PromptImport } from './lib/promptImport';
+import type { WeightSyntax } from './types';
 
 type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
 
@@ -47,10 +47,15 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const [generation, updateGeneration, generationPersistence] = useGenerationSettings();
   const token = useToken();
   const presets = usePresets();
-  const { message, show } = useToast();
-  const imageStore = useImages({
-    onEvict: (count) => show(`履歴上限のため、古い画像 ${count}枚を削除しました`, 6000),
-  });
+  const toastRef = useRef<ToastHandle>(null);
+  const show = useCallback((message: string, durationMs?: number) => {
+    toastRef.current?.show(message, durationMs);
+  }, []);
+  const onEvict = useCallback(
+    (count: number) => show(`履歴上限のため、古い画像 ${count}枚を削除しました`, 6000),
+    [show],
+  );
+  const imageStore = useImages({ onEvict });
   const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
   const [promptSource, setPromptSource] = useState<PromptSource | null>(null);
@@ -69,10 +74,19 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const openEditor = useCallback(() => setTab('editor'), []);
   const firstRunReady = dictionary.loaded && !dictionary.error &&
     [persistence, settingsPersistence, generationPersistence, ...presets.persistence].every((state) => state.loaded && !state.error);
+  const hasExistingData = useMemo(
+    () =>
+      !isEmptyWorkspace(workspace) ||
+      dictionary.entries.length > 0 ||
+      presets.presets.length > 0 ||
+      !!token.token ||
+      !isDefaultSettings(settings) ||
+      !isDefaultGeneration(generation),
+    [workspace, dictionary.entries.length, presets.presets.length, token.token, settings, generation],
+  );
   const firstRun = useFirstRun({
     ready: firstRunReady,
-    hasExistingData: !isEmptyWorkspace(workspace) || dictionary.entries.length > 0 || presets.presets.length > 0 || !!token.token ||
-      JSON.stringify(settings) !== JSON.stringify(DEFAULT_SETTINGS) || JSON.stringify(generation) !== JSON.stringify(DEFAULT_GENERATION),
+    hasExistingData,
     dictionary, workspace, dispatch, presets, notify: show, onOpenEditor: openEditor,
   });
 
@@ -118,10 +132,28 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const latest = imageStore.images[0];
   const { unseenId, dismiss } = useLatestImageNotice(latest?.id, tab === 'generate');
   const showLatest = tab === 'editor' && !!latest && unseenId === latest.id;
-  const pickPng = firstRunReady ? () => pngInput.current?.click() : undefined;
-  const openPromptImport = (source: PromptSource) => {
-    if (firstRunReady) setPromptSource(source);
-  };
+  const pickPng = useMemo(
+    () => (firstRunReady ? () => pngInput.current?.click() : undefined),
+    [firstRunReady],
+  );
+  const openPromptImport = useCallback(
+    (source: PromptSource) => {
+      if (firstRunReady) setPromptSource(source);
+    },
+    [firstRunReady],
+  );
+  const handleCharacterNegativeChange = useCallback(
+    (characterNegativePrompt: string) => updateSettings({ characterNegativePrompt }),
+    [updateSettings],
+  );
+  const handleSyntaxChange = useCallback(
+    (weightSyntax: WeightSyntax) => updateSettings({ weightSyntax }),
+    [updateSettings],
+  );
+  const handleSizeChange = useCallback(
+    (size: SizeKey) => updateGeneration({ size }),
+    [updateGeneration],
+  );
   const applyPrompt = (result: PromptImport, applyGeneration: boolean) => {
     setPromptSource(null);
     dispatch({ type: 'replace', workspace: {
@@ -170,7 +202,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         </nav>
         <QuickGenerate
           size={generation.size}
-          onSizeChange={(size) => updateGeneration({ size })}
+          onSizeChange={handleSizeChange}
           generating={generator.generating}
           blocker={blocker}
           onGenerate={startGenerate}
@@ -202,7 +234,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onPickPng={pickPng}
               onReadPng={openPromptImport}
               characterNegative={settings.characterNegativePrompt}
-              onCharacterNegativeChange={(characterNegativePrompt) => updateSettings({ characterNegativePrompt })}
+              onCharacterNegativeChange={handleCharacterNegativeChange}
               shown={tab === 'editor'}
             />
           </div>
@@ -231,7 +263,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
                   basePrompt={basePrompt}
                   characterPrompts={characterPrompts}
                   syntax={settings.weightSyntax}
-                  onSyntaxChange={(weightSyntax) => updateSettings({ weightSyntax })}
+                  onSyntaxChange={handleSyntaxChange}
                   onCopy={copy}
                   negativePrompt={negativePrompt}
                 />
@@ -298,9 +330,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         onDismiss={tagUndo.dismiss}
       />
 
-      <div className="toast" role="status" aria-live="polite">
-        {message}
-      </div>
+      <Toast ref={toastRef} />
     </div>
   );
 }
