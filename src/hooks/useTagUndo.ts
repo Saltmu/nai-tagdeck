@@ -5,15 +5,24 @@ import { tagsOf, workspaceReducer, type WorkspaceAction } from '../lib/workspace
 const HISTORY_LIMIT = 100;
 /** ドラッグ中の moveTo は連続するので、この間隔以内なら 1 ステップにまとめる。 */
 const DRAG_MERGE_MS = 500;
+/** 重み入力とキャラクター名は、この間隔を空けるか欄を離れたら別のステップにする。 */
+const EDIT_MERGE_MS = 3000;
 
 interface PastStep {
   before: Workspace;
+  activePresetId: string | null;
   label: string;
 }
 
 interface FutureStep {
   state: Workspace;
+  activePresetId: string | null;
   label: string;
+}
+
+export interface PresetSelectionSync {
+  activeId: string | null;
+  setActiveId: (id: string | null) => void;
 }
 
 function isTextEntry(target: EventTarget | null): boolean {
@@ -96,6 +105,7 @@ export function useTagUndo(
   workspace: Workspace,
   dispatch: Dispatch<WorkspaceAction>,
   notify: (message: string) => void,
+  preset?: PresetSelectionSync,
 ) {
   const [past, setPast] = useState<PastStep[]>([]);
   const [future, setFuture] = useState<FutureStep[]>([]);
@@ -103,10 +113,14 @@ export function useTagUndo(
   const pastRef = useRef(past);
   const futureRef = useRef(future);
   const ownedRef = useRef(workspace);
+  const activeIdRef = useRef<string | null>(preset?.activeId ?? null);
+  const setActiveIdRef = useRef(preset?.setActiveId);
   const lastActionRef = useRef<WorkspaceAction | null>(null);
   const lastAtRef = useRef(0);
   pastRef.current = past;
   futureRef.current = future;
+  activeIdRef.current = preset?.activeId ?? null;
+  setActiveIdRef.current = preset?.setActiveId;
 
   // 永続化の読み込みなど、このフックを通らない更新は履歴と対応しないので捨てる。
   if (workspace !== ownedRef.current) {
@@ -121,9 +135,13 @@ export function useTagUndo(
   }
 
   const apply = useCallback(
-    (snapshot: Workspace) => {
+    (snapshot: Workspace, activePresetId: string | null) => {
       ownedRef.current = snapshot;
       dispatch({ type: 'commit', workspace: snapshot });
+      if (setActiveIdRef.current) {
+        activeIdRef.current = activePresetId;
+        setActiveIdRef.current(activePresetId);
+      }
     },
     [dispatch],
   );
@@ -138,11 +156,20 @@ export function useTagUndo(
       }
       const now = Date.now();
       const previous = lastActionRef.current;
+      const editing = isTextEntry(document.activeElement);
       const merge =
         previous !== null &&
         previous.type === action.type &&
-        ((action.type === 'renameCharacter' && previous.type === 'renameCharacter' && previous.id === action.id) ||
-          (action.type === 'setWeight' && previous.type === 'setWeight' && sameTag(previous, action)) ||
+        ((action.type === 'renameCharacter' &&
+          previous.type === 'renameCharacter' &&
+          previous.id === action.id &&
+          editing &&
+          now - lastAtRef.current < EDIT_MERGE_MS) ||
+          (action.type === 'setWeight' &&
+            previous.type === 'setWeight' &&
+            sameTag(previous, action) &&
+            editing &&
+            now - lastAtRef.current < EDIT_MERGE_MS) ||
           (action.type === 'moveTo' &&
             previous.type === 'moveTo' &&
             sameTag(previous, action) &&
@@ -150,7 +177,10 @@ export function useTagUndo(
       lastActionRef.current = action;
       lastAtRef.current = now;
       if (!merge || pastRef.current.length === 0) {
-        const next = [...pastRef.current, { before, label: actionLabel(before, action) }];
+        const next = [
+          ...pastRef.current,
+          { before, activePresetId: activeIdRef.current, label: actionLabel(before, action) },
+        ];
         if (next.length > HISTORY_LIMIT) next.shift();
         pastRef.current = next;
         setPast(next);
@@ -170,15 +200,19 @@ export function useTagUndo(
     const step = pastRef.current.at(-1);
     if (!step) return;
     const current = ownedRef.current;
+    const currentPresetId = activeIdRef.current;
     const nextPast = pastRef.current.slice(0, -1);
     pastRef.current = nextPast;
     setPast(nextPast);
-    const nextFuture = [...futureRef.current, { state: current, label: step.label }];
+    const nextFuture = [
+      ...futureRef.current,
+      { state: current, activePresetId: currentPresetId, label: step.label },
+    ];
     futureRef.current = nextFuture;
     setFuture(nextFuture);
     lastActionRef.current = null;
     setBarHidden(false);
-    apply(step.before);
+    apply(step.before, step.activePresetId);
     notify('元に戻しました');
   }, [apply, notify]);
 
@@ -186,24 +220,39 @@ export function useTagUndo(
     const step = futureRef.current.at(-1);
     if (!step) return;
     const current = ownedRef.current;
+    const currentPresetId = activeIdRef.current;
     const nextFuture = futureRef.current.slice(0, -1);
     futureRef.current = nextFuture;
     setFuture(nextFuture);
-    const nextPast = [...pastRef.current, { before: current, label: step.label }];
+    const nextPast = [
+      ...pastRef.current,
+      { before: current, activePresetId: currentPresetId, label: step.label },
+    ];
     pastRef.current = nextPast;
     setPast(nextPast);
     lastActionRef.current = null;
     setBarHidden(false);
-    apply(step.state);
+    apply(step.state, step.activePresetId);
     notify('やり直しました');
   }, [apply, notify]);
 
-  const dismiss = useCallback(() => setBarHidden(true), []);
+  const dismiss = useCallback(() => {
+    lastActionRef.current = null;
+    setBarHidden(true);
+  }, []);
 
   const undoRef = useRef(undo);
   const redoRef = useRef(redo);
   undoRef.current = undo;
   redoRef.current = redo;
+
+  useEffect(() => {
+    const onFocusOut = (event: FocusEvent) => {
+      if (isTextEntry(event.target)) lastActionRef.current = null;
+    };
+    document.addEventListener('focusout', onFocusOut);
+    return () => document.removeEventListener('focusout', onFocusOut);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

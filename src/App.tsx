@@ -61,7 +61,10 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     if ((e.target as Element).closest('.dock')) return;
     if (window.matchMedia?.('(min-width: 1100px)').matches) setDockCollapse((n) => n + 1);
   };
-  const tagUndo = useTagUndo(workspace, rawDispatch, show);
+  const tagUndo = useTagUndo(workspace, rawDispatch, show, {
+    activeId: presets.activeId,
+    setActiveId: presets.setActiveId,
+  });
   const dispatch = tagUndo.dispatch;
   const openEditor = useCallback(() => setTab('editor'), []);
   const firstRunReady = dictionary.loaded && !dictionary.error &&
