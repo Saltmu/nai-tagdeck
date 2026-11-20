@@ -3,7 +3,7 @@ import { parseBackup, toBackupJSON } from '../src/lib/backup';
 import { DEFAULT_GENERATION } from '../src/lib/generation';
 import { createPreset, presetToWorkspace, sameWorkspace } from '../src/lib/presets';
 import { buildCharacterPrompts, buildPrompt } from '../src/lib/prompt';
-import { readPromptImport } from '../src/lib/promptImport';
+import { importedBaseForMode, readPromptImport } from '../src/lib/promptImport';
 import { restoreInitialDictionary } from '../src/lib/sampleDictionary';
 import { DEFAULT_SETTINGS } from '../src/lib/settings';
 import { BASE, emptyWorkspace, normalizeWorkspace, workspaceReducer } from '../src/lib/workspace';
@@ -169,21 +169,26 @@ describe('NovelAI PNG import', () => {
     expect(result.negative?.map((t) => t.tag)).toEqual(['lowres']);
   });
 
-  it('detects leading fur dataset as furry mode without importing it as a tag', async () => {
+  it('detects leading fur dataset as furry mode without duplicating it, while keeping it for anime mode', async () => {
     const furry = await read({ v4_prompt: caption('Fur_Dataset, wolf, 1boy') });
+    expect(furry.furDataset).toBe('Fur_Dataset');
     expect(furry.base.unclassified.map((t) => t.tag)).toEqual(['wolf', '1boy']);
+    expect(importedBaseForMode(furry, 'furry').unclassified.map((t) => t.tag)).toEqual(['wolf', '1boy']);
+    expect(importedBaseForMode(furry, 'anime').unclassified.map((t) => t.tag)).toEqual(['Fur_Dataset', 'wolf', '1boy']);
     expect(furry.generation.values.mode).toBe('furry');
     expect(furry.generation.labels).toContain('生成モード ケモノ');
     expect(furry.notes).not.toContain('生成モード（アニメ／ケモノ）は現在の設定を使います。');
 
     const charOnly = await read({ v4_prompt: caption('fur dataset', ['wolf']) });
     expect(charOnly.base.unclassified).toEqual([]);
+    expect(importedBaseForMode(charOnly, 'anime').unclassified.map((t) => t.tag)).toEqual(['fur dataset']);
     expect(charOnly.characters[0]?.tags.unclassified.map((t) => t.tag)).toEqual(['wolf']);
     expect(charOnly.generation.values.mode).toBe('furry');
 
     await expect(read({ v4_prompt: caption('fur dataset') })).rejects.toThrow('適用できる正');
 
     const nonLeading = await read({ prompt: 'wolf, fur dataset' });
+    expect(nonLeading.furDataset).toBeUndefined();
     expect(nonLeading.base.unclassified.map((t) => t.tag)).toEqual(['wolf', 'fur dataset']);
     expect(nonLeading.generation.values.mode).toBeUndefined();
   });

@@ -29,7 +29,7 @@ import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/p
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { sizeOf } from './lib/generation';
 import { copyText } from './lib/browser';
-import type { PromptImport } from './lib/promptImport';
+import { importedBaseForMode, type PromptImport } from './lib/promptImport';
 
 type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
 
@@ -121,8 +121,9 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   };
   const applyPrompt = (result: PromptImport, applyGeneration: boolean) => {
     setPromptSource(null);
+    const nextMode = applyGeneration ? (result.generation.values.mode ?? generation.mode) : generation.mode;
     dispatch({ type: 'replace', workspace: {
-      base: result.base,
+      base: importedBaseForMode(result, nextMode),
       characters: result.characters,
       negative: result.negative ?? workspace.negative,
     } });

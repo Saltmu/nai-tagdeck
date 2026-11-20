@@ -6,6 +6,7 @@ import {
   type GenerationSettings,
 } from './generation';
 import { newId } from './id';
+import type { GenerationMode } from './novelai';
 import { readPngMetadata } from './pngMetadata';
 import { parseTagList } from './prompt';
 import { normalize } from './suggest';
@@ -36,7 +37,7 @@ function sameCenters(a: unknown, b: unknown): boolean {
   });
 }
 
-const FUR_DATASET_PREFIX = /^\s*fur[\s_]+dataset(?:\s*[,\n]+\s*|\s*$)/i;
+const FUR_DATASET_PREFIX = /^\s*(fur[\s_]+dataset)(?:\s*[,\n]+\s*|\s*$)/i;
 
 function generationFrom(comment: Fields, isFurry: boolean) {
   const values: Partial<GenerationSettings> = {};
@@ -72,11 +73,23 @@ function generationFrom(comment: Fields, isFurry: boolean) {
 
 export interface PromptImport {
   base: Workspace['base'];
+  furDataset?: string;
   characters: Workspace['characters'];
   negative?: Workspace['negative'];
   characterNegative?: string;
   generation: ReturnType<typeof generationFrom>;
   notes: string[];
+}
+
+export function importedBaseForMode(result: Pick<PromptImport, 'base' | 'furDataset'>, mode: GenerationMode): Workspace['base'] {
+  if (!result.furDataset || mode === 'furry') return result.base;
+  const key = normalize(result.furDataset);
+  const exists = Object.values(result.base).some((tags) => tags.some((t) => normalize(t.tag) === key));
+  if (exists) return result.base;
+  return {
+    ...result.base,
+    unclassified: [{ id: newId(), enabled: true, tag: result.furDataset, weight: 1 }, ...result.base.unclassified],
+  };
 }
 
 function dictionaryCategories(entries: readonly DictEntry[]) {
@@ -126,7 +139,8 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
     throw new Error(`画像のキャラクター数が保存上限（${MAX_CHARACTERS}人）を超えています`);
   }
 
-  const isFurry = FUR_DATASET_PREFIX.test(baseText);
+  const furDataset = baseText.match(FUR_DATASET_PREFIX)?.[1];
+  const isFurry = furDataset !== undefined;
   const normalizedBaseText = isFurry ? baseText.replace(FUR_DATASET_PREFIX, '') : baseText;
   const notes: string[] = [];
   const byTag = dictionaryCategories(entries);
@@ -192,5 +206,5 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
   if (useCoordinates) notes.push('画像に記録されたキャラクターの座標は反映できません。');
   if (!isFurry) notes.push('生成モード（アニメ／ケモノ）は現在の設定を使います。');
 
-  return { base, characters, negative, characterNegative, generation: generationFrom(comment, isFurry), notes };
+  return { base, furDataset, characters, negative, characterNegative, generation: generationFrom(comment, isFurry), notes };
 }

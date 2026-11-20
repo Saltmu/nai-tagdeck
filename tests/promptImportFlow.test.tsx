@@ -182,3 +182,24 @@ it('ignores an older read that completes after cancellation and a new selection'
   await click(button('適用', container.querySelector('dialog')!));
   expect(preview()).toBe('fresh tag');
 });
+
+it('preserves fur dataset when generation settings are not applied in anime mode and avoids duplication when applied', async () => {
+  const furryBytes = pngFixture({ v4_prompt: caption('fur dataset, wolf') });
+  await drop(imageFile(furryBytes, 'furry.png'));
+  await click(button('適用', container.querySelector('dialog')!));
+  expect(preview()).toBe('fur dataset, wolf');
+  await click(button('生成する（Ctrl+Enter）'));
+  expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
+    input: 'fur dataset, wolf',
+  }), expect.anything());
+
+  await drop(imageFile(furryBytes, 'furry.png'));
+  const dialog = container.querySelector('dialog')!;
+  await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await click(button('適用', dialog));
+  expect(preview()).toBe('wolf');
+  await click(button('生成する（Ctrl+Enter）'));
+  expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
+    input: 'fur dataset, wolf',
+  }), expect.anything());
+});
