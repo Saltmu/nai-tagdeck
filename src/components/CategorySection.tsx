@@ -6,9 +6,15 @@ import { buildCategoryPrompt, parseTagList } from '../lib/prompt';
 import { useCategoryOpen } from '../hooks/useCategoryOpen';
 import { normalize } from '../lib/suggest';
 import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
+import type { PromptTagCategory } from '../lib/tagClassification';
 import { TagRow } from './TagRow';
 import { TagInput, type TagInputDraft } from './TagInput';
 import { CheckIcon, CopyIcon, PasteIcon, SortIcon, ToggleAllIcon } from './icons';
+
+export interface BaseCategorySuggestion {
+  tag: string;
+  category: PromptTagCategory;
+}
 
 interface Props {
   target: TargetId;
@@ -35,6 +41,8 @@ interface Props {
   onAdded?: (tag: string) => void;
   /** 検索語と ON だけの表示。並べ替えは絞り込み中は使わない。 */
   filter?: TagFilter;
+  /** ベースの未分類タグに対する移動先候補（WorkTag.id → 正規化タグ名と候補カテゴリ）。 */
+  suggestedCategories?: Readonly<Record<string, BaseCategorySuggestion>>;
 }
 
 export const CategorySection = memo(function CategorySection({
@@ -55,6 +63,7 @@ export const CategorySection = memo(function CategorySection({
   interactions,
   onAdded,
   filter,
+  suggestedCategories,
 }: Props) {
   const [open, toggleOpen] = useCategoryOpen(target, category);
   const [sorting, setSorting] = useState(false);
@@ -283,26 +292,35 @@ export const CategorySection = memo(function CategorySection({
           )}
           {visibleTags.length > 0 && (
             <ul className="tag-list" ref={listRef}>
-              {visibleTags.map((t, i) => (
-                <TagRow
-                  key={t.id}
-                  tag={t}
-                  query={appliedFilter.query}
-                  sorting={sorting && canSort && !filtering}
-                  canMoveUp={i > 0}
-                  canMoveDown={i < visibleTags.length - 1}
-                  onMove={handleMove}
-                  onDrag={handleDrag}
-                  onToggle={handleToggle}
-                  onWeight={handleWeight}
-                  onEdit={handleEdit}
-                  onRemove={handleRemove}
-                  canRegister={category !== 'unclassified' && !isKnown(t.tag)}
-                  onRegister={handleRegister}
-                  moveDestinations={destinations}
-                  onMoveCategory={destinations ? handleMoveCategory : undefined}
-                />
-              ))}
+              {visibleTags.map((t, i) => {
+                const entry = destinations && suggestedCategories && !isKnown(t.tag)
+                  ? suggestedCategories[t.id]
+                  : undefined;
+                const suggestedCategory = entry && entry.tag === normalize(t.tag) && destinations?.includes(entry.category)
+                  ? entry.category
+                  : undefined;
+                return (
+                  <TagRow
+                    key={t.id}
+                    tag={t}
+                    query={appliedFilter.query}
+                    sorting={sorting && canSort && !filtering}
+                    canMoveUp={i > 0}
+                    canMoveDown={i < visibleTags.length - 1}
+                    onMove={handleMove}
+                    onDrag={handleDrag}
+                    onToggle={handleToggle}
+                    onWeight={handleWeight}
+                    onEdit={handleEdit}
+                    onRemove={handleRemove}
+                    canRegister={category !== 'unclassified' && !isKnown(t.tag)}
+                    onRegister={handleRegister}
+                    moveDestinations={destinations}
+                    suggestedCategory={suggestedCategory}
+                    onMoveCategory={destinations ? handleMoveCategory : undefined}
+                  />
+                );
+              })}
             </ul>
           )}
           {!sorting && (

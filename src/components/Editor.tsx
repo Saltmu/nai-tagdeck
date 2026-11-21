@@ -12,12 +12,12 @@ import {
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { saveCategoriesOpen } from '../lib/categoryOpen';
 import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
-import { classifyTag, dictionaryCategories } from '../lib/tagClassification';
+import { classifyEditorTag, createTagVectorIndex, type PromptTagCategory } from '../lib/tagClassification';
 import { DEFAULT_CHARACTER_NEGATIVE } from '../lib/novelai';
 import { normalize } from '../lib/suggest';
 import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
-import { CategorySection } from './CategorySection';
+import { CategorySection, type BaseCategorySuggestion } from './CategorySection';
 import { CharacterCard } from './CharacterCard';
 import { HistoryControls } from './HistoryControls';
 import { PresetBar } from './PresetBar';
@@ -69,8 +69,42 @@ export function Editor({
   onCharacterNegativeChange,
   shown,
 }: Props) {
-  const knownTags = useMemo(() => dictionaryCategories(dictionary.entries), [dictionary.entries]);
+  const vectorIndex = useMemo(() => createTagVectorIndex(dictionary.entries), [dictionary.entries]);
+  const knownTags = vectorIndex.byTag;
   const isKnown = useCallback((tag: string) => knownTags.has(normalize(tag)), [knownTags]);
+  const [baseSuggestions, setBaseSuggestions] = useState<Record<string, BaseCategorySuggestion>>({});
+  // 上部入力欄で追加した直後の行 ID が確定したタイミングで候補を結び付ける（PNG 取り込み等の別行へ引き継がないため）
+  const pendingBaseSuggestions = useRef<Map<string, PromptTagCategory | null>>(new Map());
+  const [pendingSuggestionVersion, setPendingSuggestionVersion] = useState(0);
+  const clearBaseSuggestion = useCallback((tag: string) => {
+    const key = normalize(tag);
+    pendingBaseSuggestions.current.set(key, null);
+    setPendingSuggestionVersion((v) => v + 1);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (pendingBaseSuggestions.current.size === 0) return;
+    const pending = pendingBaseSuggestions.current;
+    pendingBaseSuggestions.current = new Map();
+    const byTag = new Map(workspace.base.unclassified.map((t) => [normalize(t.tag), t.id]));
+    setBaseSuggestions((prev) => {
+      let next: Record<string, BaseCategorySuggestion> | null = null;
+      for (const [key, suggested] of pending) {
+        const rowId = byTag.get(key);
+        if (!rowId) continue;
+        if (suggested) {
+          const current = (next ?? prev)[rowId];
+          if (current?.tag === key && current.category === suggested) continue;
+          next ??= { ...prev };
+          next[rowId] = { tag: key, category: suggested };
+        } else if (rowId in (next ?? prev)) {
+          next ??= { ...prev };
+          delete next[rowId];
+        }
+      }
+      return next ?? prev;
+    });
+  }, [workspace.base.unclassified, pendingSuggestionVersion]);
 
   const { save } = dictionary;
   const register = useCallback(
@@ -147,9 +181,17 @@ export function Editor({
     [dictionary.entries, promptCategories],
   );
   const addPromptTag = (tag: string, weight: number, pickedCategory?: CategoryKey) => {
-    const category = pickedCategory && pickedCategory !== 'negative' && promptCategories.includes(pickedCategory)
-      ? pickedCategory
-      : classifyTag(tag, knownTags, promptCategories);
+    let category: typeof promptCategories[number];
+    if (pickedCategory && pickedCategory !== 'negative' && promptCategories.includes(pickedCategory)) {
+      category = pickedCategory;
+    } else {
+      const routed = classifyEditorTag(tag, vectorIndex, promptCategories, active ? 'auto' : 'suggest');
+      category = routed.category;
+      if (!active) {
+        pendingBaseSuggestions.current.set(normalize(tag), routed.suggestedCategory);
+        setPendingSuggestionVersion((v) => v + 1);
+      }
+    }
     dispatch({ type: 'add', target: paneTarget, category, tag, weight });
     if (category === 'pose') handlePoseAdded(tag);
   };
@@ -365,6 +407,8 @@ export function Editor({
                 onRegister={register}
                 quickPicks={key === 'quality' ? QUALITY_PICKS : undefined}
                 quickPicksMode="many"
+                onAdded={key === 'unclassified' ? clearBaseSuggestion : undefined}
+                suggestedCategories={key === 'unclassified' ? baseSuggestions : undefined}
                 filter={tagFilter}
               />
             ))}

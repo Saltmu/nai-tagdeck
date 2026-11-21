@@ -17,6 +17,8 @@ interface Props {
   onRegister?: (tag: WorkTag) => void;
   /** 未分類カテゴリからの移動先一覧。 */
   moveDestinations?: readonly PromptCategoryKey[];
+  /** 単語ベクトルで推定した移動先候補カテゴリ（ベースの未分類行に表示）。 */
+  suggestedCategory?: PromptCategoryKey;
   onMoveCategory?: (id: string, to: PromptCategoryKey) => void;
   /** 検索語。一致した範囲を目立たせる。 */
   query?: string;
@@ -47,6 +49,7 @@ export const TagRow = memo(function TagRow({
   canRegister,
   onRegister,
   moveDestinations,
+  suggestedCategory,
   onMoveCategory,
   query = '',
   sorting = false,
@@ -154,6 +157,17 @@ export const TagRow = memo(function TagRow({
         </div>
       ) : (
         <>
+          {!editing && suggestedCategory && onMoveCategory && (
+            <button
+              type="button"
+              className="btn btn-small tag-category-suggest"
+              aria-label={`${tag.tag} を候補カテゴリ「${categoryLabel(suggestedCategory)}」へ移動`}
+              title={`候補カテゴリ「${categoryLabel(suggestedCategory)}」へ移動`}
+              onClick={() => onMoveCategory(tag.id, suggestedCategory)}
+            >
+              候補: {categoryLabel(suggestedCategory)}
+            </button>
+          )}
           {!editing && moveDestinations && onMoveCategory && (
             <select
               className="tag-category-move"

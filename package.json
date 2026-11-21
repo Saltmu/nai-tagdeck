@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run",
+    "eval:classification": "node scripts/eval-tag-classification.mjs",
     "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
