@@ -1,4 +1,4 @@
-import type { CategoryKey, DictEntry, PromptCategoryKey, TagGroups, Workspace, WorkTag } from '../types';
+import type { DictEntry, PromptCategoryKey, TagGroups, Workspace, WorkTag } from '../types';
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from './categories';
 import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
 import {
@@ -10,6 +10,7 @@ import type { GenerationMode } from './novelai';
 import { readPngMetadata } from './pngMetadata';
 import { parseTagList } from './prompt';
 import { normalize } from './suggest';
+import { classifyTag, dictionaryCategories } from './tagClassification';
 import { emptyGroups, newCharacter, normalizeCenter } from './workspace';
 
 type Fields = Record<string, unknown>;
@@ -103,17 +104,6 @@ export function importedBaseForMode(result: Pick<PromptImport, 'base' | 'furData
   };
 }
 
-function dictionaryCategories(entries: readonly DictEntry[]) {
-  const byTag = new Map<string, Set<CategoryKey>>();
-  for (const entry of entries) {
-    const key = normalize(entry.tag);
-    const categories = byTag.get(key) ?? new Set<CategoryKey>();
-    categories.add(entry.category);
-    byTag.set(key, categories);
-  }
-  return byTag;
-}
-
 export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]): Promise<PromptImport> {
   const metadata = await readPngMetadata(blob);
   if (metadata.Comment === undefined) {
@@ -172,10 +162,7 @@ export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]
   const group = (tags: WorkTag[], allowed: readonly PromptCategoryKey[]): TagGroups => {
     const groups = emptyGroups();
     for (const tag of tags) {
-      const matches = byTag.get(normalize(tag.tag));
-      const candidates = matches ? allowed.filter((key) => key !== 'unclassified' && matches.has(key)) : [];
-      const key = candidates.length === 1 ? candidates[0]! : 'unclassified';
-      groups[key].push(tag);
+      groups[classifyTag(tag.tag, byTag, allowed)].push(tag);
     }
     return groups;
   };
