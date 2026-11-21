@@ -257,3 +257,31 @@ it('moves a character left and right along the tab row', async () => {
   await click('右');
   expect(container.querySelector<HTMLButtonElement>('button[aria-label="右 を右へ"]')!.disabled).toBe(true);
 });
+
+it('keeps a single top tag-add input without duplicating when switching tabs', async () => {
+  const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const addInputs = () =>
+    container.querySelectorAll<HTMLInputElement>('input[placeholder="タグを追加（英語・日本語名・よみ）"]');
+
+  try {
+    expect(addInputs()).toHaveLength(1);
+    for (const [tabLabel, expectedCount] of [
+      ['左', 1],
+      ['中', 1],
+      ['ネガティブ', 0],
+      ['ベース', 1],
+      ['中', 1],
+      ['右', 1],
+      ['ベース', 1],
+    ] as const) {
+      await click(tabLabel);
+      expect(addInputs()).toHaveLength(expectedCount);
+    }
+    const keyWarnings = errorSpy.mock.calls.filter((args) =>
+      args.some((arg) => typeof arg === 'string' && arg.includes('Encountered two children with the same key')),
+    );
+    expect(keyWarnings).toEqual([]);
+  } finally {
+    errorSpy.mockRestore();
+  }
+});
