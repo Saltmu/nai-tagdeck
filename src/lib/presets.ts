@@ -1,7 +1,7 @@
 import type { WorkTag, Workspace } from '../types';
 import { PROMPT_CATEGORY_KEYS } from './categories';
 import { newId, normalizeId } from './id';
-import { normalize } from './suggest';
+import { normalize } from './tagText';
 import { hasNegative, normalizeWorkspace } from './workspace';
 
 /** プリセットのタグ一式。ネガティブ対応前に保存したものは negative を持たない。 */

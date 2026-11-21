@@ -14,7 +14,7 @@ import { saveCategoriesOpen } from '../lib/categoryOpen';
 import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import { classifyEditorTag, createTagVectorIndex, type PromptTagCategory } from '../lib/tagClassification';
 import { DEFAULT_CHARACTER_NEGATIVE } from '../lib/novelai';
-import { normalize } from '../lib/suggest';
+import { normalize } from '../lib/tagText';
 import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
 import { CategorySection, type BaseCategorySuggestion } from './CategorySection';

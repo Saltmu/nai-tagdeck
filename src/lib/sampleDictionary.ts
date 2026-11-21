@@ -1,7 +1,7 @@
 import type { CategoryKey, DictEntry } from '../types';
 import { newId } from './id';
 import { sortEntries } from './io';
-import { normalize } from './suggest';
+import { normalize } from './tagText';
 
 // 初期カテゴリに登録するタグ（NovelAI Diffusion V5 向け）。
 const SAMPLE: Array<[CategoryKey, string, string, number?]> = [

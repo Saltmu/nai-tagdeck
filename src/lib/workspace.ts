@@ -3,7 +3,7 @@ import { CHARACTER_CATEGORY_KEYS, LEGACY_DRESS_STATE_CATEGORY, PROMPT_CATEGORY_K
 import { newId, normalizeId } from './id';
 import { clampWeight, parseTagList } from './prompt';
 import { DEFAULT_NEGATIVE } from './novelai';
-import { normalize } from './suggest';
+import { normalize } from './tagText';
 import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
 
 export { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';

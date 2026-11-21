@@ -9,7 +9,7 @@ import { newId } from './id';
 import type { GenerationMode } from './novelai';
 import { readPngMetadata } from './pngMetadata';
 import { parseTagList } from './prompt';
-import { normalize } from './suggest';
+import { normalize } from './tagText';
 import { classifyTag, dictionaryCategories } from './tagClassification';
 import { emptyGroups, newCharacter, normalizeCenter } from './workspace';
 

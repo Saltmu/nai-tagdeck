@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { filterEntries, matchesFilter, normalize, suggest } from '../src/lib/suggest';
+import { filterEntries, matchesFilter, suggest } from '../src/lib/suggest';
+import { normalize } from '../src/lib/tagText';
 import type { CategoryKey, DictEntry } from '../src/types';
 
 const entry = (tag: string, alias = '', category: CategoryKey = 'appearance', sort_order = 0): DictEntry => ({

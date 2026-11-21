@@ -1,25 +1,13 @@
 import type { CategoryKey, DictEntry } from '../types';
+import { normalize, tagWords } from './tagText';
 
-/** 全角/半角・大小文字・カタカナ/ひらがな・アンダースコアの違いを吸収する。 */
-export function normalize(s: string): string {
-  return s
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[ァ-ヶ]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60))
-    .replace(/_/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+export { normalize, tagWords };
 
 export function aliasTokens(alias: string): string[] {
   return alias
     .split(/[\s,、，|/・]+/)
     .map(normalize)
     .filter(Boolean);
-}
-
-export function tagWords(normalizedTag: string): string[] {
-  return normalizedTag.split(/[ #]/).filter(Boolean);
 }
 
 export type MatchKind = 'tag' | 'alias' | 'word';
