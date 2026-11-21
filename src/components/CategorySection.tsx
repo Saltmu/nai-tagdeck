@@ -11,6 +11,11 @@ import { TagRow } from './TagRow';
 import { TagInput, type TagInputDraft } from './TagInput';
 import { CheckIcon, CopyIcon, PasteIcon, SortIcon, ToggleAllIcon } from './icons';
 
+export interface BaseCategorySuggestion {
+  tag: string;
+  category: PromptTagCategory;
+}
+
 interface Props {
   target: TargetId;
   /** コピー時のトーストや入力欄のラベルに使う（例: 「キャラ1 / 外見」）。 */
@@ -36,8 +41,8 @@ interface Props {
   onAdded?: (tag: string) => void;
   /** 検索語と ON だけの表示。並べ替えは絞り込み中は使わない。 */
   filter?: TagFilter;
-  /** ベースの未分類タグに対する移動先候補（正規化タグ名 → カテゴリ）。 */
-  suggestedCategories?: Readonly<Record<string, PromptTagCategory>>;
+  /** ベースの未分類タグに対する移動先候補（WorkTag.id → 正規化タグ名と候補カテゴリ）。 */
+  suggestedCategories?: Readonly<Record<string, BaseCategorySuggestion>>;
 }
 
 export const CategorySection = memo(function CategorySection({
@@ -288,10 +293,12 @@ export const CategorySection = memo(function CategorySection({
           {visibleTags.length > 0 && (
             <ul className="tag-list" ref={listRef}>
               {visibleTags.map((t, i) => {
-                const rawSuggested = destinations && suggestedCategories && !isKnown(t.tag)
-                  ? suggestedCategories[normalize(t.tag)]
+                const entry = destinations && suggestedCategories && !isKnown(t.tag)
+                  ? suggestedCategories[t.id]
                   : undefined;
-                const suggestedCategory = rawSuggested && destinations?.includes(rawSuggested) ? rawSuggested : undefined;
+                const suggestedCategory = entry && entry.tag === normalize(t.tag) && destinations?.includes(entry.category)
+                  ? entry.category
+                  : undefined;
                 return (
                   <TagRow
                     key={t.id}

@@ -156,4 +156,29 @@ describe('単語ベクトルによる未登録タグ分類', () => {
     expect(base.misclassified).toHaveLength(base.wrong);
     expect(character.misclassified).toHaveLength(character.wrong);
   });
+
+  it('同名異表記の辞書エントリが複数カテゴリにある場合も、評価時の重み計算が本番予測と一致する', () => {
+    const entries = [
+      entry('red jacket', 'outfit', 'e1'),
+      entry('red_jacket', 'appearance', 'e2'),
+      entry('jacket', 'outfit', 'e3'),
+    ];
+    const allowed = ['outfit', 'appearance', 'unclassified'] as const;
+
+    const evaluated = evaluateTagVectorClassification(entries, allowed);
+    const prodPrediction = predictTagCategory('red jacket', createTagVectorIndex(entries.slice(2)), allowed);
+
+    expect(prodPrediction?.category).toBe('outfit');
+    // red jacket（衣装）は正解、red_jacket（外見）は衣装と誤分類、jacket は共通語なしのため未分類になる
+    expect(evaluated.total).toBe(3);
+    expect(evaluated.correct).toBe(1);
+    expect(evaluated.wrong).toBe(1);
+    expect(evaluated.unclassified).toBe(1);
+    expect(evaluated.misclassified).toHaveLength(1);
+    expect(evaluated.misclassified[0]).toMatchObject({
+      tag: 'red_jacket',
+      expected: 'appearance',
+      predicted: 'outfit',
+    });
+  });
 });

@@ -283,9 +283,14 @@ export function evaluateTagVectorClassification(
   const indexed = getIndexedEntries(entries);
   const nonNegative = indexed.filter((item) => item.entry.category !== 'negative');
   const wordCatCounts = new Map<string, Map<PromptTagCategory, number>>();
+  const byNormalizedTag = new Map<string, Array<{ category: PromptTagCategory; words: Set<string> }>>();
   for (const item of nonNegative) {
     const cat = item.entry.category as PromptTagCategory;
     const uniqueWords = new Set(item.tagWords);
+    const sameTag = byNormalizedTag.get(item.tag);
+    if (sameTag) sameTag.push({ category: cat, words: uniqueWords });
+    else byNormalizedTag.set(item.tag, [{ category: cat, words: uniqueWords }]);
+
     for (const word of uniqueWords) {
       let counts = wordCatCounts.get(word);
       if (!counts) {
@@ -318,13 +323,30 @@ export function evaluateTagVectorClassification(
   for (let i = 0; i < targets.length; i++) {
     const hidden = targets[i]!;
     const expected = hidden.entry.category as PromptTagCategory;
-    const hiddenWords = new Set(hidden.tagWords);
+    // 本番判定では同名タグが辞書に存在しない前提になるため、正規化名が一致する全エントリを重み計算からも除外する
+    const heldOutEntries = byNormalizedTag.get(hidden.tag) ?? [];
+    const heldOutWordCounts = new Map<string, Map<PromptTagCategory, number>>();
+    for (const entry of heldOutEntries) {
+      for (const word of entry.words) {
+        let counts = heldOutWordCounts.get(word);
+        if (!counts) {
+          counts = new Map();
+          heldOutWordCounts.set(word, counts);
+        }
+        counts.set(entry.category, (counts.get(entry.category) ?? 0) + 1);
+      }
+    }
 
     const weightOf = (word: string): number => {
       const counts = wordCatCounts.get(word);
       if (!counts) return 1;
+      const excluded = heldOutWordCounts.get(word);
       let categories = counts.size;
-      if (hiddenWords.has(word) && counts.get(expected) === 1) categories--;
+      if (excluded) {
+        for (const [cat, removed] of excluded) {
+          if ((counts.get(cat) ?? 0) <= removed) categories--;
+        }
+      }
       return categories <= 1 ? 1 : 1 / categories;
     };
 

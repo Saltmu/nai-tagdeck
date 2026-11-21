@@ -17,7 +17,7 @@ import { DEFAULT_CHARACTER_NEGATIVE } from '../lib/novelai';
 import { normalize } from '../lib/suggest';
 import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
-import { CategorySection } from './CategorySection';
+import { CategorySection, type BaseCategorySuggestion } from './CategorySection';
 import { CharacterCard } from './CharacterCard';
 import { HistoryControls } from './HistoryControls';
 import { PresetBar } from './PresetBar';
@@ -72,16 +72,39 @@ export function Editor({
   const vectorIndex = useMemo(() => createTagVectorIndex(dictionary.entries), [dictionary.entries]);
   const knownTags = vectorIndex.byTag;
   const isKnown = useCallback((tag: string) => knownTags.has(normalize(tag)), [knownTags]);
-  const [baseSuggestions, setBaseSuggestions] = useState<Record<string, PromptTagCategory>>({});
+  const [baseSuggestions, setBaseSuggestions] = useState<Record<string, BaseCategorySuggestion>>({});
+  // 上部入力欄で追加した直後の行 ID が確定したタイミングで候補を結び付ける（PNG 取り込み等の別行へ引き継がないため）
+  const pendingBaseSuggestions = useRef<Map<string, PromptTagCategory | null>>(new Map());
+  const [pendingSuggestionVersion, setPendingSuggestionVersion] = useState(0);
   const clearBaseSuggestion = useCallback((tag: string) => {
     const key = normalize(tag);
-    setBaseSuggestions((prev) => {
-      if (!(key in prev)) return prev;
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
+    pendingBaseSuggestions.current.set(key, null);
+    setPendingSuggestionVersion((v) => v + 1);
   }, []);
+
+  useLayoutEffect(() => {
+    if (pendingBaseSuggestions.current.size === 0) return;
+    const pending = pendingBaseSuggestions.current;
+    pendingBaseSuggestions.current = new Map();
+    const byTag = new Map(workspace.base.unclassified.map((t) => [normalize(t.tag), t.id]));
+    setBaseSuggestions((prev) => {
+      let next: Record<string, BaseCategorySuggestion> | null = null;
+      for (const [key, suggested] of pending) {
+        const rowId = byTag.get(key);
+        if (!rowId) continue;
+        if (suggested) {
+          const current = (next ?? prev)[rowId];
+          if (current?.tag === key && current.category === suggested) continue;
+          next ??= { ...prev };
+          next[rowId] = { tag: key, category: suggested };
+        } else if (rowId in (next ?? prev)) {
+          next ??= { ...prev };
+          delete next[rowId];
+        }
+      }
+      return next ?? prev;
+    });
+  }, [workspace.base.unclassified, pendingSuggestionVersion]);
 
   const { save } = dictionary;
   const register = useCallback(
@@ -165,17 +188,8 @@ export function Editor({
       const routed = classifyEditorTag(tag, vectorIndex, promptCategories, active ? 'auto' : 'suggest');
       category = routed.category;
       if (!active) {
-        const key = normalize(tag);
-        const suggested = routed.suggestedCategory;
-        setBaseSuggestions((prev) => {
-          if (suggested) {
-            return prev[key] === suggested ? prev : { ...prev, [key]: suggested };
-          }
-          if (!(key in prev)) return prev;
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        });
+        pendingBaseSuggestions.current.set(normalize(tag), routed.suggestedCategory);
+        setPendingSuggestionVersion((v) => v + 1);
       }
     }
     dispatch({ type: 'add', target: paneTarget, category, tag, weight });

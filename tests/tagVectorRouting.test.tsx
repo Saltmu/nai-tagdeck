@@ -31,6 +31,7 @@ function initialWorkspace(): Workspace {
 interface HarnessRef {
   setEntries: (next: DictEntry[]) => void;
   getWorkspace: () => Workspace;
+  replaceWorkspace: (next: Workspace) => void;
 }
 
 function Harness({ initialEntries, onReady }: { initialEntries: DictEntry[]; onReady: (ref: HarnessRef) => void }) {
@@ -40,6 +41,7 @@ function Harness({ initialEntries, onReady }: { initialEntries: DictEntry[]; onR
   onReady({
     setEntries,
     getWorkspace: () => workspace,
+    replaceWorkspace: (next) => dispatch({ type: 'replace', workspace: next }),
   });
 
   const dictionary: Dictionary = {
@@ -243,4 +245,18 @@ it('keeps unclassified section input, ambiguous dictionary tags, and PNG import 
   const imported = await readPromptImport(png, sampleDictionary());
   expect(imported.base.unclassified.map((t) => t.tag)).toEqual(['asymmetrical bomber jacket']);
   expect(imported.characters[0]?.tags.unclassified.map((t) => t.tag)).toEqual(['asymmetrical bomber jacket']);
+
+  // 上部入力で候補が付いたあと、PNG 取り込み等で別の行に置き換わった場合は候補を引き継がない
+  await submitTopInput('ベース', 'asymmetrical bomber jacket');
+  expect(
+    container.querySelector('button[aria-label="asymmetrical bomber jacket を候補カテゴリ「衣装」へ移動"]'),
+  ).not.toBeNull();
+
+  await act(async () => harness.replaceWorkspace({
+    base: imported.base,
+    characters: imported.characters,
+    negative: harness.getWorkspace().negative,
+  }));
+  expect(harness.getWorkspace().base.unclassified.map((t) => t.tag)).toEqual(['asymmetrical bomber jacket']);
+  expect(container.querySelector('button[aria-label^="asymmetrical bomber jacket を候補カテゴリ"]')).toBeNull();
 });
