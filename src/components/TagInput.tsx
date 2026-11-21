@@ -2,7 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState, type RefObject } from 'rea
 import type { CategoryKey, DictEntry } from '../types';
 import { categoryLabel } from '../lib/categories';
 import { parseTagList } from '../lib/prompt';
-import { normalize, suggest } from '../lib/suggest';
+import { suggest } from '../lib/suggest';
+import { normalize } from '../lib/tagText';
 import { useSuggestionPopup } from '../hooks/useSuggestionPopup';
 import { INTERACTIONS, splitInteraction, withInteraction, type Interaction } from '../lib/interaction';
 

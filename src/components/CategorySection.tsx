@@ -4,7 +4,7 @@ import { BASE, type WorkspaceAction } from '../lib/workspace';
 import { categoryLabel, CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { buildCategoryPrompt, parseTagList } from '../lib/prompt';
 import { useCategoryOpen } from '../hooks/useCategoryOpen';
-import { normalize } from '../lib/suggest';
+import { normalize } from '../lib/tagText';
 import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import type { PromptTagCategory } from '../lib/tagClassification';
 import { TagRow } from './TagRow';

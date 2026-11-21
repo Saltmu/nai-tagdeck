@@ -2,7 +2,7 @@ import type { DictEntry } from '../types';
 import { categoryIndex, parseCategory } from './categories';
 import { normalizeId } from './id';
 import { clampWeight } from './prompt';
-import { normalize } from './suggest';
+import { normalize } from './tagText';
 
 /** Excel 向け CSV の先頭に付ける UTF-8 BOM。 */
 export const UTF8_BOM = '\uFEFF';

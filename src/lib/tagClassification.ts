@@ -1,5 +1,6 @@
 import type { CategoryKey, DictEntry, PromptCategoryKey } from '../types';
-import { getIndexedEntries, normalize, tagWords } from './suggest';
+import { getIndexedEntries } from './suggest';
+import { normalize, tagWords } from './tagText';
 
 export type PromptTagCategory = Exclude<PromptCategoryKey, 'unclassified'>;
 

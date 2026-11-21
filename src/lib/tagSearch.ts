@@ -1,5 +1,5 @@
 import type { WorkTag } from '../types';
-import { normalize } from './suggest';
+import { normalize } from './tagText';
 
 /** 表示中のタグを、検索語と ON だけで絞る。 */
 export interface TagFilter {

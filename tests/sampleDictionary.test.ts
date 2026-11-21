@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { restoreInitialDictionary, sampleDictionary } from '../src/lib/sampleDictionary';
-import { normalize } from '../src/lib/suggest';
+import { normalize } from '../src/lib/tagText';
 import type { DictEntry } from '../src/types';
 import { tagsFromText } from '../src/lib/workspace';
 import { DEFAULT_NEGATIVE } from '../src/lib/novelai';
