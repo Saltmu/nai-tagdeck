@@ -69,11 +69,18 @@ export function buildSwAsset({ bundle, publicFiles, template }: SwBuildInput): {
   source: string;
 } {
   const bundleNames = Object.keys(bundle).sort();
+  const indexEntry = bundle['index.html'];
+  const offlineHtml =
+    indexEntry?.type === 'asset'
+      ? typeof indexEntry.source === 'string'
+        ? indexEntry.source
+        : new TextDecoder().decode(indexEntry.source)
+      : '';
   const precachePublicNames = Object.keys(publicFiles)
     .filter((name) => !PRECACHE_EXCLUDE.has(name))
     .sort();
+  // ページ本体は一覧に入れない。インストール時の別リクエストにすると、埋め込みと違う HTML を掴む。
   const precache = [
-    './',
     ...bundleNames.filter((name) => name !== 'index.html').map((name) => `./${name}`),
     ...precachePublicNames.map((name) => `./${name}`),
   ];
@@ -99,7 +106,8 @@ export function buildSwAsset({ bundle, publicFiles, template }: SwBuildInput): {
   const version = hash.digest('hex').slice(0, 12);
   const source = template
     .replace('__VERSION__', version)
-    .replace('__PRECACHE__', JSON.stringify(precache));
+    .replace('__PRECACHE__', JSON.stringify(precache))
+    .replace('__OFFLINE_HTML__', JSON.stringify(offlineHtml));
 
   return { version, precache, source };
 }

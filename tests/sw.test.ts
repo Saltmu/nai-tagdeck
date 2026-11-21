@@ -6,11 +6,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildSwAsset, CSP_HEADER, CSP_META, type SwBuildInput } from '../vite.config';
 
 const template = readFileSync(resolve('src/sw-template.js'), 'utf-8');
+const PAGE_HTML = '<!doctype html><script src="./assets/index-aaaa1111.js"></script><title>v1</title>';
 
 function baseInput(): SwBuildInput {
   return {
     bundle: {
-      'index.html': { type: 'asset', source: '<!doctype html><title>v1</title>' },
+      'index.html': { type: 'asset', source: PAGE_HTML },
       'assets/index-aaaa1111.js': { type: 'chunk', code: 'console.log(1);' },
       'assets/index-bbbb2222.css': { type: 'asset', source: 'body{color:#000}' },
     },
@@ -32,7 +33,6 @@ describe('buildSwAsset', () => {
   it('excludes sitemap.xml and robots.txt from precache and keeps relative ./ paths', () => {
     const { precache } = buildSwAsset(baseInput());
     expect(precache).toEqual([
-      './',
       './assets/index-aaaa1111.js',
       './assets/index-bbbb2222.css',
       './brand/icon.svg',
@@ -52,7 +52,7 @@ describe('buildSwAsset', () => {
       bundle: {
         'assets/index-bbbb2222.css': { type: 'asset', source: 'body{color:#000}' },
         'assets/index-aaaa1111.js': { type: 'chunk', code: 'console.log(1);' },
-        'index.html': { type: 'asset', source: '<!doctype html><title>v1</title>' },
+        'index.html': { type: 'asset', source: PAGE_HTML },
       },
       publicFiles: {
         'sitemap.xml': '<urlset/>',
@@ -104,6 +104,28 @@ describe('buildSwAsset', () => {
   });
 });
 
+function readJsonValue(source: string, marker: string): unknown {
+  const start = source.indexOf(marker);
+  if (start < 0) throw new Error(marker);
+  const slice = source.slice(start + marker.length);
+  if (slice.startsWith('"')) {
+    let escaped = false;
+    for (let i = 1; i < slice.length; i++) {
+      const ch = slice[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') return JSON.parse(slice.slice(0, i + 1));
+    }
+  }
+  throw new Error(`unterminated ${marker}`);
+}
+
 function extractBuildOutputs(result: Awaited<ReturnType<typeof viteBuild>>) {
   const outputs = (Array.isArray(result) ? result : [result]).flatMap((r) => ('output' in r ? r.output : []));
   const byName = new Map(outputs.map((item) => [item.fileName, item]));
@@ -122,6 +144,7 @@ function extractBuildOutputs(result: Awaited<ReturnType<typeof viteBuild>>) {
   }
   return {
     html: htmlAsset.source,
+    offlineHtml: readJsonValue(swAsset.source, 'const OFFLINE_HTML = ') as string,
     cacheName: cacheMatch[1],
     precache: JSON.parse(precacheMatch[1]) as string[],
     chunkNames: outputs.filter((o) => o.type === 'chunk').map((o) => o.fileName).sort(),
@@ -160,7 +183,17 @@ describe('Vite build swPlugin integration', () => {
     expect(second.precache).toEqual(first.precache);
     expect(second.cacheName).not.toBe(first.cacheName);
     expect(first.precache).not.toContain('./index.html');
+    expect(first.precache).not.toContain('./');
     expect(first.precache).not.toContain('./sitemap.xml');
+    expect(first.offlineHtml).toBe(first.html);
+    const deployBase = 'https://shishio.x0.to/nai-tagdeck/';
+    const refs = [...first.offlineHtml.matchAll(/\b(?:src|href)="(\.\/[^"]+)"/g)].map((match) => match[1] ?? '');
+    expect(refs.length).toBeGreaterThan(0);
+    for (const ref of refs) {
+      const url = new URL(ref, deployBase);
+      expect(url.href.startsWith(deployBase)).toBe(true);
+      expect(first.precache).toContain(`.${url.pathname.slice(new URL(deployBase).pathname.length - 1)}`);
+    }
     expect(first.html).toContain(`content="${CSP_META}"`);
     expect(first.html).not.toContain('frame-ancestors');
     expect(first.html).not.toContain('data:');
@@ -193,9 +226,85 @@ interface MockRequest {
   mode: string;
 }
 
-function createSwHarness(swSource: string, baseUrl: string, options?: { failPuts?: boolean }) {
-  const listeners = new Map<string, (event: unknown) => void>();
+interface SwBackend {
+  store: Map<string, Map<string, Response>>;
+  indexedDB: { open(name: string, version: number): unknown };
+}
+
+function createSwBackend(): SwBackend {
   const store = new Map<string, Map<string, Response>>();
+  let order: string[] = [];
+  let tail = Promise.resolve();
+  const indexedDB = {
+    open(_name: string, _version: number) {
+      const pendingGets: Array<{ result: string[]; onsuccess: (() => void) | null }> = [];
+      let oncomplete: (() => void) | null = null;
+      let onsuccess: (() => void) | null = null;
+      let onupgradeneeded: (() => void) | null = null;
+      const db = {
+        objectStoreNames: { contains: () => true },
+        close() {},
+        transaction() {
+          return {
+            objectStore() {
+              return {
+                get() {
+                  const got = { result: order.slice(), onsuccess: null as (() => void) | null };
+                  pendingGets.push(got);
+                  return got;
+                },
+                put(value: string[]) {
+                  order = value.slice();
+                },
+              };
+            },
+            set oncomplete(fn: () => void) {
+              oncomplete = fn;
+            },
+            set onerror(_fn: () => void) {},
+            set onabort(_fn: () => void) {},
+          };
+        },
+      };
+      const request = {
+        result: db,
+        error: null,
+        set onsuccess(fn: () => void) {
+          onsuccess = fn;
+        },
+        set onerror(_fn: () => void) {},
+        set onupgradeneeded(fn: () => void) {
+          onupgradeneeded = fn;
+        },
+      };
+      tail = tail.then(
+        () =>
+          new Promise<void>((resolve) => {
+            queueMicrotask(() => {
+              onupgradeneeded?.();
+              onsuccess?.();
+              queueMicrotask(() => {
+                for (const got of pendingGets) got.onsuccess?.();
+                oncomplete?.();
+                resolve();
+              });
+            });
+          }),
+      );
+      return request;
+    },
+  };
+  return { store, indexedDB };
+}
+
+function createSwHarness(
+  swSource: string,
+  baseUrl: string,
+  options?: { failPuts?: boolean; backend?: SwBackend; onAddAll?: () => Promise<void> | void },
+) {
+  const listeners = new Map<string, (event: unknown) => void>();
+  const backend = options?.backend ?? createSwBackend();
+  const store = backend.store;
 
   const resolveKey = (input: string | MockRequest) =>
     new URL(typeof input === 'string' ? input : input.url, baseUrl).href;
@@ -233,6 +342,7 @@ function createSwHarness(swSource: string, baseUrl: string, options?: { failPuts
       const cache = bucket;
       return {
         async addAll(urls: string[]) {
+          await options?.onAddAll?.();
           for (const u of urls) {
             const href = resolveKey(u);
             const res = await fetchMock(href);
@@ -240,7 +350,7 @@ function createSwHarness(swSource: string, baseUrl: string, options?: { failPuts
           }
         },
         async put(req: string | MockRequest, res: Response) {
-          if (options?.failPuts) throw new Error('cache put failed');
+          if (options?.failPuts && resolveKey(req) !== resolveKey('./')) throw new Error('cache put failed');
           cache.set(resolveKey(req), res);
         },
       };
@@ -281,6 +391,7 @@ function createSwHarness(swSource: string, baseUrl: string, options?: { failPuts
     self: selfObj,
     caches: cachesMock,
     fetch: fetchMock,
+    indexedDB: backend.indexedDB,
     URL,
     Response,
   });
@@ -343,8 +454,12 @@ describe('Service Worker runtime under subdirectory deployment', () => {
 
     await sw.dispatchLifecycle('install');
     expect(sw.skipWaiting).not.toHaveBeenCalled();
+    expect(sw.fetchMock.mock.calls.map((call) => String(call[0]))).not.toContain(baseUrl);
     const activeCache = sw.store.get(`nai-tagdeck-${version}`);
     expect(activeCache?.has(`${baseUrl}`)).toBe(true);
+    expect(await activeCache?.get(`${baseUrl}`)?.clone().text()).toBe(PAGE_HTML);
+    expect(new URL('./assets/index-aaaa1111.js', baseUrl).href).toBe(`${baseUrl}assets/index-aaaa1111.js`);
+    expect(activeCache?.has(`${baseUrl}assets/index-aaaa1111.js`)).toBe(true);
     expect(activeCache?.has(`${baseUrl}icons/favicon-32.png`)).toBe(true);
 
     await sw.dispatchLifecycle('activate');
@@ -402,7 +517,37 @@ describe('Service Worker runtime under subdirectory deployment', () => {
     });
     expect(offlineNav.waitUntilRejected).toBe(false);
     expect(offlineNav.response?.ok).toBe(true);
-    expect(await offlineNav.response?.text()).toBe(`body:${baseUrl}`);
+    expect(await offlineNav.response?.text()).toBe(PAGE_HTML);
+  });
+
+  it('keeps a newer worker cache when an older waiting worker activates during its install', async () => {
+    const backend = createSwBackend();
+    const older = buildSwAsset(baseInput());
+    const newerInput = baseInput();
+    newerInput.bundle['index.html'] = { type: 'asset', source: '<!doctype html><script src="./assets/index-aaaa1111.js"></script><title>v2</title>' };
+    const newer = buildSwAsset(newerInput);
+    expect(older.version).not.toBe(newer.version);
+
+    const oldSw = createSwHarness(older.source, baseUrl, { backend });
+    await oldSw.dispatchLifecycle('install');
+
+    let releaseNewer = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseNewer = resolve;
+    });
+    const newSw = createSwHarness(newer.source, baseUrl, { backend, onAddAll: () => gate });
+    const installing = newSw.dispatchLifecycle('install');
+    await vi.waitFor(() => expect(backend.store.has(`nai-tagdeck-${newer.version}`)).toBe(true));
+    backend.store.set('nai-tagdeck-ancient', new Map());
+
+    await oldSw.dispatchLifecycle('activate');
+    expect(backend.store.has('nai-tagdeck-ancient')).toBe(false);
+    expect(backend.store.has(`nai-tagdeck-${older.version}`)).toBe(true);
+    expect(backend.store.has(`nai-tagdeck-${newer.version}`)).toBe(true);
+
+    releaseNewer();
+    await installing;
+    expect(await backend.store.get(`nai-tagdeck-${newer.version}`)?.get(baseUrl)?.text()).toContain('<title>v2</title>');
   });
 
   it('activates the new worker only after skip-waiting, and a failed cache write still returns the response', async () => {
