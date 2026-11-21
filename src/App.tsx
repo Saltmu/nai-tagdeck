@@ -14,7 +14,6 @@ import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWor
 import { Toast, type ToastHandle } from './components/Toast';
 import { useToken } from './hooks/useToken';
 import { useTagUndo } from './hooks/useTagUndo';
-import { UndoBar } from './components/UndoBar';
 import { useImages } from './hooks/useImages';
 import { useGenerator } from './hooks/useGenerator';
 import { usePresets } from './hooks/usePresets';
@@ -66,7 +65,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     if ((e.target as Element).closest('.dock')) return;
     if (window.matchMedia?.('(min-width: 1100px)').matches) setDockCollapse((n) => n + 1);
   };
-  const tagUndo = useTagUndo(workspace, rawDispatch, show, {
+  const tagUndo = useTagUndo(workspace, rawDispatch, {
     activeId: presets.activeId,
     setActiveId: presets.setActiveId,
   });
@@ -238,6 +237,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             <Editor
               workspace={workspace}
               dispatch={dispatch}
+              history={tagUndo}
               loaded={loaded}
               dictionary={dictionary}
               syntax={settings.weightSyntax}
@@ -332,16 +332,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       {showLatest && latest && (
         <LatestPreview image={latest} onOpen={() => setTab('generate')} onDismiss={dismiss} />
       )}
-
-      <UndoBar
-        open={tagUndo.barOpen}
-        label={tagUndo.label}
-        canUndo={tagUndo.canUndo}
-        canRedo={tagUndo.canRedo}
-        onUndo={tagUndo.undo}
-        onRedo={tagUndo.redo}
-        onDismiss={tagUndo.dismiss}
-      />
 
       <Toast ref={toastRef} />
     </div>

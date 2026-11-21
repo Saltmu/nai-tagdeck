@@ -2,27 +2,29 @@
 import { act, useReducer } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { HistoryControls } from '../src/components/HistoryControls';
 import { useTagUndo } from '../src/hooks/useTagUndo';
 import { BASE, emptyWorkspace, newCharacter, workspaceReducer, type WorkspaceAction } from '../src/lib/workspace';
 import type { Workspace } from '../src/types';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root;
+let container: HTMLDivElement;
 let api: ReturnType<typeof useTagUndo>;
 let rawDispatch: (action: WorkspaceAction) => void;
 let ws: Workspace;
-const notify = vi.fn();
 
 function Harness({ initial }: { initial: Workspace }) {
   const [workspace, dispatch] = useReducer(workspaceReducer, initial);
   ws = workspace;
   rawDispatch = dispatch;
-  api = useTagUndo(workspace, dispatch, notify);
-  return null;
+  api = useTagUndo(workspace, dispatch);
+  return <HistoryControls {...api} />;
 }
 const mount = async (initial: Workspace) => act(async () => root.render(<Harness initial={initial} />));
 const run = async (fn: () => void) => act(async () => fn());
 const names = () => ws.base.appearance.map((t) => t.tag);
+const historyButton = (name: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!;
 const idOf = (tag: string) => ws.base.appearance.find((t) => t.tag === tag)!.id;
 const removeTag = (tag: string) =>
   run(() => api.dispatch({ type: 'remove', target: BASE, category: 'appearance', id: idOf(tag), undo: true }));
@@ -40,8 +42,8 @@ const key = (init: KeyboardEventInit, target?: EventTarget) =>
   });
 
 beforeEach(async () => {
-  notify.mockClear();
-  root = createRoot(document.createElement('div'));
+  container = document.body.appendChild(document.createElement('div'));
+  root = createRoot(container);
   let w = emptyWorkspace();
   for (const [tag, weight] of [['a', 1.2], ['b', 1], ['c', 1], ['d', 1]] as const) {
     w = workspaceReducer(w, { type: 'add', target: BASE, category: 'appearance', tag, weight });
@@ -50,21 +52,31 @@ beforeEach(async () => {
   await mount(w);
 });
 afterEach(async () => {
-  document.body.textContent = '';
   await act(async () => root.unmount());
+  document.body.textContent = '';
 });
 
-it('restores a removed tag with its weight, state and position', async () => {
+it('keeps both icon buttons visible and restores a removed tag with its weight, state and position', async () => {
+  const undo = historyButton('元に戻す');
+  const redo = historyButton('やり直す');
+  expect(undo.querySelector('svg')).not.toBeNull();
+  expect(redo.querySelector('svg')).not.toBeNull();
+  expect(undo.getAttribute('aria-disabled')).toBe('true');
+  expect(redo.getAttribute('aria-disabled')).toBe('true');
   await removeTag('a');
   expect(names()).toEqual(['b', 'c', 'd']);
-  expect(api.label).toBe('「a」を削除しました');
-  expect(api.barOpen).toBe(true);
-  await run(() => api.undo());
+  expect(undo.getAttribute('aria-disabled')).toBe('false');
+  undo.focus();
+  await run(() => undo.click());
   expect(ws.base.appearance[0]).toMatchObject({ tag: 'a', weight: 1.2, enabled: false });
   expect(names()).toEqual(['a', 'b', 'c', 'd']);
-  expect(api.canUndo).toBe(false);
-  expect(api.canRedo).toBe(true);
-  expect(notify).toHaveBeenCalledWith('元に戻しました');
+  expect(undo.getAttribute('aria-disabled')).toBe('true');
+  expect(document.activeElement).toBe(undo);
+  expect(redo.getAttribute('aria-disabled')).toBe('false');
+  expect(container.querySelector('[role="status"]')?.textContent).toContain('元に戻しました');
+  await run(() => redo.click());
+  expect(names()).toEqual(['b', 'c', 'd']);
+  expect(redo.getAttribute('aria-disabled')).toBe('true');
 });
 
 it('undoes one removal at a time and redoes it', async () => {
@@ -75,7 +87,7 @@ it('undoes one removal at a time and redoes it', async () => {
   expect(names()).toEqual(['c', 'd']);
   await run(() => api.redo());
   expect(names()).toEqual(['c']);
-  expect(notify).toHaveBeenLastCalledWith('やり直しました');
+  expect(api.status).toContain('やり直しました');
   await run(() => api.undo());
   await run(() => api.undo());
   expect(names()).toEqual(['a', 'c', 'd']);
@@ -182,15 +194,6 @@ it('keeps a later rename when the name field was left', async () => {
   expect(ws.characters[0]!.name).toBe('あ');
 });
 
-it('starts a new weight step after dismissing the bar', async () => {
-  focusField();
-  await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.2 }));
-  await run(() => api.dismiss());
-  await run(() => api.dispatch({ type: 'setWeight', target: BASE, category: 'appearance', id: idOf('b'), weight: 1.3 }));
-  await run(() => api.undo());
-  expect(weightOf('b')).toBe(1.2);
-});
-
 it('tracks removals that do not pass the legacy undo flag', async () => {
   await run(() => api.dispatch({ type: 'remove', target: BASE, category: 'appearance', id: idOf('a') }));
   expect(api.canUndo).toBe(true);
@@ -214,15 +217,6 @@ it('discards history when the workspace is replaced outside the tracked dispatch
   expect(api.canUndo).toBe(false);
   expect(api.canRedo).toBe(false);
   expect(ws.base.appearance).toEqual([]);
-});
-
-it('hides the bar without dropping history', async () => {
-  await removeTag('a');
-  await run(() => api.dismiss());
-  expect(api.barOpen).toBe(false);
-  expect(api.canUndo).toBe(true);
-  await run(() => api.undo());
-  expect(names()[0]).toBe('a');
 });
 
 it('undoes and redoes from Ctrl, Cmd, Shift and Y shortcuts', async () => {
@@ -295,7 +289,7 @@ it('restores and redoes activePresetId alongside workspace replacement', async (
   function PresetHarness({ initial }: { initial: Workspace }) {
     const [workspace, dispatch] = useReducer(workspaceReducer, initial);
     ws = workspace;
-    api = useTagUndo(workspace, dispatch, notify, { activeId, setActiveId });
+    api = useTagUndo(workspace, dispatch, { activeId, setActiveId });
     return null;
   }
   await act(async () => root.render(<PresetHarness initial={ws} />));
