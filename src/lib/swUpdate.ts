@@ -1,7 +1,8 @@
 // 本番の Service Worker を登録し、すでにページを制御中のときだけ更新を知らせる。
-// 初回の claim では再読み込みしない。ページが更新を選んだあとの controllerchange で一度だけ再読み込みする。
+// 初回の claim では再読み込みしない。再読み込みは、そのタブが更新を選んだときだけ行う。
 
 const SKIP_WAITING = { type: 'skip-waiting' } as const;
+const SW_RELOAD_KEY = 'nai-tagdeck-sw-reload';
 
 export interface SwWaitingWorker {
   state: string;
@@ -46,7 +47,13 @@ export function dismissSwUpdate(): void {
   for (const listener of waitingListeners) listener(null);
 }
 
-export function requestSwSkipWaiting(worker: SwWaitingWorker): void {
+export function requestSwSkipWaiting(worker: SwWaitingWorker, reload: () => void = () => window.location.reload()): void {
+  // 他タブが先に有効化したあとは controllerchange が来ないので、このタブはすぐ読み直す。
+  if (worker.state === 'activated') {
+    reload();
+    return;
+  }
+  sessionStorage.setItem(SW_RELOAD_KEY, '1');
   worker.postMessage(SKIP_WAITING);
 }
 
@@ -62,8 +69,12 @@ export function bindSwUpdates(sw: SwUpdateClient, reload: () => void): () => voi
   const onControllerChange = () => {
     if (!hadController) {
       hadController = true;
+      sessionStorage.removeItem(SW_RELOAD_KEY);
       return;
     }
+    // 他タブの更新では読み直さない。このタブが「再読み込み」を押した印があるときだけ。
+    if (sessionStorage.getItem(SW_RELOAD_KEY) !== '1') return;
+    sessionStorage.removeItem(SW_RELOAD_KEY);
     if (reloading) return;
     reloading = true;
     reload();

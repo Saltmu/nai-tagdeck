@@ -106,10 +106,13 @@ jobs:
           # 1. Upload new fingerprinted assets first. Compare by size so a fresh
           #    build does not resend unchanged hashes. Do not delete yet.
           # 2. Publish pages and other files, then delete remote files that are
-          #    not in dist. Keep server-managed .htaccess (no --delete-excluded)
-          #    and leave assets/ for the next step.
+          #    not in dist. Keep server-managed .htaccess and robots.txt
+          #    (no --delete-excluded) and leave assets/ for the next step.
           # 3. Delete stale hashed assets only after the new pages are in place.
-          #    Do not use --delete-first or --transfer-all.
+          #    Do not use --delete-first or --transfer-all. A tab that already
+          #    loaded the previous index.html can miss its old script until
+          #    reload. That matches scripts/deploy.mjs; issue #33 asks to remove
+          #    those files rather than keep a grace copy.
           lftp --norc -f /dev/stdin <<EOF
           set cmd:fail-exit yes
           set net:timeout 20
@@ -120,7 +123,7 @@ jobs:
           open --env-password -u "$DEPLOY_USER" "sftp://$DEPLOY_HOST:$DEPLOY_PORT"
           cd "${DEPLOY_DIR%/}"
           mirror --reverse --no-perms --ignore-time --verbose $preview dist/assets assets
-          mirror --reverse --delete --no-perms --verbose --exclude-glob .htaccess --exclude ^assets/ $preview dist .
+          mirror --reverse --delete --no-perms --verbose --exclude-glob .htaccess --exclude-glob robots.txt --exclude ^assets/ $preview dist .
           mirror --reverse --delete --no-perms --ignore-time --verbose $preview dist/assets assets
           bye
           EOF

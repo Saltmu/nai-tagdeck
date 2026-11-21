@@ -86,20 +86,48 @@ function createClient(controller: SwWaitingWorker | null) {
 describe('bindSwUpdates', () => {
   beforeEach(() => {
     dismissSwUpdate();
+    sessionStorage.removeItem('nai-tagdeck-sw-reload');
   });
 
   afterEach(() => {
     dismissSwUpdate();
   });
 
-  it('does not reload when the first controller arrives, then reloads once on the next change', async () => {
-    const client = createClient(null);
+  it('reloads only the tab that accepted the update', () => {
+    const client = createClient(fakeWorker('activated'));
     const reload = vi.fn();
     bindSwUpdates(client.sw, reload);
     client.fireControllerChange();
     client.fireControllerChange();
+    expect(reload).not.toHaveBeenCalled();
+
+    const worker = fakeWorker('installed');
+    requestSwSkipWaiting(worker, reload);
+    expect(worker.messages).toEqual([{ type: 'skip-waiting' }]);
+    expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBe('1');
+    client.fireControllerChange();
     client.fireControllerChange();
     expect(reload).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBeNull();
+  });
+
+  it('does not reload on the first controller even if a reload was requested', () => {
+    const client = createClient(null);
+    const reload = vi.fn();
+    sessionStorage.setItem('nai-tagdeck-sw-reload', '1');
+    bindSwUpdates(client.sw, reload);
+    client.fireControllerChange();
+    expect(reload).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBeNull();
+  });
+
+  it('reloads immediately when the waiting worker is already active', () => {
+    const reload = vi.fn();
+    const worker = fakeWorker('activated');
+    requestSwSkipWaiting(worker, reload);
+    expect(worker.messages).toEqual([]);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBeNull();
   });
 
   it('reports a waiting worker only when a controller already exists', async () => {
