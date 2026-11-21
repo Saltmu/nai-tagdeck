@@ -76,6 +76,17 @@ async function click(label: string) {
   await act(async () => button(label).click());
 }
 
+async function chooseDisplayAction(label: string) {
+  const menu = container.querySelector<HTMLDetailsElement>('.tag-list-actions details')!;
+  const trigger = menu.querySelector<HTMLElement>('summary')!;
+  expect(menu.open).toBe(false);
+  await act(async () => trigger.click());
+  expect(menu.open).toBe(true);
+  await click(label);
+  expect(menu.open).toBe(false);
+  expect(document.activeElement).toBe(trigger);
+}
+
 async function type(input: HTMLInputElement, value: string) {
   await act(async () => {
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -128,16 +139,27 @@ afterEach(async () => {
 });
 
 it('searches the open pane, keeps ON tags, and highlights matches', async () => {
+  const displayMenu = container.querySelector<HTMLDetailsElement>('.tag-list-actions details')!;
+  const displayTrigger = displayMenu.querySelector<HTMLElement>('summary')!;
+  await act(async () => displayTrigger.click());
+  await act(async () => displayTrigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  expect(displayMenu.open).toBe(false);
+  expect(document.activeElement).toBe(displayTrigger);
+  await act(async () => displayTrigger.click());
+  await act(async () => searchToggle().dispatchEvent(new Event('pointerdown', { bubbles: true })));
+  expect(displayMenu.open).toBe(false);
+
   expect(searchInput()).toBeNull();
   expect(searchToggle().getAttribute('aria-expanded')).toBe('false');
   expect(textOf('.tag-filter-count')).toBe('');
-  await click('ONのみ');
+  await chooseDisplayAction('ONのみ');
   expect(button('ONのみ').getAttribute('aria-pressed')).toBe('true');
+  expect(textOf('.tag-list-actions summary')).toBe('表示（ONのみ）');
   expect(container.textContent).toContain('long hair');
   expect(container.textContent).not.toContain('short hair');
   expect(textOf('.tag-filter-count')).toBe('該当 1件');
 
-  await click('ONのみ');
+  await chooseDisplayAction('ONのみ');
   await search('HAIR');
   expect(document.activeElement).toBe(searchInput());
   expect(searchToggle().getAttribute('aria-expanded')).toBe('true');
@@ -183,8 +205,8 @@ it('adds tags across the selected pane using dictionary categories and keeps unc
   ]);
 });
 
-it('opens and closes every category in the current pane and restores that state', async () => {
-  await click('すべて閉じる');
+it('opens and closes every category in the current pane from the display menu and restores that state', async () => {
+  await chooseDisplayAction('すべて閉じる');
   expect(categoryButtons().every((item) => item.getAttribute('aria-expanded') === 'false')).toBe(true);
   for (const key of PROMPT_CATEGORY_KEYS) expect(loadCategoryOpen('base', key)).toBe(false);
   expect(categoryButtons().find((item) => item.textContent?.includes('外見'))?.textContent).toContain('1件ON');
@@ -193,20 +215,20 @@ it('opens and closes every category in the current pane and restores that state'
   expect(categoryButtons().find((item) => item.textContent?.includes('外見'))?.textContent).toContain('該当 2件');
   expect(categoryButtons().find((item) => item.textContent?.includes('未分類'))?.textContent).toContain('該当 0件');
 
-  await click('すべて開く');
+  await chooseDisplayAction('すべて開く');
   expect(categoryButtons().every((item) => item.getAttribute('aria-expanded') === 'true')).toBe(true);
   expect(categoryButtons().find((item) => item.textContent?.includes('外見'))?.textContent).toContain('1/2 · 該当 2件');
 
   await search('');
   await click('中');
   expect(categoryButtons().every((item) => item.getAttribute('aria-expanded') === 'true')).toBe(true);
-  await click('すべて閉じる');
+  await chooseDisplayAction('すべて閉じる');
   expect(loadCategoryOpen('c1', 'outfit')).toBe(false);
   expect(loadCategoryOpen('base', 'outfit')).toBe(true);
 
   await click('ベース');
   expect(categoryButtons().every((item) => item.getAttribute('aria-expanded') === 'true')).toBe(true);
-  await click('すべて閉じる');
+  await chooseDisplayAction('すべて閉じる');
   await click('中');
   expect(categoryButtons().every((item) => item.getAttribute('aria-expanded') === 'false')).toBe(true);
   await click('ベース');

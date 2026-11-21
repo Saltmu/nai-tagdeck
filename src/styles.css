@@ -30,7 +30,7 @@
 
   /* 重なり順。間に挟めるよう 10 刻みにし、下にあるものほど手前に出る */
   --z-editor-tabs: 10; /* ヘッダー直下に張り付く編集タブ */
-  --z-preset-search: 20; /* 候補を開いているプリセット検索欄 */
+  --z-editor-menu: 20; /* プリセット候補と編集操作のメニュー */
   --z-dock: 30; /* 狭い画面で下端に固定する生成ドック */
   --z-suggesting: 40; /* 候補を出しているカテゴリ（周りを薄く覆う） */
   --z-header: 50;
@@ -545,18 +545,102 @@ input[type='checkbox'] {
 }
 
 .tag-filter {
-  margin-top: 0.75rem;
+  margin-top: 1rem;
+}
+
+.tag-list-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tag-list-heading h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.tag-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-start: auto;
 }
 
 .tag-filter-search {
-  flex: 1 0 100%;
-  min-width: 0;
+  width: 100%;
+  margin-top: 0.35rem;
 }
 
 .tag-filter-count {
   color: var(--muted);
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
+}
+
+.editor-actions {
+  position: relative;
+  flex: none;
+}
+
+.editor-actions[open] {
+  z-index: var(--z-editor-menu);
+}
+
+.editor-actions > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  list-style: none;
+}
+
+.editor-actions > summary::-webkit-details-marker {
+  display: none;
+}
+
+.editor-actions-text::after {
+  content: '';
+  width: 0.34rem;
+  height: 0.34rem;
+  margin: 0 0.15rem 0.18rem;
+  border: solid currentColor;
+  border-width: 0 1px 1px 0;
+  transform: rotate(45deg);
+}
+
+.editor-actions-text.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.editor-actions-panel {
+  position: absolute;
+  inset-inline-end: 0;
+  top: calc(100% + 0.25rem);
+  display: grid;
+  gap: 0.15rem;
+  width: max-content;
+  min-width: 9rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+}
+
+.editor-actions-panel > .btn {
+  justify-content: flex-start;
+  text-align: start;
+  white-space: normal;
+  border-color: transparent;
+}
+
+.editor-actions-panel > .btn[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 /* タグ行のピクトは横幅を詰める（高さはタップしやすさのため維持）。 */
@@ -2084,8 +2168,6 @@ textarea {
 
 /* ---- phase 3: presets / weight / sort ---- */
 .preset-bar {
-  display: grid;
-  gap: 0.5rem;
   margin-bottom: 0.75rem;
 }
 
@@ -2118,7 +2200,7 @@ textarea {
 /* 候補を出している間だけ、ヘッダー直下に張り付く編集タブより手前に出す。
    常に手前にすると、スクロールでタブの下に入ったプリセット欄がタブに重なってしまう */
 .preset-search:has(> .suggest-popup:not([hidden])) {
-  z-index: var(--z-preset-search);
+  z-index: var(--z-editor-menu);
 }
 
 .preset-suggestions {
@@ -2130,10 +2212,15 @@ textarea {
   color: var(--accent);
 }
 
-.preset-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+@media (max-width: 399px) {
+  .preset-select {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 .weight-control {
@@ -2350,6 +2437,11 @@ textarea {
 }
 
 @media (pointer: coarse) {
+  .editor-actions-text,
+  .editor-actions-panel > .btn {
+    min-height: 44px;
+  }
+
   .icon-btn {
     min-width: 44px;
     min-height: 44px;

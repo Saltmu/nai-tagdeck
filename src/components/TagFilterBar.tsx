@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import type { TagFilter } from '../lib/tagSearch';
+import { EditorActions } from './EditorActions';
 import { CloseIcon, SearchIcon } from './icons';
 
 interface Props {
@@ -33,42 +34,42 @@ export function TagFilterBar({
   }
 
   return (
-    <div className="toolbar-row tag-filter" role="group" aria-label="表示中のタグ">
-      <button
-        ref={searchButton}
-        type="button"
-        className="icon-btn"
-        aria-label={searchButtonLabel}
-        title={searchButtonLabel}
-        aria-expanded={searchOpen}
-        aria-controls={searchOpen ? searchId : undefined}
-        onClick={searchOpen ? closeSearch : () => setSearchOpen(true)}
-      >
-        {searchOpen ? <CloseIcon /> : <SearchIcon />}
-      </button>
-      <button
-        type="button"
-        className={`btn btn-small${filter.onlyEnabled ? ' btn-primary' : ''}`}
-        aria-pressed={filter.onlyEnabled}
-        onClick={() => onOnlyEnabledChange(!filter.onlyEnabled)}
-      >
-        ONのみ
-      </button>
-      <button type="button" className="btn btn-small" onClick={onExpandAll}>
-        すべて開く
-      </button>
-      <button type="button" className="btn btn-small" onClick={onCollapseAll}>
-        すべて閉じる
-      </button>
-      <span className="tag-filter-count" aria-live="polite">
-        {matchCount === null ? '' : `該当 ${matchCount}件`}
-      </span>
+    <div className="tag-filter">
+      <div className="tag-list-heading">
+        <h2>タグ一覧</h2>
+        <span className="tag-filter-count" aria-live="polite">
+          {matchCount === null ? '' : `該当 ${matchCount}件`}
+        </span>
+        <div className="tag-list-actions">
+          <button
+            ref={searchButton}
+            type="button"
+            className="icon-btn"
+            aria-label={searchButtonLabel}
+            title={searchButtonLabel}
+            aria-expanded={searchOpen}
+            aria-controls={searchOpen ? searchId : undefined}
+            onClick={searchOpen ? closeSearch : () => setSearchOpen(true)}
+          >
+            {searchOpen ? <CloseIcon /> : <SearchIcon />}
+          </button>
+          <EditorActions
+            label={filter.onlyEnabled ? '表示（ONのみ）' : '表示'}
+            active={filter.onlyEnabled}
+            actions={[
+              { label: 'ONのみ', pressed: filter.onlyEnabled, run: () => onOnlyEnabledChange(!filter.onlyEnabled) },
+              { label: 'すべて開く', run: onExpandAll },
+              { label: 'すべて閉じる', run: onCollapseAll },
+            ]}
+          />
+        </div>
+      </div>
       {searchOpen && (
         <input
           id={searchId}
           type="search"
           className="tag-filter-search"
-          placeholder="タグを検索"
+          placeholder="追加済みタグを検索"
           aria-label="タグを検索"
           value={filter.query}
           autoFocus

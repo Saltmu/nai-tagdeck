@@ -139,10 +139,16 @@ it('retains the workspace on cancel or error, then applies a drop and only the s
   }), expect.anything());
 });
 
-it('opens the shared PNG picker from the editor preset bar and imports into the workspace', async () => {
+it('opens the shared PNG picker from preset actions and imports into the workspace', async () => {
   await click(button('編集'));
   const picker = vi.spyOn(container.querySelector<HTMLInputElement>('input[type="file"]')!, 'click');
-  await click(button('PNGから読み込む', container.querySelector('.preset-bar')!));
+  const menu = container.querySelector<HTMLDetailsElement>('.preset-bar details')!;
+  const trigger = menu.querySelector<HTMLElement>('summary')!;
+  expect(menu.open).toBe(false);
+  await act(async () => trigger.click());
+  expect(menu.open).toBe(true);
+  await click(button('PNGから読み込む', menu));
+  expect(menu.open).toBe(false);
   expect(picker).toHaveBeenCalledOnce();
   await pick(imageFile(pngFixture({ v4_prompt: caption('standing', ['blazer', 'other tag']) }), 'characters.png'));
   const dialog = container.querySelector('dialog')!;
