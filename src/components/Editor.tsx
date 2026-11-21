@@ -301,7 +301,7 @@ export function Editor({
       <div id={panelId} role="tabpanel" aria-labelledby={`${id}-tab-${paneTarget}`}>
         {!negativeSelected && (
           <TagInput
-            key={paneTarget}
+            key={`add-${paneTarget}`}
             label={active ? active.name.trim() || `キャラ${activeIndex + 1}` : 'ベース'}
             placeholder="タグを追加（英語・日本語名・よみ）"
             entries={addTagEntries}
@@ -333,7 +333,7 @@ export function Editor({
           />
         ) : active ? (
           <CharacterCard
-            key={active.id}
+            key={`character-${active.id}`}
             character={active}
             index={activeIndex}
             count={characters.length}
