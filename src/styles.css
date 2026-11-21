@@ -13,6 +13,7 @@
 @import './styles/dictionary.css';
 @import './styles/forms.css';
 @import './styles/toast.css';
+@import './styles/sw-update.css';
 @import './styles/responsive.css';
 @import './styles/settings.css';
 @import './styles/workbench.css';

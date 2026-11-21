@@ -3,14 +3,15 @@ import { resolve } from 'node:path';
 import vm from 'node:vm';
 import { build as viteBuild, type Plugin } from 'vite';
 import { describe, expect, it, vi } from 'vitest';
-import { buildSwAsset, type SwBuildInput } from '../vite.config';
+import { buildSwAsset, CSP_HEADER, CSP_META, type SwBuildInput } from '../vite.config';
 
 const template = readFileSync(resolve('src/sw-template.js'), 'utf-8');
+const PAGE_HTML = '<!doctype html><script src="./assets/index-aaaa1111.js"></script><title>v1</title>';
 
 function baseInput(): SwBuildInput {
   return {
     bundle: {
-      'index.html': { type: 'asset', source: '<!doctype html><title>v1</title>' },
+      'index.html': { type: 'asset', source: PAGE_HTML },
       'assets/index-aaaa1111.js': { type: 'chunk', code: 'console.log(1);' },
       'assets/index-bbbb2222.css': { type: 'asset', source: 'body{color:#000}' },
     },
@@ -32,7 +33,6 @@ describe('buildSwAsset', () => {
   it('excludes sitemap.xml and robots.txt from precache and keeps relative ./ paths', () => {
     const { precache } = buildSwAsset(baseInput());
     expect(precache).toEqual([
-      './',
       './assets/index-aaaa1111.js',
       './assets/index-bbbb2222.css',
       './brand/icon.svg',
@@ -52,7 +52,7 @@ describe('buildSwAsset', () => {
       bundle: {
         'assets/index-bbbb2222.css': { type: 'asset', source: 'body{color:#000}' },
         'assets/index-aaaa1111.js': { type: 'chunk', code: 'console.log(1);' },
-        'index.html': { type: 'asset', source: '<!doctype html><title>v1</title>' },
+        'index.html': { type: 'asset', source: PAGE_HTML },
       },
       publicFiles: {
         'sitemap.xml': '<urlset/>',
@@ -68,6 +68,14 @@ describe('buildSwAsset', () => {
     });
     expect(a.version).toBe(b.version);
     expect(a.precache).toEqual(b.precache);
+  });
+
+  it('embeds offline html without expanding replacement tokens', () => {
+    const input = baseInput();
+    input.bundle['index.html'] = { type: 'asset', source: '<title>$&</title>' };
+    const { source } = buildSwAsset(input);
+    expect(source).toContain(JSON.stringify('<title>$&</title>'));
+    expect(source).not.toContain('__OFFLINE_HTML__');
   });
 
   it('updates version when index.html, bundle assets, public files, or sw-template change without renaming', () => {
@@ -104,6 +112,28 @@ describe('buildSwAsset', () => {
   });
 });
 
+function readJsonValue(source: string, marker: string): unknown {
+  const start = source.indexOf(marker);
+  if (start < 0) throw new Error(marker);
+  const slice = source.slice(start + marker.length);
+  if (slice.startsWith('"')) {
+    let escaped = false;
+    for (let i = 1; i < slice.length; i++) {
+      const ch = slice[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') return JSON.parse(slice.slice(0, i + 1));
+    }
+  }
+  throw new Error(`unterminated ${marker}`);
+}
+
 function extractBuildOutputs(result: Awaited<ReturnType<typeof viteBuild>>) {
   const outputs = (Array.isArray(result) ? result : [result]).flatMap((r) => ('output' in r ? r.output : []));
   const byName = new Map(outputs.map((item) => [item.fileName, item]));
@@ -122,6 +152,7 @@ function extractBuildOutputs(result: Awaited<ReturnType<typeof viteBuild>>) {
   }
   return {
     html: htmlAsset.source,
+    offlineHtml: readJsonValue(swAsset.source, 'const OFFLINE_HTML = ') as string,
     cacheName: cacheMatch[1],
     precache: JSON.parse(precacheMatch[1]) as string[],
     chunkNames: outputs.filter((o) => o.type === 'chunk').map((o) => o.fileName).sort(),
@@ -160,7 +191,40 @@ describe('Vite build swPlugin integration', () => {
     expect(second.precache).toEqual(first.precache);
     expect(second.cacheName).not.toBe(first.cacheName);
     expect(first.precache).not.toContain('./index.html');
+    expect(first.precache).not.toContain('./');
     expect(first.precache).not.toContain('./sitemap.xml');
+    expect(first.offlineHtml).toBe(first.html);
+    const deployBase = 'https://shishio.x0.to/nai-tagdeck/';
+    const refs = [...first.offlineHtml.matchAll(/\b(?:src|href)="(\.\/[^"]+)"/g)].map((match) => match[1] ?? '');
+    expect(refs.length).toBeGreaterThan(0);
+    for (const ref of refs) {
+      const url = new URL(ref, deployBase);
+      expect(url.href.startsWith(deployBase)).toBe(true);
+      expect(first.precache).toContain(`.${url.pathname.slice(new URL(deployBase).pathname.length - 1)}`);
+    }
+    expect(first.html).toContain(`content="${CSP_META}"`);
+    expect(first.html).not.toContain('frame-ancestors');
+    expect(first.html).not.toContain('data:');
+  });
+});
+
+describe('security headers', () => {
+  it('keeps data: out of img-src and sends frame-ancestors only on the HTTP header', () => {
+    expect(CSP_META).toContain("img-src 'self' blob:");
+    expect(CSP_META).not.toContain('data:');
+    expect(CSP_META).not.toContain('frame-ancestors');
+    const htaccess = readFileSync(resolve('deploy/htaccess.example'), 'utf8');
+    expect(htaccess).toContain(`Content-Security-Policy "${CSP_HEADER}"`);
+    expect(CSP_HEADER.endsWith("frame-ancestors 'none'")).toBe(true);
+    const workflow = readFileSync(resolve('.github/workflows/deploy.yml'), 'utf8');
+    const mirrors = workflow.split('\n').filter((line) => line.includes('mirror '));
+    const assetMirrors = mirrors.filter((line) => line.includes('dist/assets'));
+    const pageMirrors = mirrors.filter((line) => line.includes(' dist .'));
+    expect(pageMirrors.some((line) => line.includes('--exclude-glob .htaccess --exclude-glob robots.txt'))).toBe(true);
+    expect(pageMirrors.every((line) => line.includes('--transfer-all'))).toBe(true);
+    expect(assetMirrors.some((line) => line.includes('--transfer-all') || line.includes('--delete-excluded') || line.includes('--delete-first'))).toBe(false);
+    expect(workflow).toContain('cmp -s dist/index.html');
+    expect(workflow).toContain('cmp -s dist/sw.js');
   });
 });
 
@@ -170,9 +234,90 @@ interface MockRequest {
   mode: string;
 }
 
-function createSwHarness(swSource: string, baseUrl: string) {
-  const listeners = new Map<string, (event: unknown) => void>();
+interface SwBackend {
+  store: Map<string, Map<string, Response>>;
+  indexedDB: { open(name: string, version: number): unknown };
+}
+
+function createSwBackend(): SwBackend {
   const store = new Map<string, Map<string, Response>>();
+  let order: string[] = [];
+  let tail = Promise.resolve();
+  const indexedDB = {
+    open(_name: string, _version: number) {
+      const pendingGets: Array<{ result: string[]; onsuccess: (() => void) | null }> = [];
+      let oncomplete: (() => void) | null = null;
+      let onsuccess: (() => void) | null = null;
+      let onupgradeneeded: (() => void) | null = null;
+      const db = {
+        objectStoreNames: { contains: () => true },
+        close() {},
+        transaction() {
+          return {
+            objectStore() {
+              return {
+                get() {
+                  const got = { result: order.slice(), onsuccess: null as (() => void) | null };
+                  pendingGets.push(got);
+                  return got;
+                },
+                put(value: string[]) {
+                  order = value.slice();
+                },
+              };
+            },
+            set oncomplete(fn: () => void) {
+              oncomplete = fn;
+            },
+            set onerror(_fn: () => void) {},
+            set onabort(_fn: () => void) {},
+          };
+        },
+      };
+      const request = {
+        result: db,
+        error: null,
+        set onsuccess(fn: () => void) {
+          onsuccess = fn;
+        },
+        set onerror(_fn: () => void) {},
+        set onupgradeneeded(fn: () => void) {
+          onupgradeneeded = fn;
+        },
+      };
+      tail = tail.then(
+        () =>
+          new Promise<void>((resolve) => {
+            queueMicrotask(() => {
+              onupgradeneeded?.();
+              onsuccess?.();
+              queueMicrotask(() => {
+                for (const got of pendingGets) got.onsuccess?.();
+                oncomplete?.();
+                resolve();
+              });
+            });
+          }),
+      );
+      return request;
+    },
+  };
+  return { store, indexedDB };
+}
+
+function createSwHarness(
+  swSource: string,
+  baseUrl: string,
+  options?: {
+    failPuts?: boolean;
+    backend?: SwBackend;
+    onAddAll?: () => Promise<void> | void;
+    duringKeys?: () => Promise<void> | void;
+  },
+) {
+  const listeners = new Map<string, (event: unknown) => void>();
+  const backend = options?.backend ?? createSwBackend();
+  const store = backend.store;
 
   const resolveKey = (input: string | MockRequest) =>
     new URL(typeof input === 'string' ? input : input.url, baseUrl).href;
@@ -210,6 +355,7 @@ function createSwHarness(swSource: string, baseUrl: string) {
       const cache = bucket;
       return {
         async addAll(urls: string[]) {
+          await options?.onAddAll?.();
           for (const u of urls) {
             const href = resolveKey(u);
             const res = await fetchMock(href);
@@ -217,11 +363,13 @@ function createSwHarness(swSource: string, baseUrl: string) {
           }
         },
         async put(req: string | MockRequest, res: Response) {
+          if (options?.failPuts && resolveKey(req) !== resolveKey('./')) throw new Error('cache put failed');
           cache.set(resolveKey(req), res);
         },
       };
     },
     async keys() {
+      await options?.duringKeys?.();
       return [...store.keys()];
     },
     async delete(name: string) {
@@ -257,6 +405,7 @@ function createSwHarness(swSource: string, baseUrl: string) {
     self: selfObj,
     caches: cachesMock,
     fetch: fetchMock,
+    indexedDB: backend.indexedDB,
     URL,
     Response,
   });
@@ -270,25 +419,40 @@ function createSwHarness(swSource: string, baseUrl: string) {
     async dispatchLifecycle(type: 'install' | 'activate') {
       const fn = listeners.get(type);
       if (!fn) throw new Error(`missing ${type} listener`);
-      let pending: Promise<unknown> = Promise.resolve();
+      const pending: Promise<unknown>[] = [];
       fn({
         waitUntil(p: Promise<unknown>) {
-          pending = p;
+          pending.push(p);
         },
       });
-      await pending;
+      await Promise.all(pending);
     },
-    async dispatchFetch(req: MockRequest): Promise<Response | undefined> {
+    async dispatchFetch(req: MockRequest): Promise<{ response: Response | undefined; waitUntilRejected: boolean }> {
       const fn = listeners.get('fetch');
       if (!fn) throw new Error('missing fetch listener');
+      const pending: Promise<unknown>[] = [];
       let responded: Promise<Response> | undefined;
+      let waitUntilRejected = false;
       fn({
         request: req,
+        waitUntil(p: Promise<unknown>) {
+          pending.push(Promise.resolve(p).then(
+            () => undefined,
+            () => {
+              waitUntilRejected = true;
+            },
+          ));
+        },
         respondWith(p: Promise<Response>) {
           responded = p;
         },
       });
-      return responded ? await responded : undefined;
+      const response = responded ? await responded : undefined;
+      await Promise.all(pending);
+      return { response, waitUntilRejected };
+    },
+    dispatchMessage(data: unknown) {
+      listeners.get('message')?.({ data });
     },
   };
 }
@@ -303,9 +467,13 @@ describe('Service Worker runtime under subdirectory deployment', () => {
     sw.store.set('other-app-cache', new Map());
 
     await sw.dispatchLifecycle('install');
-    expect(sw.skipWaiting).toHaveBeenCalledTimes(1);
+    expect(sw.skipWaiting).not.toHaveBeenCalled();
+    expect(sw.fetchMock.mock.calls.map((call) => String(call[0]))).not.toContain(baseUrl);
     const activeCache = sw.store.get(`nai-tagdeck-${version}`);
     expect(activeCache?.has(`${baseUrl}`)).toBe(true);
+    expect(await activeCache?.get(`${baseUrl}`)?.clone().text()).toBe(PAGE_HTML);
+    expect(new URL('./assets/index-aaaa1111.js', baseUrl).href).toBe(`${baseUrl}assets/index-aaaa1111.js`);
+    expect(activeCache?.has(`${baseUrl}assets/index-aaaa1111.js`)).toBe(true);
     expect(activeCache?.has(`${baseUrl}icons/favicon-32.png`)).toBe(true);
 
     await sw.dispatchLifecycle('activate');
@@ -323,13 +491,14 @@ describe('Service Worker runtime under subdirectory deployment', () => {
       'icons/icon-192.png?v=tag-check',
       'icons/icon-512.png?v=tag-check',
     ]) {
-      const res = await sw.dispatchFetch({
+      const { response, waitUntilRejected } = await sw.dispatchFetch({
         url: `${baseUrl}${iconPath}`,
         method: 'GET',
         mode: 'no-cors',
       });
-      expect(res?.ok).toBe(true);
-      expect(await res?.text()).toBe(`body:${baseUrl}${iconPath.split('?')[0]}`);
+      expect(waitUntilRejected).toBe(false);
+      expect(response?.ok).toBe(true);
+      expect(await response?.text()).toBe(`body:${baseUrl}${iconPath.split('?')[0]}`);
     }
     expect(sw.fetchMock).not.toHaveBeenCalled();
 
@@ -339,7 +508,19 @@ describe('Service Worker runtime under subdirectory deployment', () => {
       method: 'GET',
       mode: 'cors',
     });
-    expect(crossOrigin).toBeUndefined();
+    expect(crossOrigin.response).toBeUndefined();
+
+    // A newer page on the network must not replace this worker's offline fallback.
+    const cachedPage = activeCache?.get(`${baseUrl}`);
+    sw.fetchMock.mockResolvedValueOnce(new Response('newer-html', { status: 200 }));
+    const onlineNav = await sw.dispatchFetch({
+      url: `${baseUrl}`,
+      method: 'GET',
+      mode: 'navigate',
+    });
+    expect(onlineNav.waitUntilRejected).toBe(false);
+    expect(await onlineNav.response?.text()).toBe('newer-html');
+    expect(activeCache?.get(`${baseUrl}`)).toBe(cachedPage);
 
     // Offline navigation falls back to cached subdirectory root ('./')
     sw.fetchMock.mockRejectedValueOnce(new Error('offline'));
@@ -348,7 +529,91 @@ describe('Service Worker runtime under subdirectory deployment', () => {
       method: 'GET',
       mode: 'navigate',
     });
-    expect(offlineNav?.ok).toBe(true);
-    expect(await offlineNav?.text()).toBe(`body:${baseUrl}`);
+    expect(offlineNav.waitUntilRejected).toBe(false);
+    expect(offlineNav.response?.ok).toBe(true);
+    expect(await offlineNav.response?.text()).toBe(PAGE_HTML);
+  });
+
+  it('keeps a newer worker cache when an older waiting worker activates during its install', async () => {
+    const backend = createSwBackend();
+    const older = buildSwAsset(baseInput());
+    const newerInput = baseInput();
+    newerInput.bundle['index.html'] = { type: 'asset', source: '<!doctype html><script src="./assets/index-aaaa1111.js"></script><title>v2</title>' };
+    const newer = buildSwAsset(newerInput);
+    expect(older.version).not.toBe(newer.version);
+
+    const oldSw = createSwHarness(older.source, baseUrl, { backend });
+    await oldSw.dispatchLifecycle('install');
+
+    let releaseNewer = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseNewer = resolve;
+    });
+    const newSw = createSwHarness(newer.source, baseUrl, { backend, onAddAll: () => gate });
+    const installing = newSw.dispatchLifecycle('install');
+    await vi.waitFor(() => expect(backend.store.has(`nai-tagdeck-${newer.version}`)).toBe(true));
+    backend.store.set('nai-tagdeck-ancient', new Map());
+
+    await oldSw.dispatchLifecycle('activate');
+    expect(backend.store.has('nai-tagdeck-ancient')).toBe(false);
+    expect(backend.store.has(`nai-tagdeck-${older.version}`)).toBe(true);
+    expect(backend.store.has(`nai-tagdeck-${newer.version}`)).toBe(true);
+
+    releaseNewer();
+    await installing;
+    expect(await backend.store.get(`nai-tagdeck-${newer.version}`)?.get(baseUrl)?.text()).toContain('<title>v2</title>');
+  });
+
+  it('keeps a cache created while the activating worker is listing caches', async () => {
+    const backend = createSwBackend();
+    const older = buildSwAsset(baseInput());
+    const newerInput = baseInput();
+    newerInput.bundle['index.html'] = {
+      type: 'asset',
+      source: '<!doctype html><script src="./assets/index-aaaa1111.js"></script><title>v3</title>',
+    };
+    const newer = buildSwAsset(newerInput);
+    let startNewer = () => Promise.resolve();
+    const oldSw = createSwHarness(older.source, baseUrl, {
+      backend,
+      duringKeys: () => startNewer(),
+    });
+    await oldSw.dispatchLifecycle('install');
+    const newSw = createSwHarness(newer.source, baseUrl, { backend });
+    startNewer = () => newSw.dispatchLifecycle('install');
+    backend.store.set('nai-tagdeck-ancient', new Map());
+
+    await oldSw.dispatchLifecycle('activate');
+    expect(backend.store.has('nai-tagdeck-ancient')).toBe(false);
+    expect(backend.store.has(`nai-tagdeck-${older.version}`)).toBe(true);
+    expect(backend.store.has(`nai-tagdeck-${newer.version}`)).toBe(true);
+    expect(await backend.store.get(`nai-tagdeck-${newer.version}`)?.get(baseUrl)?.text()).toContain('<title>v3</title>');
+  });
+
+  it('activates the new worker only after skip-waiting, and a failed cache write still returns the response', async () => {
+    const { source } = buildSwAsset(baseInput());
+    const sw = createSwHarness(source, baseUrl, { failPuts: true });
+    await sw.dispatchLifecycle('install');
+    expect(sw.skipWaiting).not.toHaveBeenCalled();
+
+    sw.dispatchMessage({ type: 'skip-waiting' });
+    expect(sw.skipWaiting).toHaveBeenCalledTimes(1);
+
+    const asset = await sw.dispatchFetch({
+      url: `${baseUrl}icons/extra.png`,
+      method: 'GET',
+      mode: 'cors',
+    });
+    expect(asset.waitUntilRejected).toBe(false);
+    expect(asset.response?.ok).toBe(true);
+    expect(await asset.response?.text()).toBe(`body:${baseUrl}icons/extra.png`);
+
+    const page = await sw.dispatchFetch({
+      url: `${baseUrl}`,
+      method: 'GET',
+      mode: 'navigate',
+    });
+    expect(page.waitUntilRejected).toBe(false);
+    expect(page.response?.ok).toBe(true);
   });
 });

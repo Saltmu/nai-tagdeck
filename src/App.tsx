@@ -25,6 +25,7 @@ import { isEmptyWorkspace } from './lib/presets';
 import { isDefaultSettings } from './lib/settings';
 import { isDefaultGeneration, sizeOf, type SizeKey } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
+import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
 import { importedBaseForMode, type PromptImport } from './lib/promptImport';
@@ -220,6 +221,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
           onGenerate={startGenerate}
         />
       </header>
+      <SwUpdateNotice />
 
       {dictionary.error && (
         <p className="error-banner" role="alert">

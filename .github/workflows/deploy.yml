@@ -51,7 +51,8 @@ jobs:
           fi
 
           ssh_dir=$(mktemp -d)
-          trap 'rm -rf -- "$ssh_dir"' EXIT
+          check_dir=$(mktemp -d)
+          trap 'rm -rf -- "$ssh_dir" "$check_dir"' EXIT
           umask 077
           expected_fingerprint="${DEPLOY_HOST_FINGERPRINT%=}"
           discover_fingerprint=false
@@ -103,17 +104,64 @@ jobs:
             preview=--dry-run
           fi
 
-          # Upload fingerprinted assets before publishing pages that reference them.
-          lftp --norc -f /dev/stdin <<EOF
-          set cmd:fail-exit yes
-          set net:timeout 20
-          set net:max-retries 2
-          set sftp:auto-confirm no
-          set sftp:connect-program "ssh -a -x -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1 -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o VerifyHostKeyDNS=no -o UserKnownHostsFile=$ssh_dir/known_hosts -o ConnectTimeout=15"
-          set xfer:use-temp-file yes
-          open --env-password -u "$DEPLOY_USER" "sftp://$DEPLOY_HOST:$DEPLOY_PORT"
-          cd "${DEPLOY_DIR%/}"
-          mirror --reverse --no-perms --transfer-all --verbose $preview dist/assets assets
-          mirror --reverse --no-perms --transfer-all --verbose --exclude-glob=assets/ --exclude-glob=.htaccess $preview dist .
-          bye
-          EOF
+          # 1. Upload new fingerprinted assets first. Compare by size so a fresh
+          #    build does not resend unchanged hashes. Do not delete yet.
+          # 2. Publish pages with --transfer-all. A same-size index.html must
+          #    still replace the live page when the server clock is ahead.
+          #    Keep .htaccess and robots.txt (no --delete-excluded). Leave
+          #    assets/ until the published HTML and sw.js match this build.
+          # 3. Delete stale hashed assets only after that check. A tab that
+          #    already loaded the previous index.html can miss its old script
+          #    until reload. Issue #33 asks to remove those files.
+          if [[ "$DRY_RUN" == true ]]; then
+            lftp --norc -f /dev/stdin <<EOF
+            set cmd:fail-exit yes
+            set net:timeout 20
+            set net:max-retries 2
+            set sftp:auto-confirm no
+            set sftp:connect-program "ssh -a -x -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1 -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o VerifyHostKeyDNS=no -o UserKnownHostsFile=$ssh_dir/known_hosts -o ConnectTimeout=15"
+            set xfer:use-temp-file yes
+            open --env-password -u "$DEPLOY_USER" "sftp://$DEPLOY_HOST:$DEPLOY_PORT"
+            cd "${DEPLOY_DIR%/}"
+            mirror --reverse --no-perms --ignore-time --verbose $preview dist/assets assets
+            mirror --reverse --delete --no-perms --transfer-all --verbose --exclude-glob .htaccess --exclude-glob robots.txt --exclude ^assets/ $preview dist .
+            mirror --reverse --delete --no-perms --ignore-time --verbose $preview dist/assets assets
+            bye
+            EOF
+          else
+            lftp --norc -f /dev/stdin <<EOF
+            set cmd:fail-exit yes
+            set net:timeout 20
+            set net:max-retries 2
+            set sftp:auto-confirm no
+            set sftp:connect-program "ssh -a -x -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1 -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o VerifyHostKeyDNS=no -o UserKnownHostsFile=$ssh_dir/known_hosts -o ConnectTimeout=15"
+            set xfer:use-temp-file yes
+            open --env-password -u "$DEPLOY_USER" "sftp://$DEPLOY_HOST:$DEPLOY_PORT"
+            cd "${DEPLOY_DIR%/}"
+            mirror --reverse --no-perms --ignore-time --verbose dist/assets assets
+            mirror --reverse --delete --no-perms --transfer-all --verbose --exclude-glob .htaccess --exclude-glob robots.txt --exclude ^assets/ dist .
+            get index.html -o "$check_dir/index.html"
+            get sw.js -o "$check_dir/sw.js"
+            bye
+            EOF
+            if ! cmp -s dist/index.html "$check_dir/index.html"; then
+              echo '::error::The published index.html does not match the build. Old hashed assets were kept.'
+              exit 1
+            fi
+            if ! cmp -s dist/sw.js "$check_dir/sw.js"; then
+              echo '::error::The published sw.js does not match the build. Old hashed assets were kept.'
+              exit 1
+            fi
+            lftp --norc -f /dev/stdin <<EOF
+            set cmd:fail-exit yes
+            set net:timeout 20
+            set net:max-retries 2
+            set sftp:auto-confirm no
+            set sftp:connect-program "ssh -a -x -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1 -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o VerifyHostKeyDNS=no -o UserKnownHostsFile=$ssh_dir/known_hosts -o ConnectTimeout=15"
+            set xfer:use-temp-file yes
+            open --env-password -u "$DEPLOY_USER" "sftp://$DEPLOY_HOST:$DEPLOY_PORT"
+            cd "${DEPLOY_DIR%/}"
+            mirror --reverse --delete --no-perms --ignore-time --verbose dist/assets assets
+            bye
+            EOF
+          fi

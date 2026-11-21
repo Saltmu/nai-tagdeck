@@ -6,16 +6,21 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // 本番ビルドだけに CSP を埋め込む（開発サーバーは HMR 用のインラインスクリプトを使うため）。
-const CSP = [
+// 生成画像は blob: URL なので img-src に data: は要らない。
+// frame-ancestors は meta では無視される。HTTP ヘッダー側は deploy/htaccess.example に書く。
+export const CSP_DIRECTIVES = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
-  "img-src 'self' blob: data:",
+  "img-src 'self' blob:",
   "connect-src 'self' https://image.novelai.net",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
-].join('; ');
+] as const;
+
+export const CSP_META = CSP_DIRECTIVES.join('; ');
+export const CSP_HEADER = `${CSP_META}; frame-ancestors 'none'`;
 
 function cspPlugin(): Plugin {
   return {
@@ -24,7 +29,7 @@ function cspPlugin(): Plugin {
     transformIndexHtml(html) {
       return html.replace(
         '<meta charset="UTF-8" />',
-        `<meta charset="UTF-8" />\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />`,
+        `<meta charset="UTF-8" />\n    <meta http-equiv="Content-Security-Policy" content="${CSP_META}" />`,
       );
     },
   };
@@ -64,11 +69,18 @@ export function buildSwAsset({ bundle, publicFiles, template }: SwBuildInput): {
   source: string;
 } {
   const bundleNames = Object.keys(bundle).sort();
+  const indexEntry = bundle['index.html'];
+  const offlineHtml =
+    indexEntry?.type === 'asset'
+      ? typeof indexEntry.source === 'string'
+        ? indexEntry.source
+        : new TextDecoder().decode(indexEntry.source)
+      : '';
   const precachePublicNames = Object.keys(publicFiles)
     .filter((name) => !PRECACHE_EXCLUDE.has(name))
     .sort();
+  // ページ本体は一覧に入れない。インストール時の別リクエストにすると、埋め込みと違う HTML を掴む。
   const precache = [
-    './',
     ...bundleNames.filter((name) => name !== 'index.html').map((name) => `./${name}`),
     ...precachePublicNames.map((name) => `./${name}`),
   ];
@@ -94,7 +106,8 @@ export function buildSwAsset({ bundle, publicFiles, template }: SwBuildInput): {
   const version = hash.digest('hex').slice(0, 12);
   const source = template
     .replace('__VERSION__', version)
-    .replace('__PRECACHE__', JSON.stringify(precache));
+    .replace('__PRECACHE__', JSON.stringify(precache))
+    .replace('__OFFLINE_HTML__', () => JSON.stringify(offlineHtml));
 
   return { version, precache, source };
 }
