@@ -190,7 +190,7 @@ describe('QuickGenerate radiogroup', () => {
 });
 
 describe('Editor tablist', () => {
-  it('excludes add button from tablist and supports arrow navigation with tabpanel linkage', async () => {
+  it('keeps add and history controls outside the tablist and supports arrow navigation', async () => {
     const dictionary: Dictionary = {
       entries: [],
       loaded: true,
@@ -207,6 +207,7 @@ describe('Editor tablist', () => {
           <Editor
             workspace={emptyWorkspace()}
             dispatch={() => {}}
+            history={{ canUndo: false, canRedo: false, undo: () => {}, redo: () => {}, status: '' }}
             loaded
             dictionary={dictionary}
             syntax="brace"
@@ -222,6 +223,8 @@ describe('Editor tablist', () => {
     );
     const tablist = container.querySelector('[role="tablist"]')!;
     expect(tablist.querySelector('.editor-tab-add')).toBeNull();
+    expect(tablist.querySelector('[aria-label="編集履歴"]')).toBeNull();
+    expect(tablist.closest('.editor-tabs')?.querySelector('[aria-label="編集履歴"] button[aria-label="元に戻す"]')).not.toBeNull();
     const tabs = [...tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
     expect(tabs).toHaveLength(2);
     const [t0, t1] = tabs as [HTMLButtonElement, HTMLButtonElement];

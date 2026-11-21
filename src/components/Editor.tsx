@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type KeyboardEvent } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import {
@@ -19,6 +19,7 @@ import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
 import { CategorySection } from './CategorySection';
 import { CharacterCard } from './CharacterCard';
+import { HistoryControls } from './HistoryControls';
 import { PresetBar } from './PresetBar';
 import { TagFilterBar } from './TagFilterBar';
 import { TagInput } from './TagInput';
@@ -36,6 +37,7 @@ const QUALITY_PICKS = ['masterpiece', 'best quality', 'amazing quality', 'very a
 interface Props {
   workspace: Workspace;
   dispatch: Dispatch<WorkspaceAction>;
+  history?: ComponentProps<typeof HistoryControls>;
   loaded: boolean;
   dictionary: Dictionary;
   syntax: WeightSyntax;
@@ -54,6 +56,7 @@ interface Props {
 export function Editor({
   workspace,
   dispatch,
+  history,
   loaded,
   dictionary,
   syntax,
@@ -292,6 +295,7 @@ export function Editor({
         >
           ＋
         </button>
+        {history && <HistoryControls {...history} />}
       </div>
 
       <div id={panelId} role="tabpanel" aria-labelledby={`${id}-tab-${paneTarget}`}>
