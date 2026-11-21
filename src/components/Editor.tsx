@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent } from 'react';
-import type { CategoryKey, WeightSyntax, WorkTag, Workspace, WorkspaceCategoryKey } from '../types';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type KeyboardEvent } from 'react';
+import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import {
   BASE,
@@ -12,14 +12,17 @@ import {
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { saveCategoriesOpen } from '../lib/categoryOpen';
 import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
+import { classifyTag, dictionaryCategories } from '../lib/tagClassification';
 import { DEFAULT_CHARACTER_NEGATIVE } from '../lib/novelai';
 import { normalize } from '../lib/suggest';
 import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
 import { CategorySection } from './CategorySection';
 import { CharacterCard } from './CharacterCard';
+import { HistoryControls } from './HistoryControls';
 import { PresetBar } from './PresetBar';
 import { TagFilterBar } from './TagFilterBar';
+import { TagInput } from './TagInput';
 import type { PromptSource } from './PromptImportDialog';
 import { useDialogs } from './Dialogs';
 import type { PresetStore } from '../hooks/usePresets';
@@ -34,6 +37,7 @@ const QUALITY_PICKS = ['masterpiece', 'best quality', 'amazing quality', 'very a
 interface Props {
   workspace: Workspace;
   dispatch: Dispatch<WorkspaceAction>;
+  history?: ComponentProps<typeof HistoryControls>;
   loaded: boolean;
   dictionary: Dictionary;
   syntax: WeightSyntax;
@@ -52,6 +56,7 @@ interface Props {
 export function Editor({
   workspace,
   dispatch,
+  history,
   loaded,
   dictionary,
   syntax,
@@ -64,10 +69,7 @@ export function Editor({
   onCharacterNegativeChange,
   shown,
 }: Props) {
-  const knownTags = useMemo(
-    () => new Set(dictionary.entries.map((e) => normalize(e.tag))),
-    [dictionary.entries],
-  );
+  const knownTags = useMemo(() => dictionaryCategories(dictionary.entries), [dictionary.entries]);
   const isKnown = useCallback((tag: string) => knownTags.has(normalize(tag)), [knownTags]);
 
   const { save } = dictionary;
@@ -138,14 +140,22 @@ export function Editor({
     [activeId, offerPair],
   );
   const paneTarget = negativeSelected ? NEGATIVE : active?.id ?? BASE;
-  const paneCategories: readonly WorkspaceCategoryKey[] = negativeSelected
-    ? ['negative']
-    : active
-      ? CHARACTER_CATEGORY_KEYS
-      : PROMPT_CATEGORY_KEYS;
+  const promptCategories = active ? CHARACTER_CATEGORY_KEYS : PROMPT_CATEGORY_KEYS;
+  const paneCategories = negativeSelected ? ['negative'] as const : promptCategories;
+  const addTagEntries = useMemo(
+    () => dictionary.entries.filter((entry) => entry.category !== 'negative' && promptCategories.includes(entry.category)),
+    [dictionary.entries, promptCategories],
+  );
+  const addPromptTag = (tag: string, weight: number, pickedCategory?: CategoryKey) => {
+    const category = pickedCategory && pickedCategory !== 'negative' && promptCategories.includes(pickedCategory)
+      ? pickedCategory
+      : classifyTag(tag, knownTags, promptCategories);
+    dispatch({ type: 'add', target: paneTarget, category, tag, weight });
+    if (category === 'pose') handlePoseAdded(tag);
+  };
   const paneTagLists: WorkTag[][] = negativeSelected
     ? [workspace.negative]
-    : (active ? CHARACTER_CATEGORY_KEYS : PROMPT_CATEGORY_KEYS).map((key) => (active ? active.tags[key] : workspace.base[key]));
+    : promptCategories.map((key) => (active ? active.tags[key] : workspace.base[key]));
   const matchCount = isTagFilterActive(tagFilter)
     ? paneTagLists.reduce((sum, tags) => sum + visibleWorkTags(tags, tagFilter).length, 0)
     : null;
@@ -285,18 +295,28 @@ export function Editor({
         >
           ＋
         </button>
+        {history && <HistoryControls {...history} />}
       </div>
 
-      <TagFilterBar
-        filter={tagFilter}
-        matchCount={matchCount}
-        onQueryChange={setTagQuery}
-        onOnlyEnabledChange={setOnlyEnabledTags}
-        onExpandAll={() => saveCategoriesOpen(paneTarget, paneCategories, true)}
-        onCollapseAll={() => saveCategoriesOpen(paneTarget, paneCategories, false)}
-      />
-
       <div id={panelId} role="tabpanel" aria-labelledby={`${id}-tab-${paneTarget}`}>
+        {!negativeSelected && (
+          <TagInput
+            key={paneTarget}
+            label={active ? active.name.trim() || `キャラ${activeIndex + 1}` : 'ベース'}
+            placeholder="タグを追加（英語・日本語名・よみ）"
+            entries={addTagEntries}
+            onAdd={addPromptTag}
+            onPick={addPromptTag}
+          />
+        )}
+        <TagFilterBar
+          filter={tagFilter}
+          matchCount={matchCount}
+          onQueryChange={setTagQuery}
+          onOnlyEnabledChange={setOnlyEnabledTags}
+          onExpandAll={() => saveCategoriesOpen(paneTarget, paneCategories, true)}
+          onCollapseAll={() => saveCategoriesOpen(paneTarget, paneCategories, false)}
+        />
         {negativeSelected ? (
           <NegativePane
             tags={workspace.negative}

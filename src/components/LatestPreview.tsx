@@ -11,7 +11,7 @@ interface Props {
 export function LatestPreview({ image, onOpen, onDismiss }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
-  // 取り消しバーとトーストを、このプレビューの上へ持ち上げる。
+  // トーストを、このプレビューの上へ持ち上げる。
   useEffect(() => {
     const el = ref.current;
     if (!el) return;

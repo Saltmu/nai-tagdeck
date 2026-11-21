@@ -27,10 +27,6 @@
   }
 
   .toast {
-    bottom: calc(1.5rem + var(--dock-offset) + var(--latest-offset) + var(--undo-offset));
-  }
-
-  .undo-bar-slot {
     bottom: calc(1.5rem + var(--dock-offset) + var(--latest-offset));
   }
 }
@@ -43,4 +39,3 @@
     animation: none !important;
   }
 }
-

@@ -9,12 +9,22 @@ import type { PresetStore } from '../src/hooks/usePresets';
 import { PROMPT_CATEGORY_KEYS } from '../src/lib/categories';
 import { loadCategoryOpen } from '../src/lib/categoryOpen';
 import { emptyGroups, emptyWorkspace } from '../src/lib/workspace';
-import type { WorkTag, Workspace } from '../src/types';
+import type { DictEntry, WorkTag, Workspace } from '../src/types';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
+function entry(tag: string, category: DictEntry['category'], alias = '', weight = 1): DictEntry {
+  return { id: `${category}:${tag}`, tag, category, alias, default_weight: weight, sort_order: 0, updated_at: '' };
+}
+
 const dictionary = {
-  entries: [],
+  entries: [
+    entry('blonde hair', 'appearance', '金髪', 1.2),
+    entry('blue jacket', 'outfit'),
+    entry('sunny park', 'background'),
+    entry('ambiguous', 'appearance'),
+    entry('ambiguous', 'outfit'),
+  ],
   loaded: true,
   error: null,
   save: async () => {},
@@ -54,6 +64,8 @@ const dispatch = vi.fn();
 
 const textOf = (selector: string) => container.querySelector(selector)?.textContent ?? '';
 const categoryButtons = () => [...container.querySelectorAll<HTMLButtonElement>('.category .disclosure')];
+const searchInput = () => container.querySelector<HTMLInputElement>('input[aria-label="タグを検索"]');
+const searchToggle = () => container.querySelector<HTMLButtonElement>('button[aria-label^="タグ検索を"]')!;
 const button = (label: string) => {
   const found = [...container.querySelectorAll('button')].find((el) => el.textContent === label);
   if (!found) throw new Error(`ボタンがありません: ${label}`);
@@ -64,14 +76,28 @@ async function click(label: string) {
   await act(async () => button(label).click());
 }
 
-async function search(value: string) {
-  const input = container.querySelector<HTMLInputElement>('input[aria-label="タグを検索"]');
-  if (!input) throw new Error('検索欄がありません');
+async function chooseDisplayAction(label: string) {
+  const menu = container.querySelector<HTMLDetailsElement>('.tag-list-actions details')!;
+  const trigger = menu.querySelector<HTMLElement>('summary')!;
+  expect(menu.open).toBe(false);
+  await act(async () => trigger.click());
+  expect(menu.open).toBe(true);
+  await click(label);
+  expect(menu.open).toBe(false);
+  expect(document.activeElement).toBe(trigger);
+}
+
+async function type(input: HTMLInputElement, value: string) {
   await act(async () => {
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     set?.call(input, value);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
+}
+
+async function search(value: string) {
+  if (!searchInput()) await act(async () => searchToggle().click());
+  await type(searchInput()!, value);
 }
 
 beforeEach(async () => {
@@ -113,15 +139,30 @@ afterEach(async () => {
 });
 
 it('searches the open pane, keeps ON tags, and highlights matches', async () => {
+  const displayMenu = container.querySelector<HTMLDetailsElement>('.tag-list-actions details')!;
+  const displayTrigger = displayMenu.querySelector<HTMLElement>('summary')!;
+  await act(async () => displayTrigger.click());
+  await act(async () => displayTrigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  expect(displayMenu.open).toBe(false);
+  expect(document.activeElement).toBe(displayTrigger);
+  await act(async () => displayTrigger.click());
+  await act(async () => searchToggle().dispatchEvent(new Event('pointerdown', { bubbles: true })));
+  expect(displayMenu.open).toBe(false);
+
+  expect(searchInput()).toBeNull();
+  expect(searchToggle().getAttribute('aria-expanded')).toBe('false');
   expect(textOf('.tag-filter-count')).toBe('');
-  await click('ONのみ');
+  await chooseDisplayAction('ONのみ');
   expect(button('ONのみ').getAttribute('aria-pressed')).toBe('true');
+  expect(textOf('.tag-list-actions summary')).toBe('表示（ONのみ）');
   expect(container.textContent).toContain('long hair');
   expect(container.textContent).not.toContain('short hair');
   expect(textOf('.tag-filter-count')).toBe('該当 1件');
 
-  await click('ONのみ');
+  await chooseDisplayAction('ONのみ');
   await search('HAIR');
+  expect(document.activeElement).toBe(searchInput());
+  expect(searchToggle().getAttribute('aria-expanded')).toBe('true');
   expect(textOf('.tag-filter-count')).toBe('該当 2件');
   expect([...container.querySelectorAll('.tag-name mark')].map((mark) => mark.textContent)).toEqual(['hair', 'hair']);
   expect(container.textContent).not.toContain('lowres');
@@ -132,12 +173,40 @@ it('searches the open pane, keeps ON tags, and highlights matches', async () => 
   expect(textOf('.tag-filter-count')).toBe('該当 1件');
   expect(container.querySelector('.tag-name mark')?.textContent).toBe('uniform');
   expect(container.textContent).not.toContain('hat');
-  const input = container.querySelector<HTMLInputElement>('input[aria-label="タグを検索"]')!;
-  expect(input.value).toBe('uniform');
+  expect(searchInput()?.value).toBe('uniform');
+
+  await act(async () => searchInput()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  expect(searchInput()).toBeNull();
+  expect(document.activeElement).toBe(searchToggle());
+  expect(container.textContent).toContain('hat');
+  await act(async () => searchToggle().click());
+  expect(searchInput()?.value).toBe('');
+  await act(async () => searchToggle().click());
+  expect(searchInput()).toBeNull();
 });
 
-it('opens and closes every category in the current pane and restores that state', async () => {
-  await click('すべて閉じる');
+it('adds tags across the selected pane using dictionary categories and keeps unclassified input', async () => {
+  const baseInput = container.querySelector<HTMLInputElement>('input[aria-label="ベースにタグを追加"]')!;
+  await type(baseInput, '金髪');
+  const candidate = [...container.querySelectorAll<HTMLElement>('[role="option"]')].find((item) => item.textContent?.includes('blonde hair'))!;
+  expect(candidate.textContent).toContain('外見');
+  await act(async () => candidate.click());
+  expect(dispatch).toHaveBeenLastCalledWith({ type: 'add', target: 'base', category: 'appearance', tag: 'blonde hair', weight: 1.2 });
+
+  await click('中');
+  const characterInput = container.querySelector<HTMLInputElement>('input[aria-label="中にタグを追加"]')!;
+  await type(characterInput, '1.4::BLUE_JACKET::, sunny park, ambiguous, custom tag');
+  await act(async () => characterInput.parentElement!.querySelector<HTMLButtonElement>('button')!.click());
+  expect(dispatch.mock.calls.slice(1)).toEqual([
+    [{ type: 'add', target: 'c1', category: 'outfit', tag: 'BLUE_JACKET', weight: 1.4 }],
+    [{ type: 'add', target: 'c1', category: 'unclassified', tag: 'sunny park', weight: 1 }],
+    [{ type: 'add', target: 'c1', category: 'unclassified', tag: 'ambiguous', weight: 1 }],
+    [{ type: 'add', target: 'c1', category: 'unclassified', tag: 'custom tag', weight: 1 }],
+  ]);
+});
+
+it('opens and closes every category in the current pane from the display menu and restores that state', async () => {
+  await chooseDisplayAction('すべて閉じる');
   expect(categoryButtons().every((item) => item.getAttribute('aria-expanded') === 'false')).toBe(true);
   for (const key of PROMPT_CATEGORY_KEYS) expect(loadCategoryOpen('base', key)).toBe(false);
   expect(categoryButtons().find((item) => item.textContent?.includes('外見'))?.textContent).toContain('1件ON');
@@ -146,20 +215,20 @@ it('opens and closes every category in the current pane and restores that state'
   expect(categoryButtons().find((item) => item.textContent?.includes('外見'))?.textContent).toContain('該当 2件');
   expect(categoryButtons().find((item) => item.textContent?.includes('未分類'))?.textContent).toContain('該当 0件');
 
-  await click('すべて開く');
+  await chooseDisplayAction('すべて開く');
   expect(categoryButtons().every((item) => item.getAttribute('aria-expanded') === 'true')).toBe(true);
   expect(categoryButtons().find((item) => item.textContent?.includes('外見'))?.textContent).toContain('1/2 · 該当 2件');
 
   await search('');
   await click('中');
   expect(categoryButtons().every((item) => item.getAttribute('aria-expanded') === 'true')).toBe(true);
-  await click('すべて閉じる');
+  await chooseDisplayAction('すべて閉じる');
   expect(loadCategoryOpen('c1', 'outfit')).toBe(false);
   expect(loadCategoryOpen('base', 'outfit')).toBe(true);
 
   await click('ベース');
   expect(categoryButtons().every((item) => item.getAttribute('aria-expanded') === 'true')).toBe(true);
-  await click('すべて閉じる');
+  await chooseDisplayAction('すべて閉じる');
   await click('中');
   expect(categoryButtons().every((item) => item.getAttribute('aria-expanded') === 'false')).toBe(true);
   await click('ベース');

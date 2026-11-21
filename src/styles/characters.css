@@ -13,12 +13,11 @@
 
 .editor-tabs {
   display: flex;
+  align-items: center;
   gap: 0.35rem;
   margin-top: 0.65rem;
-  padding: 0.35rem 0 0.25rem;
-  overflow-x: auto;
+  padding: 0.15rem 0 0.05rem;
   border-bottom: 1px solid var(--border);
-  scrollbar-width: thin;
   /* スクロールしてもヘッダーの直下に残す（top はヘッダーの高さに合わせて JS で設定） */
   position: sticky;
   top: 0;
@@ -34,9 +33,25 @@
 
 .editor-tablist {
   display: flex;
-  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0.2rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
   align-items: center;
   gap: 0.35rem;
+}
+
+.editor-history {
+  display: flex;
+  flex: none;
+  margin-inline-start: auto;
+}
+
+.editor-history .icon-btn[aria-disabled='true'] {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--muted);
 }
 
 .editor-tab {
@@ -253,4 +268,3 @@
 .character .icon-btn:hover:not(:disabled) {
   background: var(--surface);
 }
-

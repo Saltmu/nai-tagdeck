@@ -118,11 +118,6 @@
     position: relative;
     padding-top: 0.9rem;
   }
-
-  /* 幅が決まらないとボタンが max-content のまま折り返さず、プレビュー側へはみ出す */
-  .undo-bar-slot {
-    width: calc(100vw - 1.5rem - env(safe-area-inset-left) - env(safe-area-inset-right));
-  }
 }
 
 @media (min-width: 1100px) {
@@ -173,4 +168,3 @@
     max-height: min(42dvh, 30rem);
   }
 }
-

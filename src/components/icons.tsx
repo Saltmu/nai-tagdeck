@@ -115,6 +115,42 @@ export function TrashIcon() {
   );
 }
 
+export function MoreIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" fill="currentColor" aria-hidden="true">
+      <circle cx="4" cy="10" r="1.5" />
+      <circle cx="10" cy="10" r="1.5" />
+      <circle cx="16" cy="10" r="1.5" />
+    </svg>
+  );
+}
+
+export function UndoIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="m7 4-4 4 4 4M3 8h9a4 4 0 0 1 0 8h-2" {...stroke} />
+    </svg>
+  );
+}
+
+export function RedoIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="m13 4 4 4-4 4m4-4H8a4 4 0 0 0 0 8h2" {...stroke} />
+    </svg>
+  );
+}
+
+/** 検索（虫眼鏡）。 */
+export function SearchIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <circle cx="8.5" cy="8.5" r="4.75" {...stroke} />
+      <path d="m12 12 4 4" {...stroke} />
+    </svg>
+  );
+}
+
 /** 閉じる（×）。 */
 export function CloseIcon() {
   return (

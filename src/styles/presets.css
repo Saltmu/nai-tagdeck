@@ -1,7 +1,5 @@
 /* ---- phase 3: presets / weight / sort ---- */
 .preset-bar {
-  display: grid;
-  gap: 0.5rem;
   margin-bottom: 0.75rem;
 }
 
@@ -34,7 +32,7 @@
 /* 候補を出している間だけ、ヘッダー直下に張り付く編集タブより手前に出す。
    常に手前にすると、スクロールでタブの下に入ったプリセット欄がタブに重なってしまう */
 .preset-search:has(> .suggest-popup:not([hidden])) {
-  z-index: var(--z-preset-search);
+  z-index: var(--z-editor-menu);
 }
 
 .preset-suggestions {
@@ -46,10 +44,15 @@
   color: var(--accent);
 }
 
-.preset-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+@media (max-width: 399px) {
+  .preset-select {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 .weight-control {
@@ -132,4 +135,3 @@
 .sort-control .icon-btn {
   border: 1px solid var(--border);
 }
-

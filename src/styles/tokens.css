@@ -30,18 +30,16 @@
 
   /* 重なり順。間に挟めるよう 10 刻みにし、下にあるものほど手前に出る */
   --z-editor-tabs: 10; /* ヘッダー直下に張り付く編集タブ */
-  --z-preset-search: 20; /* 候補を開いているプリセット検索欄 */
+  --z-editor-menu: 20; /* プリセット候補と編集操作のメニュー */
   --z-dock: 30; /* 狭い画面で下端に固定する生成ドック */
   --z-suggesting: 40; /* 候補を出しているカテゴリ（周りを薄く覆う） */
   --z-header: 50;
   --z-latest-preview: 60;
   --z-toast: 70;
-  --z-undo-bar: 80;
   --z-gesture-shield: 90; /* 候補の外を押したあと、その押下が下の要素に届かないよう一時的に覆う透明な板 */
-  /* 狭い画面で下端に固定した生成ドック・未読プレビュー・取り消しバーの高さ。無いときは 0 */
+  /* 狭い画面で下端に固定した生成ドック・未読プレビューの高さ。無いときは 0 */
   --dock-offset: 0px;
   --latest-offset: 0px;
-  --undo-offset: 0px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -65,4 +63,3 @@
     color-scheme: dark;
   }
 }
-
