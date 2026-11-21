@@ -107,7 +107,7 @@ export function buildSwAsset({ bundle, publicFiles, template }: SwBuildInput): {
   const source = template
     .replace('__VERSION__', version)
     .replace('__PRECACHE__', JSON.stringify(precache))
-    .replace('__OFFLINE_HTML__', JSON.stringify(offlineHtml));
+    .replace('__OFFLINE_HTML__', () => JSON.stringify(offlineHtml));
 
   return { version, precache, source };
 }

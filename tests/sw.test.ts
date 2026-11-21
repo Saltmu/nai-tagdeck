@@ -70,6 +70,14 @@ describe('buildSwAsset', () => {
     expect(a.precache).toEqual(b.precache);
   });
 
+  it('embeds offline html without expanding replacement tokens', () => {
+    const input = baseInput();
+    input.bundle['index.html'] = { type: 'asset', source: '<title>$&</title>' };
+    const { source } = buildSwAsset(input);
+    expect(source).toContain(JSON.stringify('<title>$&</title>'));
+    expect(source).not.toContain('__OFFLINE_HTML__');
+  });
+
   it('updates version when index.html, bundle assets, public files, or sw-template change without renaming', () => {
     const base = buildSwAsset(baseInput());
 
@@ -300,7 +308,12 @@ function createSwBackend(): SwBackend {
 function createSwHarness(
   swSource: string,
   baseUrl: string,
-  options?: { failPuts?: boolean; backend?: SwBackend; onAddAll?: () => Promise<void> | void },
+  options?: {
+    failPuts?: boolean;
+    backend?: SwBackend;
+    onAddAll?: () => Promise<void> | void;
+    duringKeys?: () => Promise<void> | void;
+  },
 ) {
   const listeners = new Map<string, (event: unknown) => void>();
   const backend = options?.backend ?? createSwBackend();
@@ -356,6 +369,7 @@ function createSwHarness(
       };
     },
     async keys() {
+      await options?.duringKeys?.();
       return [...store.keys()];
     },
     async delete(name: string) {
@@ -548,6 +562,32 @@ describe('Service Worker runtime under subdirectory deployment', () => {
     releaseNewer();
     await installing;
     expect(await backend.store.get(`nai-tagdeck-${newer.version}`)?.get(baseUrl)?.text()).toContain('<title>v2</title>');
+  });
+
+  it('keeps a cache created while the activating worker is listing caches', async () => {
+    const backend = createSwBackend();
+    const older = buildSwAsset(baseInput());
+    const newerInput = baseInput();
+    newerInput.bundle['index.html'] = {
+      type: 'asset',
+      source: '<!doctype html><script src="./assets/index-aaaa1111.js"></script><title>v3</title>',
+    };
+    const newer = buildSwAsset(newerInput);
+    let startNewer = () => Promise.resolve();
+    const oldSw = createSwHarness(older.source, baseUrl, {
+      backend,
+      duringKeys: () => startNewer(),
+    });
+    await oldSw.dispatchLifecycle('install');
+    const newSw = createSwHarness(newer.source, baseUrl, { backend });
+    startNewer = () => newSw.dispatchLifecycle('install');
+    backend.store.set('nai-tagdeck-ancient', new Map());
+
+    await oldSw.dispatchLifecycle('activate');
+    expect(backend.store.has('nai-tagdeck-ancient')).toBe(false);
+    expect(backend.store.has(`nai-tagdeck-${older.version}`)).toBe(true);
+    expect(backend.store.has(`nai-tagdeck-${newer.version}`)).toBe(true);
+    expect(await backend.store.get(`nai-tagdeck-${newer.version}`)?.get(baseUrl)?.text()).toContain('<title>v3</title>');
   });
 
   it('activates the new worker only after skip-waiting, and a failed cache write still returns the response', async () => {

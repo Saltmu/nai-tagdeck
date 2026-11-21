@@ -75,13 +75,17 @@ self.addEventListener('message', (event) => {
 self.addEventListener('activate', (event) => {
   const keep = new Set([CACHE]);
   event.waitUntil(
-    updateGenerationList((order) => {
-      const at = order.indexOf(CACHE);
-      const newer = at === -1 ? [] : order.slice(at + 1);
-      for (const name of newer) keep.add(name);
-      return [CACHE, ...newer];
-    })
-      .then(() => caches.keys())
+    // 一覧を先に取る。このあとで開いたキャッシュは、世代一覧に無くても消さない。
+    caches
+      .keys()
+      .then((keys) =>
+        updateGenerationList((order) => {
+          const at = order.indexOf(CACHE);
+          const newer = at === -1 ? [] : order.slice(at + 1);
+          for (const name of newer) keep.add(name);
+          return [CACHE, ...newer];
+        }).then(() => keys),
+      )
       .then((keys) => Promise.all(keys.filter((k) => k.startsWith('nai-tagdeck-') && !keep.has(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
