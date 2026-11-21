@@ -104,7 +104,9 @@ describe('bindSwUpdates', () => {
     const worker = fakeWorker('installed');
     requestSwSkipWaiting(worker, reload);
     expect(worker.messages).toEqual([{ type: 'skip-waiting' }]);
-    expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBe('1');
+    const stamp = Number(sessionStorage.getItem('nai-tagdeck-sw-reload'));
+    expect(Number.isFinite(stamp)).toBe(true);
+    expect(Date.now() - stamp).toBeLessThan(5_000);
     client.fireControllerChange();
     client.fireControllerChange();
     expect(reload).toHaveBeenCalledTimes(1);
@@ -116,6 +118,25 @@ describe('bindSwUpdates', () => {
     const reload = vi.fn();
     sessionStorage.setItem('nai-tagdeck-sw-reload', '1');
     bindSwUpdates(client.sw, reload);
+    client.fireControllerChange();
+    expect(reload).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBeNull();
+  });
+
+  it('reloads immediately while the worker is still activating', () => {
+    const reload = vi.fn();
+    const worker = fakeWorker('activating');
+    requestSwSkipWaiting(worker, reload);
+    expect(worker.messages).toEqual([]);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBeNull();
+  });
+
+  it('drops a stale reload request instead of using it for a later update', () => {
+    const client = createClient(fakeWorker('activated'));
+    const reload = vi.fn();
+    bindSwUpdates(client.sw, reload);
+    sessionStorage.setItem('nai-tagdeck-sw-reload', String(Date.now() - 20_000));
     client.fireControllerChange();
     expect(reload).not.toHaveBeenCalled();
     expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBeNull();

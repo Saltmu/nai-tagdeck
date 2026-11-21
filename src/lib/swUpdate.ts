@@ -3,6 +3,11 @@
 
 const SKIP_WAITING = { type: 'skip-waiting' } as const;
 const SW_RELOAD_KEY = 'nai-tagdeck-sw-reload';
+const SW_RELOAD_MS = 15_000;
+
+function controlsThisTab(worker: SwWaitingWorker): boolean {
+  return typeof navigator !== 'undefined' && 'serviceWorker' in navigator && navigator.serviceWorker.controller === worker;
+}
 
 export interface SwWaitingWorker {
   state: string;
@@ -48,12 +53,13 @@ export function dismissSwUpdate(): void {
 }
 
 export function requestSwSkipWaiting(worker: SwWaitingWorker, reload: () => void = () => window.location.reload()): void {
-  // 他タブが先に有効化したあとは controllerchange が来ないので、このタブはすぐ読み直す。
-  if (worker.state === 'activated') {
+  // 他タブが先に切り替えたあとは controllerchange がもう来ない。activating の途中でも、このタブはすぐ読み直す。
+  if (worker.state === 'activating' || worker.state === 'activated' || controlsThisTab(worker)) {
+    sessionStorage.removeItem(SW_RELOAD_KEY);
     reload();
     return;
   }
-  sessionStorage.setItem(SW_RELOAD_KEY, '1');
+  sessionStorage.setItem(SW_RELOAD_KEY, String(Date.now()));
   worker.postMessage(SKIP_WAITING);
 }
 
@@ -72,9 +78,12 @@ export function bindSwUpdates(sw: SwUpdateClient, reload: () => void): () => voi
       sessionStorage.removeItem(SW_RELOAD_KEY);
       return;
     }
-    // 他タブの更新では読み直さない。このタブが「再読み込み」を押した印があるときだけ。
-    if (sessionStorage.getItem(SW_RELOAD_KEY) !== '1') return;
+    // 他タブの更新では読み直さない。このタブが直前に「再読み込み」を押したときだけ。
+    const stamp = sessionStorage.getItem(SW_RELOAD_KEY);
     sessionStorage.removeItem(SW_RELOAD_KEY);
+    if (stamp === null) return;
+    const age = Date.now() - Number(stamp);
+    if (!Number.isFinite(age) || age < 0 || age > SW_RELOAD_MS) return;
     if (reloading) return;
     reloading = true;
     reload();

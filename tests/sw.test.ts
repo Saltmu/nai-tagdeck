@@ -177,8 +177,13 @@ describe('security headers', () => {
     expect(CSP_HEADER.endsWith("frame-ancestors 'none'")).toBe(true);
     const workflow = readFileSync(resolve('.github/workflows/deploy.yml'), 'utf8');
     const mirrors = workflow.split('\n').filter((line) => line.includes('mirror '));
-    expect(mirrors.some((line) => line.includes('--exclude-glob .htaccess --exclude-glob robots.txt'))).toBe(true);
-    expect(mirrors.some((line) => line.includes('--transfer-all') || line.includes('--delete-excluded') || line.includes('--delete-first'))).toBe(false);
+    const assetMirrors = mirrors.filter((line) => line.includes('dist/assets'));
+    const pageMirrors = mirrors.filter((line) => line.includes(' dist .'));
+    expect(pageMirrors.some((line) => line.includes('--exclude-glob .htaccess --exclude-glob robots.txt'))).toBe(true);
+    expect(pageMirrors.every((line) => line.includes('--transfer-all'))).toBe(true);
+    expect(assetMirrors.some((line) => line.includes('--transfer-all') || line.includes('--delete-excluded') || line.includes('--delete-first'))).toBe(false);
+    expect(workflow).toContain('cmp -s dist/index.html');
+    expect(workflow).toContain('cmp -s dist/sw.js');
   });
 });
 
