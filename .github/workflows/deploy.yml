@@ -103,7 +103,13 @@ jobs:
             preview=--dry-run
           fi
 
-          # Upload fingerprinted assets before publishing pages that reference them.
+          # 1. Upload new fingerprinted assets first. Compare by size so a fresh
+          #    build does not resend unchanged hashes. Do not delete yet.
+          # 2. Publish pages and other files, then delete remote files that are
+          #    not in dist. Keep server-managed .htaccess (no --delete-excluded)
+          #    and leave assets/ for the next step.
+          # 3. Delete stale hashed assets only after the new pages are in place.
+          #    Do not use --delete-first or --transfer-all.
           lftp --norc -f /dev/stdin <<EOF
           set cmd:fail-exit yes
           set net:timeout 20
@@ -113,7 +119,8 @@ jobs:
           set xfer:use-temp-file yes
           open --env-password -u "$DEPLOY_USER" "sftp://$DEPLOY_HOST:$DEPLOY_PORT"
           cd "${DEPLOY_DIR%/}"
-          mirror --reverse --no-perms --transfer-all --verbose $preview dist/assets assets
-          mirror --reverse --no-perms --transfer-all --verbose --exclude-glob=assets/ --exclude-glob=.htaccess $preview dist .
+          mirror --reverse --no-perms --ignore-time --verbose $preview dist/assets assets
+          mirror --reverse --delete --no-perms --verbose --exclude-glob .htaccess --exclude ^assets/ $preview dist .
+          mirror --reverse --delete --no-perms --ignore-time --verbose $preview dist/assets assets
           bye
           EOF

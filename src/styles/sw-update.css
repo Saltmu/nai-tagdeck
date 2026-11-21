@@ -1,0 +1,16 @@
+/* ---- service worker update ---- */
+.sw-update {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem max(0.75rem, env(safe-area-inset-right)) 0.6rem max(0.75rem, env(safe-area-inset-left));
+  background: var(--accent-soft);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+
+.sw-update p {
+  flex: 1 1 12rem;
+  margin: 0;
+}

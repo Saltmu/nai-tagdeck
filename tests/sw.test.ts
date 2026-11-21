@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import vm from 'node:vm';
 import { build as viteBuild, type Plugin } from 'vite';
 import { describe, expect, it, vi } from 'vitest';
-import { buildSwAsset, type SwBuildInput } from '../vite.config';
+import { buildSwAsset, CSP_HEADER, CSP_META, type SwBuildInput } from '../vite.config';
 
 const template = readFileSync(resolve('src/sw-template.js'), 'utf-8');
 
@@ -161,6 +161,20 @@ describe('Vite build swPlugin integration', () => {
     expect(second.cacheName).not.toBe(first.cacheName);
     expect(first.precache).not.toContain('./index.html');
     expect(first.precache).not.toContain('./sitemap.xml');
+    expect(first.html).toContain(`content="${CSP_META}"`);
+    expect(first.html).not.toContain('frame-ancestors');
+    expect(first.html).not.toContain('data:');
+  });
+});
+
+describe('security headers', () => {
+  it('keeps data: out of img-src and sends frame-ancestors only on the HTTP header', () => {
+    expect(CSP_META).toContain("img-src 'self' blob:");
+    expect(CSP_META).not.toContain('data:');
+    expect(CSP_META).not.toContain('frame-ancestors');
+    const htaccess = readFileSync(resolve('deploy/htaccess.example'), 'utf8');
+    expect(htaccess).toContain(`Content-Security-Policy "${CSP_HEADER}"`);
+    expect(CSP_HEADER.endsWith("frame-ancestors 'none'")).toBe(true);
   });
 });
 
@@ -170,7 +184,7 @@ interface MockRequest {
   mode: string;
 }
 
-function createSwHarness(swSource: string, baseUrl: string) {
+function createSwHarness(swSource: string, baseUrl: string, options?: { failPuts?: boolean }) {
   const listeners = new Map<string, (event: unknown) => void>();
   const store = new Map<string, Map<string, Response>>();
 
@@ -217,6 +231,7 @@ function createSwHarness(swSource: string, baseUrl: string) {
           }
         },
         async put(req: string | MockRequest, res: Response) {
+          if (options?.failPuts) throw new Error('cache put failed');
           cache.set(resolveKey(req), res);
         },
       };
@@ -270,25 +285,40 @@ function createSwHarness(swSource: string, baseUrl: string) {
     async dispatchLifecycle(type: 'install' | 'activate') {
       const fn = listeners.get(type);
       if (!fn) throw new Error(`missing ${type} listener`);
-      let pending: Promise<unknown> = Promise.resolve();
+      const pending: Promise<unknown>[] = [];
       fn({
         waitUntil(p: Promise<unknown>) {
-          pending = p;
+          pending.push(p);
         },
       });
-      await pending;
+      await Promise.all(pending);
     },
-    async dispatchFetch(req: MockRequest): Promise<Response | undefined> {
+    async dispatchFetch(req: MockRequest): Promise<{ response: Response | undefined; waitUntilRejected: boolean }> {
       const fn = listeners.get('fetch');
       if (!fn) throw new Error('missing fetch listener');
+      const pending: Promise<unknown>[] = [];
       let responded: Promise<Response> | undefined;
+      let waitUntilRejected = false;
       fn({
         request: req,
+        waitUntil(p: Promise<unknown>) {
+          pending.push(Promise.resolve(p).then(
+            () => undefined,
+            () => {
+              waitUntilRejected = true;
+            },
+          ));
+        },
         respondWith(p: Promise<Response>) {
           responded = p;
         },
       });
-      return responded ? await responded : undefined;
+      const response = responded ? await responded : undefined;
+      await Promise.all(pending);
+      return { response, waitUntilRejected };
+    },
+    dispatchMessage(data: unknown) {
+      listeners.get('message')?.({ data });
     },
   };
 }
@@ -303,7 +333,7 @@ describe('Service Worker runtime under subdirectory deployment', () => {
     sw.store.set('other-app-cache', new Map());
 
     await sw.dispatchLifecycle('install');
-    expect(sw.skipWaiting).toHaveBeenCalledTimes(1);
+    expect(sw.skipWaiting).not.toHaveBeenCalled();
     const activeCache = sw.store.get(`nai-tagdeck-${version}`);
     expect(activeCache?.has(`${baseUrl}`)).toBe(true);
     expect(activeCache?.has(`${baseUrl}icons/favicon-32.png`)).toBe(true);
@@ -323,13 +353,14 @@ describe('Service Worker runtime under subdirectory deployment', () => {
       'icons/icon-192.png?v=tag-check',
       'icons/icon-512.png?v=tag-check',
     ]) {
-      const res = await sw.dispatchFetch({
+      const { response, waitUntilRejected } = await sw.dispatchFetch({
         url: `${baseUrl}${iconPath}`,
         method: 'GET',
         mode: 'no-cors',
       });
-      expect(res?.ok).toBe(true);
-      expect(await res?.text()).toBe(`body:${baseUrl}${iconPath.split('?')[0]}`);
+      expect(waitUntilRejected).toBe(false);
+      expect(response?.ok).toBe(true);
+      expect(await response?.text()).toBe(`body:${baseUrl}${iconPath.split('?')[0]}`);
     }
     expect(sw.fetchMock).not.toHaveBeenCalled();
 
@@ -339,7 +370,7 @@ describe('Service Worker runtime under subdirectory deployment', () => {
       method: 'GET',
       mode: 'cors',
     });
-    expect(crossOrigin).toBeUndefined();
+    expect(crossOrigin.response).toBeUndefined();
 
     // Offline navigation falls back to cached subdirectory root ('./')
     sw.fetchMock.mockRejectedValueOnce(new Error('offline'));
@@ -348,7 +379,35 @@ describe('Service Worker runtime under subdirectory deployment', () => {
       method: 'GET',
       mode: 'navigate',
     });
-    expect(offlineNav?.ok).toBe(true);
-    expect(await offlineNav?.text()).toBe(`body:${baseUrl}`);
+    expect(offlineNav.waitUntilRejected).toBe(false);
+    expect(offlineNav.response?.ok).toBe(true);
+    expect(await offlineNav.response?.text()).toBe(`body:${baseUrl}`);
+  });
+
+  it('activates the new worker only after skip-waiting, and a failed cache write still returns the response', async () => {
+    const { source } = buildSwAsset(baseInput());
+    const sw = createSwHarness(source, baseUrl, { failPuts: true });
+    await sw.dispatchLifecycle('install');
+    expect(sw.skipWaiting).not.toHaveBeenCalled();
+
+    sw.dispatchMessage({ type: 'skip-waiting' });
+    expect(sw.skipWaiting).toHaveBeenCalledTimes(1);
+
+    const asset = await sw.dispatchFetch({
+      url: `${baseUrl}icons/extra.png`,
+      method: 'GET',
+      mode: 'cors',
+    });
+    expect(asset.waitUntilRejected).toBe(false);
+    expect(asset.response?.ok).toBe(true);
+    expect(await asset.response?.text()).toBe(`body:${baseUrl}icons/extra.png`);
+
+    const page = await sw.dispatchFetch({
+      url: `${baseUrl}`,
+      method: 'GET',
+      mode: 'navigate',
+    });
+    expect(page.waitUntilRejected).toBe(false);
+    expect(page.response?.ok).toBe(true);
   });
 });

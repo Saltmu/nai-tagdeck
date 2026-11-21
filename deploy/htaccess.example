@@ -7,6 +7,10 @@
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "DENY"
   Header always set Referrer-Policy "no-referrer"
+  # frame-ancestors は meta の CSP では無視されるため、HTTP ヘッダーで送る。
+  # img-src は 'self' と blob: のみ。生成画像は blob: URL で、data: は使わない。
+  # この値は vite.config.ts の CSP_HEADER と揃える。
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self' https://image.novelai.net; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
   # index.html・sw.js・manifest はキャッシュさせず、ハッシュ付きの js/css は長くキャッシュする
   <FilesMatch "(\.html|sw\.js|\.webmanifest)$">
     Header set Cache-Control "no-cache"

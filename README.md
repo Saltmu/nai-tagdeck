@@ -100,7 +100,7 @@ npm run dev
 
 `DEPLOY_HOST_FINGERPRINT` が未設定の状態で dry-run を実行すると、ランナーから観測した指紋の候補だけをログに表示します。この実行では SFTP ログインや配付のプレビューは行いません。WinSCP またはホスティング事業者で照合した指紋を登録してから、再度 dry-run を実行します。
 
-**Actions → Deploy nai-tagdeck → Run workflow** で `main` を選び、まず **Preview files without uploading** をオンにしたまま実行します。接続と転送予定を確認したら、チェックを外して再実行します。毎回テストとビルドを実行し、ハッシュ付きアセットを先にアップロードします。公開先のファイルは削除しないため、以前のアセットもサーバーに残ります。
+**Actions → Deploy nai-tagdeck → Run workflow** で `main` を選び、まず **Preview files without uploading** をオンにしたまま実行します。接続と転送予定を確認したら、チェックを外して再実行します。毎回テストとビルドを実行し、ハッシュ付きアセットを先に送ります。サイズが同じアセットは再送しません。その後にページを公開し、`dist/` に無いファイルを削除します。サーバー側の `.htaccess` は残します。
 
 </details>
 
@@ -116,8 +116,8 @@ npm run dev
 <details>
 <summary>配信設定と検索エンジン向けの設定</summary>
 
-- ビルド時に `index.html` へ CSP が入り、通信先を配信元と `image.novelai.net` に制限します。追加のセキュリティヘッダーやキャッシュ制御は [Apache の設定例](deploy/htaccess.example) を参照してください。
-- 変更後のページを取得できるよう、Service Worker はページ本体の取得をサーバーから試み、通信に失敗したときにキャッシュを使います。アイコンを再生成する場合は `node scripts/make-icons.mjs` を実行します。
+- ビルド時に `index.html` へ CSP が入り、通信先を配信元と `image.novelai.net` に制限します。画像は `blob:` のみを許可します。`frame-ancestors 'none'` は meta では効かないため、[Apache の設定例](deploy/htaccess.example) の HTTP ヘッダーに含めています。キャッシュ制御も同じ設定例を参照してください。
+- 変更後のページを取得できるよう、Service Worker はページ本体の取得をサーバーから試み、通信に失敗したときにキャッシュを使います。新しい版があるときは画面の案内から再読み込みします。アイコンを再生成する場合は `node scripts/make-icons.mjs` を実行します。
 - 公開 URL を変更する場合は、[`index.html`](index.html) の canonical・SNS 共有用 URL と [サイトマップ](public/sitemap.xml) をそろえます。現在の公開 URL は `www` なしの `shishio.x0.to` を使用します。
 - 検索に掲載する場合は、認証なしで公開し、robots.txt や `X-Robots-Tag` の設定でクロール・インデックス登録を許可します。ビルドに含まれる `sitemap.xml` を Google Search Console に送信します。robots.txt は [設定例](deploy/robots.txt.example) を参考に、ドメイン直下の既存ルールに統合します。
 

@@ -6,16 +6,21 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // 本番ビルドだけに CSP を埋め込む（開発サーバーは HMR 用のインラインスクリプトを使うため）。
-const CSP = [
+// 生成画像は blob: URL なので img-src に data: は要らない。
+// frame-ancestors は meta では無視される。HTTP ヘッダー側は deploy/htaccess.example に書く。
+export const CSP_DIRECTIVES = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
-  "img-src 'self' blob: data:",
+  "img-src 'self' blob:",
   "connect-src 'self' https://image.novelai.net",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
-].join('; ');
+] as const;
+
+export const CSP_META = CSP_DIRECTIVES.join('; ');
+export const CSP_HEADER = `${CSP_META}; frame-ancestors 'none'`;
 
 function cspPlugin(): Plugin {
   return {
@@ -24,7 +29,7 @@ function cspPlugin(): Plugin {
     transformIndexHtml(html) {
       return html.replace(
         '<meta charset="UTF-8" />',
-        `<meta charset="UTF-8" />\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />`,
+        `<meta charset="UTF-8" />\n    <meta http-equiv="Content-Security-Policy" content="${CSP_META}" />`,
       );
     },
   };
