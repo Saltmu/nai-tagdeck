@@ -2,7 +2,7 @@ import { useMemo, useState, type ChangeEvent } from 'react';
 import type { CategoryKey, DictEntry } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import { CATEGORIES, categoryLabel, isCategoryKey } from '../lib/categories';
-import { findDuplicate, parseImportFile, toCSV, toJSON, type ImportMode, type ImportResult } from '../lib/io';
+import { findDuplicate, parseImportFile, toCSV, toJSON, UTF8_BOM, type ImportMode, type ImportResult } from '../lib/io';
 import { formatWeight, isNeutralWeight } from '../lib/prompt';
 import { filterEntries, normalize } from '../lib/suggest';
 import { dateStamp, downloadText } from '../lib/browser';
@@ -100,7 +100,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
     const name = `nai-tagdeck-dictionary-${dateStamp()}.${format}`;
     if (format === 'json') downloadText(name, toJSON(entries), 'application/json');
     // Excel で文字化けしないよう BOM を付ける
-    else downloadText(name, '﻿' + toCSV(entries), 'text/csv');
+    else downloadText(name, UTF8_BOM + toCSV(entries), 'text/csv');
   };
 
   const handleRestore = async () => {

@@ -1,6 +1,6 @@
 import type { Character, PromptCategoryKey, TagGroups, TargetId, WorkTag, Workspace, WorkspaceCategoryKey } from '../types';
 import { CHARACTER_CATEGORY_KEYS, LEGACY_DRESS_STATE_CATEGORY, PROMPT_CATEGORY_KEYS } from './categories';
-import { newId } from './id';
+import { newId, normalizeId } from './id';
 import { clampWeight, parseTagList } from './prompt';
 import { DEFAULT_NEGATIVE } from './novelai';
 import { normalize } from './suggest';
@@ -86,11 +86,6 @@ export function normalizeCenter(raw: unknown): { x: number; y: number } | undefi
 
 // ---- 保存データの読み込み ----
 
-/** 空文字や空白だけの ID は採番し直す（辞書の取り込み・プリセットと同じ）。 */
-function storedId(id: unknown): string {
-  return typeof id === 'string' && id.trim() ? id : newId();
-}
-
 function normalizeTags(list: unknown[]): WorkTag[] {
   return list.flatMap((item): WorkTag[] => {
     if (!item || typeof item !== 'object') return [];
@@ -98,7 +93,7 @@ function normalizeTags(list: unknown[]): WorkTag[] {
     if (typeof t.tag !== 'string' || !t.tag.trim()) return [];
     return [
       {
-        id: storedId(t.id),
+        id: normalizeId(t.id),
         tag: t.tag.trim(),
         enabled: t.enabled !== false,
         weight: clampWeight(typeof t.weight === 'number' ? t.weight : 1),
@@ -147,7 +142,7 @@ export function normalizeWorkspace(raw: unknown, fallbackNegative?: readonly Wor
         const center = normalizeCenter(c.center);
         return [
           {
-            id: storedId(c.id),
+            id: normalizeId(c.id),
             name: typeof c.name === 'string' && c.name.trim() ? c.name : `キャラ${i + 1}`,
             enabled: c.enabled !== false,
             tags: normalizeGroups(c.tags),

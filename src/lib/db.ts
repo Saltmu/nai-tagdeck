@@ -12,6 +12,11 @@ interface TagDeckDB extends DBSchema {
 }
 
 const DB_NAME = 'nai-tagdeck';
+
+/** IndexedDB の kv ストアにアプリが書くキー。 */
+export const KV_KEYS = ['workspace', 'settings', 'generation', 'presets', 'activePreset'] as const;
+export type KVKey = (typeof KV_KEYS)[number];
+
 let dbPromise: Promise<IDBPDatabase<TagDeckDB>> | null = null;
 
 function getDB(): Promise<IDBPDatabase<TagDeckDB>> {
@@ -73,11 +78,11 @@ export async function replaceAllEntries(entries: readonly DictEntry[]): Promise<
   await tx.done;
 }
 
-export async function getKV<T>(key: string): Promise<T | undefined> {
+export async function getKV<T>(key: KVKey): Promise<T | undefined> {
   return (await (await getDB()).get('kv', key)) as T | undefined;
 }
 
-export async function setKV(key: string, value: unknown): Promise<void> {
+export async function setKV(key: KVKey, value: unknown): Promise<void> {
   await (await getDB()).put('kv', value, key);
 }
 

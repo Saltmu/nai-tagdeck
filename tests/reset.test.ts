@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearAllData, getKV, listEntries, putEntry, setKV } from '../src/lib/db';
+import { clearAllData, getKV, KV_KEYS, listEntries, putEntry, setKV, type KVKey } from '../src/lib/db';
 import { clearAppStorage, resetAppData } from '../src/lib/reset';
 import { loadCategoryOpen, saveCategoryOpen } from '../src/lib/categoryOpen';
 import { loadToken, saveToken } from '../src/lib/token';
@@ -21,12 +21,14 @@ describe('全設定とデータの削除', () => {
 
   it('辞書とすべてのKVを削除し、削除後も保存が使える', async () => {
     await putEntry({ id: 'tag', tag: 'solo', category: 'subject', alias: '', default_weight: 1, sort_order: 0, updated_at: '' });
-    for (const key of ['workspace', 'settings', 'generation', 'presets', 'activePreset', 'future-setting']) {
+    // アプリの型に無いキーも、ストアごと消える。
+    const unknownKey = 'future-setting' as KVKey;
+    for (const key of [...KV_KEYS, unknownKey]) {
       await setKV(key, { value: 'saved' });
     }
     await clearAllData();
     expect(await listEntries()).toEqual([]);
-    for (const key of ['workspace', 'settings', 'generation', 'presets', 'activePreset', 'future-setting']) {
+    for (const key of [...KV_KEYS, unknownKey]) {
       expect(await getKV(key)).toBeUndefined();
     }
     await setKV('settings', { value: 'new' });

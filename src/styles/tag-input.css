@@ -1,0 +1,122 @@
+/* ---- tag input / suggestions ---- */
+.tag-input {
+  position: relative;
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.tag-input input {
+  flex: 1;
+}
+
+.category.is-suggesting {
+  position: relative;
+  z-index: var(--z-suggesting);
+  /* 候補を出している間、このカテゴリ以外を薄いグレーで覆って強調する */
+  box-shadow: 0 0 0 100vmax rgba(128, 128, 128, 0.3);
+}
+
+/* 候補表示中は、そのカテゴリ以外のボタン等にホバー・フォーカス風の反応を起こさせない */
+body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label, summary):not(.is-suggesting *) {
+  pointer-events: none;
+}
+
+.gesture-shield {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-gesture-shield);
+}
+
+.suggest-popup {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 10; /* 候補を出しているカテゴリ・プリセット検索欄の中での重なり順（--z-* とは別） */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-pop);
+}
+
+.suggest-popup[hidden] {
+  display: none;
+}
+
+.suggest-popup.is-below {
+  top: calc(100% + 4px);
+}
+
+/* 上に出すときは閉じるボタンの行を入力欄側（下）に置く */
+.suggest-popup.is-above {
+  bottom: calc(100% + 4px);
+  flex-direction: column-reverse;
+}
+
+.suggest-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 4px 4px 4px 0.7rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.suggest-popup.is-above .suggest-head {
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+}
+
+.suggestions {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 4px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.6rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.suggestion[aria-selected='true'] {
+  background: var(--accent-soft);
+}
+
+.suggestion-tag {
+  font-weight: 600;
+}
+
+.suggestion-alias {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.chip {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.chip-weight {
+  color: var(--weighted);
+}
+

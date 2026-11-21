@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getKV, setKV } from '../lib/db';
+import { getKV, setKV, type KVKey } from '../lib/db';
 import { getDataResetSignal } from '../lib/reset';
 
 export interface PersistenceState {
@@ -15,7 +15,7 @@ const INITIAL: PersistenceState = { loaded: false, status: 'loading', error: nul
  * 読み込みが終わるまでは書き込まない（初期値で保存データを上書きしないため）。
  */
 export function usePersistence<T>(
-  key: string,
+  key: KVKey,
   value: T,
   onLoad: (raw: unknown, isCurrent: () => boolean) => Promise<void> | void,
   delayMs = 300,

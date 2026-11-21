@@ -1,8 +1,15 @@
 import type { DictEntry } from '../types';
 import { categoryIndex, parseCategory } from './categories';
-import { newId } from './id';
+import { normalizeId } from './id';
 import { clampWeight } from './prompt';
 import { normalize } from './suggest';
+
+/** Excel 向け CSV の先頭に付ける UTF-8 BOM。 */
+export const UTF8_BOM = '\uFEFF';
+
+export function stripBom(text: string): string {
+  return text.replace(/^\uFEFF/, '');
+}
 
 export const CSV_COLUMNS = [
   'id',
@@ -40,7 +47,7 @@ export function coerceEntry(raw: Record<string, unknown>, where: string): DictEn
   if (!tag) return `${where}: tag が空です`;
   const category = parseCategory(String(raw.category ?? ''));
   if (!category) return `${where}: category「${String(raw.category ?? '')}」は不明です`;
-  const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : newId();
+  const id = normalizeId(raw.id);
   const updatedAt =
     typeof raw.updated_at === 'string' && raw.updated_at.trim()
       ? raw.updated_at.trim()
@@ -77,13 +84,8 @@ export function toJSON(entries: readonly DictEntry[]): string {
   );
 }
 
-export function fromJSON(text: string): ImportResult {
-  let data: unknown;
-  try {
-    data = JSON.parse(text.replace(/^﻿/, ''));
-  } catch (e) {
-    return { entries: [], errors: [`JSON として読めません: ${(e as Error).message}`] };
-  }
+/** 配列、または `{ entries }` の中の辞書を検証する。 */
+export function entriesFromData(data: unknown): ImportResult {
   const list = Array.isArray(data)
     ? data
     : data && typeof data === 'object' && Array.isArray((data as { entries?: unknown }).entries)
@@ -96,6 +98,16 @@ export function fromJSON(text: string): ImportResult {
       where: `${i + 1}件目`,
     })),
   );
+}
+
+export function fromJSON(text: string): ImportResult {
+  let data: unknown;
+  try {
+    data = JSON.parse(stripBom(text));
+  } catch (e) {
+    return { entries: [], errors: [`JSON として読めません: ${(e as Error).message}`] };
+  }
+  return entriesFromData(data);
 }
 
 // ---- CSV ----
@@ -131,7 +143,7 @@ function parseCSVRecords(text: string): CsvRecord[] {
   let quoted = false;
   let line = 1;
   let recordLine = 1;
-  const src = text.replace(/^﻿/, '');
+  const src = stripBom(text);
 
   const pushRecord = () => {
     row.push(cell);

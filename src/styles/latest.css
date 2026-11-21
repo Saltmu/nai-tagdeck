@@ -1,0 +1,54 @@
+/* ---- latest image preview ---- */
+.latest-preview {
+  position: fixed;
+  right: max(0.75rem, env(safe-area-inset-right));
+  bottom: calc(env(safe-area-inset-bottom) + 0.75rem + var(--dock-offset));
+  z-index: var(--z-latest-preview);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+}
+
+.latest-open {
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.latest-open img {
+  display: block;
+  width: 72px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.latest-close {
+  width: 28px;
+  height: 28px;
+}
+
+/* 広い画面では画像一覧が常に見えているので出さない */
+@media (min-width: 1100px) {
+  .latest-preview {
+    display: none;
+  }
+}
+
+/* `.card` の padding と border を上書きするため、カードの定義より後に置く。 */
+.negative-section {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+

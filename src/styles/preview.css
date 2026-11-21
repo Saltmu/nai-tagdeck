@@ -1,0 +1,27 @@
+/* ---- preview list ---- */
+.preview-list {
+  margin: 0;
+}
+
+.preview-item + .preview-item {
+  margin-top: 0.6rem;
+}
+
+.preview-item dt {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.preview-item dd {
+  margin: 0;
+}
+
+.preview-item .preview-text {
+  margin-top: 0.3rem;
+}
+

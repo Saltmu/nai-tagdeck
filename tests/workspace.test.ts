@@ -294,7 +294,7 @@ describe('normalizeWorkspace', () => {
 
   it('空の ID は読み込み時に振り直す', () => {
     const ws = normalizeWorkspace({
-      base: { quality: [{ id: '', tag: 'a' }, { id: '   ', tag: 'b' }, { id: 'keep', tag: 'c' }] },
+      base: { quality: [{ id: '', tag: 'a' }, { id: '   ', tag: 'b' }, { id: '  keep  ', tag: 'c' }] },
       characters: [{ id: '', name: 'n', tags: { subject: [{ id: '', tag: 'girl' }] } }],
     });
     const ids = [

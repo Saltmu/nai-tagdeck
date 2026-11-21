@@ -45,13 +45,13 @@ describe('db connection recovery', () => {
       .mockResolvedValueOnce(db2);
 
     const { getKV } = await import('../src/lib/db');
-    await getKV('a');
+    await getKV('workspace');
     expect(openDBMock).toHaveBeenCalledTimes(1);
 
     callbacks?.terminated?.();
-    await getKV('b');
+    await getKV('settings');
     expect(openDBMock).toHaveBeenCalledTimes(2);
-    expect(db2.get).toHaveBeenCalledWith('kv', 'b');
+    expect(db2.get).toHaveBeenCalledWith('kv', 'settings');
   });
 
   it('closes and reopens the database when the blocking callback fires', async () => {
@@ -66,14 +66,14 @@ describe('db connection recovery', () => {
       .mockResolvedValueOnce(db2);
 
     const { getKV } = await import('../src/lib/db');
-    await getKV('a');
+    await getKV('workspace');
     expect(openDBMock).toHaveBeenCalledTimes(1);
 
     callbacks?.blocking?.(1, 2, {} as IDBVersionChangeEvent);
     expect(db1.close).toHaveBeenCalledTimes(1);
 
-    await getKV('b');
+    await getKV('settings');
     expect(openDBMock).toHaveBeenCalledTimes(2);
-    expect(db2.get).toHaveBeenCalledWith('kv', 'b');
+    expect(db2.get).toHaveBeenCalledWith('kv', 'settings');
   });
 });

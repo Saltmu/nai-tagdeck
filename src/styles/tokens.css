@@ -1,0 +1,65 @@
+/* ---- tokens ---- */
+:root {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --surface-2: #eef0f4;
+  --text: #1c2029;
+  --muted: #5d6878;
+  --border: #d6dbe3;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-text: #ffffff;
+  --accent-soft: #e9e8ff;
+  --danger: #c0262d;
+  --weighted: #b45309;
+  --toast-bg: #1c2029;
+  --toast-text: #ffffff;
+  /* 生成画像の上に載るボタン。下地の明暗に左右されないよう、カラースキームでは変えない */
+  --overlay-text: #1c2029;
+  --overlay-bg: #ffffff;
+  --overlay-bg-hover: #eef0f4;
+  --overlay-border: #d6dbe3;
+  --overlay-done-text: #1c2029;
+  --overlay-done-bg: #b8bec8;
+  --overlay-done-bg-hover: #a8b0bc;
+  --overlay-done-border: #a8b0bc;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgb(15 20 30 / 0.06), 0 1px 1px rgb(15 20 30 / 0.04);
+  --shadow-pop: 0 8px 24px rgb(15 20 30 / 0.14);
+  color-scheme: light;
+
+  /* 重なり順。間に挟めるよう 10 刻みにし、下にあるものほど手前に出る */
+  --z-editor-tabs: 10; /* ヘッダー直下に張り付く編集タブ */
+  --z-editor-menu: 20; /* プリセット候補と編集操作のメニュー */
+  --z-dock: 30; /* 狭い画面で下端に固定する生成ドック */
+  --z-suggesting: 40; /* 候補を出しているカテゴリ（周りを薄く覆う） */
+  --z-header: 50;
+  --z-latest-preview: 60;
+  --z-toast: 70;
+  --z-gesture-shield: 90; /* 候補の外を押したあと、その押下が下の要素に届かないよう一時的に覆う透明な板 */
+  /* 狭い画面で下端に固定した生成ドック・未読プレビューの高さ。無いときは 0 */
+  --dock-offset: 0px;
+  --latest-offset: 0px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12141a;
+    --surface: #1b1e26;
+    --surface-2: #242833;
+    --text: #e6e8ee;
+    --muted: #9aa3b2;
+    --border: #333947;
+    --accent: #8b85ff;
+    --accent-hover: #a29dff;
+    --accent-text: #12141a;
+    --accent-soft: #2c2a52;
+    --danger: #ff7b7f;
+    --weighted: #f0a54a;
+    --toast-bg: #e6e8ee;
+    --toast-text: #12141a;
+    --shadow: none;
+    --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5);
+    color-scheme: dark;
+  }
+}

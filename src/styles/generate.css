@@ -1,0 +1,84 @@
+/* ---- generate panel ---- */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background: var(--accent-soft);
+}
+
+.free-note {
+  margin: 0.35rem 0 0;
+}
+
+.gen-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.gen-advanced {
+  margin-top: 0.75rem;
+}
+
+.gen-advanced .field {
+  width: 100%;
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+.seed-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.seed-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.gen-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.gen-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.btn-large {
+  flex: 1;
+  min-height: 48px;
+  font-size: 1.05rem;
+}
+
+.gen-blocker {
+  text-align: center;
+}
+
+.gen-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  color: var(--danger);
+}
+
+.gen-error p {
+  flex: 1;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+

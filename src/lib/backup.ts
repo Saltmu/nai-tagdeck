@@ -1,5 +1,5 @@
 import type { DictEntry, Settings, Workspace } from '../types';
-import { fromJSON } from './io';
+import { entriesFromData, stripBom } from './io';
 import { normalizePresets, type Preset } from './presets';
 import { legacyNegativePrompt, normalizeSettings } from './settings';
 import { normalizeGeneration, type GenerationSettings } from './generation';
@@ -17,9 +17,11 @@ export interface Backup {
   generation: GenerationSettings;
 }
 
+const BACKUP_VERSION = 1;
+
 export function toBackupJSON(data: Backup): string {
   return JSON.stringify(
-    { app: 'nai-tagdeck', kind: 'backup', version: 1, exported_at: new Date().toISOString(), ...data },
+    { app: 'nai-tagdeck', kind: 'backup', version: BACKUP_VERSION, exported_at: new Date().toISOString(), ...data },
     null,
     2,
   );
@@ -33,10 +35,18 @@ export function migrateNegative(rawWorkspace: unknown, rawSettings: unknown): Wo
 
 export type ParsedBackup = { ok: true; data: Backup; warnings: string[] } | { ok: false; error: string };
 
+const MISSING_SECTION = {
+  dictionary: 'dictionary がないため、空の辞書で補います',
+  presets: 'presets がないため、空の一覧で補います',
+  workspace: 'workspace がないため、空の作業状態で補います',
+  settings: 'settings がないため、初期設定で補います',
+  generation: 'generation がないため、初期の生成設定で補います',
+} as const;
+
 export function parseBackup(text: string): ParsedBackup {
   let raw: unknown;
   try {
-    raw = JSON.parse(text.replace(/^﻿/, ''));
+    raw = JSON.parse(stripBom(text));
   } catch (e) {
     return { ok: false, error: `JSON として読めません: ${(e as Error).message}` };
   }
@@ -44,7 +54,19 @@ export function parseBackup(text: string): ParsedBackup {
     return { ok: false, error: 'nai-tagdeck のバックアップファイルではありません（辞書だけのファイルは辞書画面で読み込んでください）' };
   }
   const r = raw as Record<string, unknown>;
-  const dict = fromJSON(JSON.stringify({ entries: Array.isArray(r.dictionary) ? r.dictionary : [] }));
+  if (r.version !== undefined && r.version !== BACKUP_VERSION) {
+    return { ok: false, error: `このアプリが読めるバックアップは version ${BACKUP_VERSION} です（ファイルは version ${String(r.version)}）` };
+  }
+  const warnings: string[] = [];
+  if (r.version === undefined) warnings.push(`version がないため、version ${BACKUP_VERSION} として読み込みます`);
+  for (const key of Object.keys(MISSING_SECTION) as Array<keyof typeof MISSING_SECTION>) {
+    if (!(key in r)) warnings.push(MISSING_SECTION[key]);
+  }
+  const dictionary = Array.isArray(r.dictionary) ? r.dictionary : [];
+  if ('dictionary' in r && !Array.isArray(r.dictionary)) {
+    warnings.push('dictionary の形式が不正なため、空の辞書で補います');
+  }
+  const dict = entriesFromData(dictionary);
   return {
     ok: true,
     data: {
@@ -54,6 +76,6 @@ export function parseBackup(text: string): ParsedBackup {
       settings: normalizeSettings(r.settings),
       generation: normalizeGeneration(r.generation),
     },
-    warnings: dict.errors,
+    warnings: [...warnings, ...dict.errors],
   };
 }

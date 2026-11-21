@@ -1,0 +1,270 @@
+/* ---- sections / characters ---- */
+.section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0;
+  font-size: 1.05rem;
+}
+
+.section-title + .category-grid {
+  margin-top: 0.5rem;
+}
+
+.editor-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+  padding: 0.15rem 0 0.05rem;
+  border-bottom: 1px solid var(--border);
+  /* スクロールしてもヘッダーの直下に残す（top はヘッダーの高さに合わせて JS で設定） */
+  position: sticky;
+  top: 0;
+  z-index: var(--z-editor-tabs);
+  background: var(--bg);
+}
+
+/* ヘッダーの直下に張り付いている間は影を付けて下の内容と区切る。
+   高さが変わると下の内容がずれるので、余白は張り付く前と同じにする */
+.editor-tabs.is-stuck {
+  box-shadow: 0 6px 10px -6px rgb(15 20 30 / 0.25);
+}
+
+.editor-tablist {
+  display: flex;
+  min-width: 0;
+  padding: 0.2rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.editor-history {
+  display: flex;
+  flex: none;
+  margin-inline-start: auto;
+}
+
+.editor-history .icon-btn[aria-disabled='true'] {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--muted);
+}
+
+.editor-tab {
+  flex: 0 0 auto;
+  max-width: 10rem;
+  padding: 0.45rem 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.editor-tab[aria-selected='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.editor-tab.is-off:not([aria-selected='true']) {
+  opacity: 0.55;
+}
+
+.editor-tab-wrap {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+}
+
+/* チェックボックスはタブの左端に重ねる（ボタンの中には置けないため兄弟要素にしている） */
+.editor-tab-check {
+  position: absolute;
+  top: 50%;
+  left: 0.6rem;
+  z-index: 10; /* 編集タブの中での重なり順（--z-* とは別） */
+  margin: 0;
+  transform: translateY(-50%);
+}
+
+.editor-tab-character {
+  padding-left: 2rem;
+}
+
+.editor-tab-wrap:has(.editor-tab[aria-selected='true']) .editor-tab-check {
+  accent-color: var(--accent-text);
+}
+
+.editor-tab:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.editor-pane,
+.editor-tabs + .character {
+  margin-top: 0.75rem;
+}
+
+/* ベースとネガティブは全体の設定なので、キャラクターのタブと間を空ける */
+.editor-tab-negative {
+  margin-right: 0.6rem;
+}
+
+.negative-pane > * + * {
+  margin-top: 0.75rem;
+}
+
+.negative-actions .hint {
+  margin: 0.4rem 0 0;
+}
+
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.section-head .section-title {
+  margin: 0;
+}
+
+.hint {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.character {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.character.is-off {
+  border-left-color: var(--border);
+}
+
+.character-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.character-name {
+  flex: 1 1 8rem;
+  font-weight: 700;
+}
+
+.character .category-grid {
+  margin-top: 0.6rem;
+}
+
+.character-extra {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.character-extra .hint {
+  margin: 0;
+}
+
+.check-line {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.center-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.icon-btn-danger:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+/* 確認状態になると左から赤く塗られていき、塗り終わるまでは押せない */
+.viewer-remove-confirm {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  height: 36px;
+  padding: 0 0.8rem;
+  border: 0;
+  border-radius: 8px;
+  background: rgb(192 38 45 / 0.35);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: not-allowed;
+}
+
+.viewer-remove-confirm::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #c0262d;
+  transform-origin: left;
+  animation: remove-arm var(--arm-ms, 1000ms) linear both;
+}
+
+.viewer-remove-confirm span {
+  position: relative;
+}
+
+.viewer-remove-confirm.is-ready {
+  cursor: pointer;
+}
+
+.viewer-remove-confirm.is-ready:hover::before {
+  background: #a51f25;
+}
+
+@keyframes remove-arm {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-remove-confirm::before {
+    animation: none;
+    opacity: 0;
+  }
+
+  .viewer-remove-confirm.is-ready::before {
+    opacity: 1;
+  }
+}
+
+.character .icon-btn:hover:not(:disabled) {
+  background: var(--surface);
+}
