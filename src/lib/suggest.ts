@@ -18,6 +18,10 @@ export function aliasTokens(alias: string): string[] {
     .filter(Boolean);
 }
 
+export function tagWords(normalizedTag: string): string[] {
+  return normalizedTag.split(/[ #]/).filter(Boolean);
+}
+
 export type MatchKind = 'tag' | 'alias' | 'word';
 
 export interface Suggestion {
@@ -27,7 +31,7 @@ export interface Suggestion {
 
 const RANK: Record<MatchKind, number> = { tag: 0, alias: 1, word: 2 };
 
-interface IndexedEntry {
+export interface IndexedEntry {
   entry: DictEntry;
   rawTag: string;
   rawAlias: string;
@@ -56,7 +60,7 @@ function getIndexedEntry(entry: DictEntry): IndexedEntry {
     rawTag: entry.tag,
     rawAlias: entry.alias,
     tag,
-    tagWords: tag.split(/[ #]/),
+    tagWords: tagWords(tag),
     alias,
     aliasTokens: aliasTokens(entry.alias),
   };
@@ -75,6 +79,11 @@ function getSuggestIndex(entries: readonly DictEntry[]): SuggestIndex {
   };
   indexCache.set(entries, index);
   return index;
+}
+
+/** サジェスト用の事前正規化インデックスを共有する（単語情報の再計算を避ける）。 */
+export function getIndexedEntries(entries: readonly DictEntry[]): readonly IndexedEntry[] {
+  return getSuggestIndex(entries).entries;
 }
 
 function matchEntry(item: IndexedEntry, q: string): MatchKind | null {

@@ -1,6 +1,7 @@
 @media (pointer: coarse) {
   .editor-actions-text,
-  .editor-actions-panel > .btn {
+  .editor-actions-panel > .btn,
+  .tag-category-suggest {
     min-height: 44px;
   }
 

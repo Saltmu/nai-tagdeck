@@ -12,7 +12,7 @@ import {
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { saveCategoriesOpen } from '../lib/categoryOpen';
 import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
-import { classifyTag, dictionaryCategories } from '../lib/tagClassification';
+import { classifyEditorTag, createTagVectorIndex, type PromptTagCategory } from '../lib/tagClassification';
 import { DEFAULT_CHARACTER_NEGATIVE } from '../lib/novelai';
 import { normalize } from '../lib/suggest';
 import { newId } from '../lib/id';
@@ -69,8 +69,19 @@ export function Editor({
   onCharacterNegativeChange,
   shown,
 }: Props) {
-  const knownTags = useMemo(() => dictionaryCategories(dictionary.entries), [dictionary.entries]);
+  const vectorIndex = useMemo(() => createTagVectorIndex(dictionary.entries), [dictionary.entries]);
+  const knownTags = vectorIndex.byTag;
   const isKnown = useCallback((tag: string) => knownTags.has(normalize(tag)), [knownTags]);
+  const [baseSuggestions, setBaseSuggestions] = useState<Record<string, PromptTagCategory>>({});
+  const clearBaseSuggestion = useCallback((tag: string) => {
+    const key = normalize(tag);
+    setBaseSuggestions((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
 
   const { save } = dictionary;
   const register = useCallback(
@@ -147,9 +158,26 @@ export function Editor({
     [dictionary.entries, promptCategories],
   );
   const addPromptTag = (tag: string, weight: number, pickedCategory?: CategoryKey) => {
-    const category = pickedCategory && pickedCategory !== 'negative' && promptCategories.includes(pickedCategory)
-      ? pickedCategory
-      : classifyTag(tag, knownTags, promptCategories);
+    let category: typeof promptCategories[number];
+    if (pickedCategory && pickedCategory !== 'negative' && promptCategories.includes(pickedCategory)) {
+      category = pickedCategory;
+    } else {
+      const routed = classifyEditorTag(tag, vectorIndex, promptCategories, active ? 'auto' : 'suggest');
+      category = routed.category;
+      if (!active) {
+        const key = normalize(tag);
+        const suggested = routed.suggestedCategory;
+        setBaseSuggestions((prev) => {
+          if (suggested) {
+            return prev[key] === suggested ? prev : { ...prev, [key]: suggested };
+          }
+          if (!(key in prev)) return prev;
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      }
+    }
     dispatch({ type: 'add', target: paneTarget, category, tag, weight });
     if (category === 'pose') handlePoseAdded(tag);
   };
@@ -365,6 +393,8 @@ export function Editor({
                 onRegister={register}
                 quickPicks={key === 'quality' ? QUALITY_PICKS : undefined}
                 quickPicksMode="many"
+                onAdded={key === 'unclassified' ? clearBaseSuggestion : undefined}
+                suggestedCategories={key === 'unclassified' ? baseSuggestions : undefined}
                 filter={tagFilter}
               />
             ))}
