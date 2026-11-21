@@ -2,8 +2,8 @@
 // 初回の claim では再読み込みしない。再読み込みは、そのタブが更新を選んだときだけ行う。
 
 const SKIP_WAITING = { type: 'skip-waiting' } as const;
-const SW_RELOAD_KEY = 'nai-tagdeck-sw-reload';
 const SW_RELOAD_MS = 15_000;
+let reloadRequestedAt: number | null = null;
 
 function controlsThisTab(worker: SwWaitingWorker): boolean {
   return typeof navigator !== 'undefined' && 'serviceWorker' in navigator && navigator.serviceWorker.controller === worker;
@@ -55,11 +55,11 @@ export function dismissSwUpdate(): void {
 export function requestSwSkipWaiting(worker: SwWaitingWorker, reload: () => void = () => window.location.reload()): void {
   // 他タブが先に切り替えたあとは controllerchange がもう来ない。activating の途中でも、このタブはすぐ読み直す。
   if (worker.state === 'activating' || worker.state === 'activated' || controlsThisTab(worker)) {
-    sessionStorage.removeItem(SW_RELOAD_KEY);
+    reloadRequestedAt = null;
     reload();
     return;
   }
-  sessionStorage.setItem(SW_RELOAD_KEY, String(Date.now()));
+  reloadRequestedAt = Date.now();
   worker.postMessage(SKIP_WAITING);
 }
 
@@ -75,12 +75,12 @@ export function bindSwUpdates(sw: SwUpdateClient, reload: () => void): () => voi
   const onControllerChange = () => {
     if (!hadController) {
       hadController = true;
-      sessionStorage.removeItem(SW_RELOAD_KEY);
+      reloadRequestedAt = null;
       return;
     }
     // 他タブの更新では読み直さない。このタブが直前に「再読み込み」を押したときだけ。
-    const stamp = sessionStorage.getItem(SW_RELOAD_KEY);
-    sessionStorage.removeItem(SW_RELOAD_KEY);
+    const stamp = reloadRequestedAt;
+    reloadRequestedAt = null;
     if (stamp === null) return;
     const age = Date.now() - Number(stamp);
     if (!Number.isFinite(age) || age < 0 || age > SW_RELOAD_MS) return;
@@ -94,15 +94,20 @@ export function bindSwUpdates(sw: SwUpdateClient, reload: () => void): () => voi
   sw.register('./sw.js')
     .then((reg) => {
       if (cancelled) return;
-      announceInstalled(sw, reg.waiting);
-      reg.addEventListener('updatefound', () => {
-        const worker = reg.installing;
-        if (!worker) return;
+      const watched = new Set<SwWaitingWorker>();
+      const watch = (worker: SwWaitingWorker | null) => {
+        if (!worker || watched.has(worker)) return;
+        watched.add(worker);
         const onState = () => {
           if (worker.state === 'installed') announceInstalled(sw, worker);
         };
         worker.addEventListener('statechange', onState);
         onState();
+      };
+      announceInstalled(sw, reg.waiting);
+      watch(reg.installing);
+      reg.addEventListener('updatefound', () => {
+        watch(reg.installing);
       });
     })
     .catch(() => {});

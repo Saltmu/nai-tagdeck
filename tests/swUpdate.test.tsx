@@ -86,7 +86,8 @@ function createClient(controller: SwWaitingWorker | null) {
 describe('bindSwUpdates', () => {
   beforeEach(() => {
     dismissSwUpdate();
-    sessionStorage.removeItem('nai-tagdeck-sw-reload');
+    // 再読み込みの意思はモジュール内に残る。前のテストの印を消す。
+    requestSwSkipWaiting(fakeWorker('activated'), () => {});
   });
 
   afterEach(() => {
@@ -104,23 +105,20 @@ describe('bindSwUpdates', () => {
     const worker = fakeWorker('installed');
     requestSwSkipWaiting(worker, reload);
     expect(worker.messages).toEqual([{ type: 'skip-waiting' }]);
-    const stamp = Number(sessionStorage.getItem('nai-tagdeck-sw-reload'));
-    expect(Number.isFinite(stamp)).toBe(true);
-    expect(Date.now() - stamp).toBeLessThan(5_000);
     client.fireControllerChange();
     client.fireControllerChange();
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBeNull();
   });
 
   it('does not reload on the first controller even if a reload was requested', () => {
-    const client = createClient(null);
     const reload = vi.fn();
-    sessionStorage.setItem('nai-tagdeck-sw-reload', '1');
+    requestSwSkipWaiting(fakeWorker('installed'), reload);
+    const client = createClient(null);
     bindSwUpdates(client.sw, reload);
     client.fireControllerChange();
     expect(reload).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBeNull();
+    client.fireControllerChange();
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it('reloads immediately while the worker is still activating', () => {
@@ -129,17 +127,22 @@ describe('bindSwUpdates', () => {
     requestSwSkipWaiting(worker, reload);
     expect(worker.messages).toEqual([]);
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBeNull();
   });
 
   it('drops a stale reload request instead of using it for a later update', () => {
-    const client = createClient(fakeWorker('activated'));
-    const reload = vi.fn();
-    bindSwUpdates(client.sw, reload);
-    sessionStorage.setItem('nai-tagdeck-sw-reload', String(Date.now() - 20_000));
-    client.fireControllerChange();
-    expect(reload).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBeNull();
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      const client = createClient(fakeWorker('activated'));
+      const reload = vi.fn();
+      bindSwUpdates(client.sw, reload);
+      requestSwSkipWaiting(fakeWorker('installed'), reload);
+      vi.setSystemTime(new Date('2026-01-01T00:00:20Z'));
+      client.fireControllerChange();
+      expect(reload).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('reloads immediately when the waiting worker is already active', () => {
@@ -148,7 +151,6 @@ describe('bindSwUpdates', () => {
     requestSwSkipWaiting(worker, reload);
     expect(worker.messages).toEqual([]);
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(sessionStorage.getItem('nai-tagdeck-sw-reload')).toBeNull();
   });
 
   it('reports a waiting worker only when a controller already exists', async () => {
@@ -168,6 +170,23 @@ describe('bindSwUpdates', () => {
     active.setWaiting(waiting);
     bindSwUpdates(active.sw, vi.fn());
     await vi.waitFor(() => expect(seen).toEqual([waiting]));
+    stop();
+  });
+
+  it('reports a worker that is already installing when registration resolves', async () => {
+    const seen: SwWaitingWorker[] = [];
+    const stop = subscribeSwUpdate((worker) => {
+      if (worker) seen.push(worker);
+    });
+    const client = createClient(fakeWorker('activated'));
+    const installing = fakeWorker('installing');
+    client.setInstalling(installing);
+    bindSwUpdates(client.sw, vi.fn());
+    await vi.waitFor(() => expect(client.sw.register).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(seen).toEqual([]);
+    client.setState(installing, 'installed');
+    expect(seen).toEqual([installing]);
     stop();
   });
 

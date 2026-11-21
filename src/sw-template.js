@@ -1,6 +1,6 @@
 // Service Worker のひな形。ビルド時に vite.config.ts の swPlugin が、版とキャッシュするファイルの一覧を埋めて dist/sw.js にする。
 // - 自サイトのファイルだけをキャッシュする。NovelAI への通信（別オリジン）には一切触れない。
-// - ページ本体（index.html）は通信を優先し、オフラインのときだけキャッシュを使う。更新がすぐ反映されるように。
+// - ページ本体（index.html）は通信を優先する。オフラインのときは、この版のインストール時に入れたページを使う。通信で得た HTML では上書きしない。
 // - ハッシュ付きの js/css・アイコンはキャッシュを優先し、?v=... 付きのアイコン参照もクエリ無視で照合する。
 // - インストール直後には切り替えない。ページが { type: 'skip-waiting' } を送ったときだけ新しい版を有効にする。
 const CACHE = 'nai-tagdeck-__VERSION__';
@@ -36,11 +36,11 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
 
+  // ページ本体は、この版のインストール時に入れたものをオフライン用に保つ。
+  // 待っている新しい版の HTML で上書きすると、そのスクリプトがこのキャッシュに無く、オフラインで開けなくなる。
   if (req.mode === 'navigate') {
-    const fetched = fetch(req);
-    event.waitUntil(fetched.then((res) => putInCache('./', res)).catch(() => {}));
     event.respondWith(
-      fetched.catch(() => caches.match('./', { cacheName: CACHE }).then((res) => res || Response.error())),
+      fetch(req).catch(() => caches.match('./', { cacheName: CACHE }).then((res) => res || Response.error())),
     );
     return;
   }

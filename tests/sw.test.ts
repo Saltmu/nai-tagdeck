@@ -381,6 +381,18 @@ describe('Service Worker runtime under subdirectory deployment', () => {
     });
     expect(crossOrigin.response).toBeUndefined();
 
+    // A newer page on the network must not replace this worker's offline fallback.
+    const cachedPage = activeCache?.get(`${baseUrl}`);
+    sw.fetchMock.mockResolvedValueOnce(new Response('newer-html', { status: 200 }));
+    const onlineNav = await sw.dispatchFetch({
+      url: `${baseUrl}`,
+      method: 'GET',
+      mode: 'navigate',
+    });
+    expect(onlineNav.waitUntilRejected).toBe(false);
+    expect(await onlineNav.response?.text()).toBe('newer-html');
+    expect(activeCache?.get(`${baseUrl}`)).toBe(cachedPage);
+
     // Offline navigation falls back to cached subdirectory root ('./')
     sw.fetchMock.mockRejectedValueOnce(new Error('offline'));
     const offlineNav = await sw.dispatchFetch({
