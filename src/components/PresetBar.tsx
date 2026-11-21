@@ -15,6 +15,8 @@ import {
 import { emptyWorkspace, type WorkspaceAction } from '../lib/workspace';
 import { scrollOptionIntoList } from '../lib/browser';
 import { useDialogs } from './Dialogs';
+import { EditorActions } from './EditorActions';
+import { MoreIcon } from './icons';
 
 interface Props {
   store: PresetStore;
@@ -115,27 +117,18 @@ export function PresetBar({ store, workspace, dispatch, notify, onPickPng }: Pro
         </label>
         <PresetSearch inputId={`${id}-search`} presets={presets} active={active} onPick={load} />
         {dirty && active && <span className="chip chip-weight">変更あり</span>}
-      </div>
-      <div className="preset-actions">
-        <button type="button" className="btn btn-small" disabled={!active || !dirty} onClick={overwrite}>
-          変更を上書き
-        </button>
-        <button type="button" className="btn btn-small" disabled={isEmptyWorkspace(workspace)} onClick={saveAs}>
-          新しいプリセットとして保存
-        </button>
-        <button type="button" className="btn btn-small" disabled={!active} onClick={rename}>
-          名前変更
-        </button>
-        <button type="button" className="btn btn-small btn-danger" disabled={!active} onClick={remove}>
-          削除
-        </button>
-        <span className="spacer" />
-        <button type="button" className="btn btn-small" disabled={!onPickPng} onClick={onPickPng}>
-          PNGから読み込む
-        </button>
-        <button type="button" className="btn btn-small" onClick={startNew}>
-          新規
-        </button>
+        <EditorActions
+          label="プリセット操作"
+          icon={<MoreIcon />}
+          actions={[
+            { label: '変更を上書き', run: overwrite, disabled: !active || !dirty },
+            { label: '新しいプリセットとして保存', run: saveAs, disabled: isEmptyWorkspace(workspace) },
+            { label: '名前変更', run: rename, disabled: !active },
+            { label: 'PNGから読み込む', run: () => onPickPng?.(), disabled: !onPickPng },
+            { label: '新規', run: startNew },
+            { label: '削除', run: remove, disabled: !active, danger: true },
+          ]}
+        />
       </div>
     </section>
   );
@@ -180,8 +173,8 @@ function PresetSearch({ inputId, presets, active, onPick }: SearchProps) {
   const placeholder = open
     ? active?.name || '名前の一部で検索'
     : presets.length === 0
-      ? '（まだありません）'
-      : '（未選択）';
+      ? 'プリセットなし'
+      : 'プリセットを選択';
   const headText =
     matches.length > 0
       ? `${matches.length}件`
