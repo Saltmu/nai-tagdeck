@@ -14,8 +14,10 @@ export interface TagInputDraft {
 interface Props {
   category?: CategoryKey;
   label: string;
+  placeholder?: string;
   entries: DictEntry[];
   onAdd: (tag: string, weight: number) => void;
+  onPick?: (tag: string, weight: number, category: CategoryKey) => void;
   /** 候補の表示・非表示が切り替わったとき（表示中のカテゴリを強調するのに使う）。 */
   onExpandedChange?: (expanded: boolean) => void;
   /** キャラ同士の動作（source# / target# / mutual#）を付けるボタンを出す。 */
@@ -24,7 +26,7 @@ interface Props {
   draftRef?: RefObject<TagInputDraft>;
 }
 
-export function TagInput({ category, label, entries, onAdd, onExpandedChange, interactions, draftRef }: Props) {
+export function TagInput({ category, label, placeholder, entries, onAdd, onPick, onExpandedChange, interactions, draftRef }: Props) {
   const [text, setText] = useState(() => draftRef?.current.text ?? '');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -95,7 +97,9 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
   };
 
   const pick = (entry: DictEntry) => {
-    onAdd(withInteraction(entry.tag, interaction), entry.default_weight);
+    const tag = withInteraction(entry.tag, interaction);
+    if (onPick) onPick(tag, entry.default_weight, entry.category);
+    else onAdd(tag, entry.default_weight);
     reset();
   };
 
@@ -143,7 +147,7 @@ export function TagInput({ category, label, entries, onAdd, onExpandedChange, in
           aria-expanded={expanded}
           aria-controls={listId}
           aria-activedescendant={expanded ? `${listId}-${active}` : undefined}
-          placeholder={interaction ? `${interaction}# に続けるタグ・日本語名・よみ` : 'タグ・日本語名・よみ'}
+          placeholder={interaction ? `${interaction}# に続けるタグ・日本語名・よみ` : placeholder ?? 'タグ・日本語名・よみ'}
           autoComplete="off"
           autoCapitalize="off"
           spellCheck={false}

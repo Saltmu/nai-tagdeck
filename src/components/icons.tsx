@@ -115,6 +115,16 @@ export function TrashIcon() {
   );
 }
 
+/** 検索（虫眼鏡）。 */
+export function SearchIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <circle cx="8.5" cy="8.5" r="4.75" {...stroke} />
+      <path d="m12 12 4 4" {...stroke} />
+    </svg>
+  );
+}
+
 /** 閉じる（×）。 */
 export function CloseIcon() {
   return (

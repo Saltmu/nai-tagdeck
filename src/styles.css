@@ -550,6 +550,11 @@ input[type='checkbox'] {
   margin-top: 0.75rem;
 }
 
+.tag-filter-search {
+  flex: 1 0 100%;
+  min-width: 0;
+}
+
 .tag-filter-count {
   color: var(--muted);
   font-size: 0.85rem;
