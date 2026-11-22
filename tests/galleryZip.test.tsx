@@ -13,7 +13,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root;
 let container: HTMLDivElement;
 
-function image(seed: number, downloaded: boolean): GeneratedImage {
+function image(seed: number, options?: { downloaded?: boolean; pinned?: boolean }): GeneratedImage {
   const bytes = new Uint8Array([seed, seed + 1, seed + 2, seed + 3]);
   return {
     id: `img-${seed}`,
@@ -25,19 +25,18 @@ function image(seed: number, downloaded: boolean): GeneratedImage {
     prompt: `prompt-${seed}`,
     characterPrompts: [],
     createdAt: Date.UTC(2026, 10, 22, 3, 4, seed),
-    downloaded,
-    saveConfirmed: downloaded,
-    pinned: false,
+    downloaded: options?.downloaded ?? false,
+    pinned: options?.pinned ?? false,
   };
 }
 
-function buttonByText(text: string): HTMLButtonElement {
-  const found = [...container.querySelectorAll('button')].find((el) => el.textContent === text);
-  if (!found) throw new Error(`button not found: ${text}`);
+function zipButton(): HTMLButtonElement {
+  const found = container.querySelector('.gallery-zip-btn');
+  if (!found) throw new Error('zip button not found');
   return found as HTMLButtonElement;
 }
 
-async function renderGallery(images: GeneratedImage[], props?: { onSaveConfirmed?: (id: string) => void; onTogglePin?: (id: string) => void }) {
+async function renderGallery(images: GeneratedImage[], props?: { onDownloaded?: (id: string) => void; onTogglePin?: (id: string) => void }) {
   await act(async () => {
     root.render(
       <DialogProvider>
@@ -48,7 +47,7 @@ async function renderGallery(images: GeneratedImage[], props?: { onSaveConfirmed
           onRemove={vi.fn()}
           onClear={vi.fn()}
           onUseSeed={vi.fn()}
-          onSaveConfirmed={props?.onSaveConfirmed ?? vi.fn()}
+          onDownloaded={props?.onDownloaded ?? vi.fn()}
           onTogglePin={props?.onTogglePin ?? vi.fn()}
           onReadPng={vi.fn()}
         />
@@ -88,12 +87,6 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function confirmZipSaved() {
-  await act(async () => {
-    buttonByText('保存できた').click();
-  });
-}
-
 function captureDownloads(): { name: string; blob: Blob }[] {
   const saved: { name: string; blob: Blob }[] = [];
   vi.spyOn(URL, 'createObjectURL').mockImplementation((obj) => {
@@ -108,106 +101,77 @@ function captureDownloads(): { name: string; blob: Blob }[] {
   return saved;
 }
 
-it('downloads every image in a zip using the individual file names and marks them downloaded', async () => {
-  const images = [image(2, false), image(1, true)];
-  const onSaveConfirmed = vi.fn();
+it('downloads only pinned images in a zip without confirmation dialog and marks them downloaded', async () => {
+  const images = [
+    image(3, { pinned: true }),
+    image(2, { pinned: false }),
+    image(1, { pinned: true, downloaded: true }),
+  ];
+  const onDownloaded = vi.fn();
   const saved = captureDownloads();
-  await renderGallery(images, { onSaveConfirmed });
+  await renderGallery(images, { onDownloaded });
+
+  expect(zipButton().disabled).toBe(false);
+  expect(zipButton().textContent).toContain('ピン留めを ZIP 保存');
+  expect(zipButton().textContent).toContain('2');
+  expect(container.textContent).not.toContain('すべて ZIP で保存');
+  expect(container.textContent).not.toContain('未ダウンロードを ZIP で保存');
 
   await act(async () => {
-    buttonByText('すべて ZIP で保存').click();
+    zipButton().click();
   });
 
   expect(saved).toHaveLength(1);
-  expect(onSaveConfirmed).not.toHaveBeenCalled();
-  await confirmZipSaved();
-
-  expect(saved[0]!.name).toMatch(/^nai-tagdeck-\d{8}-\d{6}\.zip$/);
+  expect(container.querySelector('dialog[open]')).toBeNull();
+  expect(saved[0]!.name).toMatch(/^nai-tagdeck-pinned-\d{8}-\d{6}\.zip$/);
   const files = unzipSync(new Uint8Array(await saved[0]!.blob.arrayBuffer()));
-  const ordered = [...images].reverse();
-  expect(Object.keys(files)).toEqual(ordered.map((item) => imageFileName(item)));
-  for (const item of ordered) {
+  const expected = [images[2]!, images[0]!];
+  expect(Object.keys(files)).toEqual(expected.map((item) => imageFileName(item)));
+  for (const item of expected) {
     expect(files[imageFileName(item)]).toEqual(new Uint8Array(await item.blob.arrayBuffer()));
   }
-  expect(onSaveConfirmed.mock.calls.map((call) => call[0])).toEqual(['img-2', 'img-1']);
+  expect(onDownloaded.mock.calls.map((call) => call[0])).toEqual(['img-3', 'img-1']);
 });
 
-it('zips only images that are not downloaded yet', async () => {
-  const images = [image(2, false), image(1, true)];
-  const onSaveConfirmed = vi.fn();
-  const saved = captureDownloads();
-  await renderGallery(images, { onSaveConfirmed });
-
-  expect(buttonByText('未ダウンロードを ZIP で保存').disabled).toBe(false);
-  await act(async () => {
-    buttonByText('未ダウンロードを ZIP で保存').click();
-  });
-  await act(async () => {
-    buttonByText('キャンセル').click();
-  });
-  expect(onSaveConfirmed).not.toHaveBeenCalled();
-  expect(buttonByText('未ダウンロードを ZIP で保存').disabled).toBe(false);
-  expect(container.querySelector('.notice')?.textContent).toContain('もう一度 ZIP で保存できます');
-
-  await act(async () => {
-    buttonByText('未ダウンロードを ZIP で保存').click();
-  });
-  await confirmZipSaved();
-
-  expect(saved[0]!.name).toMatch(/^nai-tagdeck-undownloaded-\d{8}-\d{6}\.zip$/);
-  const files = unzipSync(new Uint8Array(await saved[0]!.blob.arrayBuffer()));
-  expect(Object.keys(files)).toEqual([imageFileName(images[0]!)]);
-  expect(onSaveConfirmed.mock.calls.map((call) => call[0])).toEqual(['img-2']);
-});
-
-it('does not export a zip after its images are removed', async () => {
-  const pending = image(3, false);
+it('does not export a zip after its pinned images are removed', async () => {
+  const pending = image(3, { pinned: true });
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
   const read = pending.blob.arrayBuffer.bind(pending.blob);
   pending.blob.arrayBuffer = () => gate.then(() => read());
-  const onSaveConfirmed = vi.fn();
+  const onDownloaded = vi.fn();
   const saved = captureDownloads();
-  await renderGallery([pending], { onSaveConfirmed });
+  await renderGallery([pending], { onDownloaded });
   act(() => {
-    buttonByText('すべて ZIP で保存').click();
+    zipButton().click();
   });
-  await renderGallery([], { onSaveConfirmed });
+  await renderGallery([], { onDownloaded });
   release();
   await act(async () => {
     await gate;
   });
   expect(saved).toHaveLength(0);
-  expect(onSaveConfirmed).not.toHaveBeenCalled();
+  expect(onDownloaded).not.toHaveBeenCalled();
 });
 
-it('includes a png whose save was not confirmed in the unsaved zip', async () => {
-  const attempted = image(7, true);
-  attempted.saveConfirmed = false;
-  const onSaveConfirmed = vi.fn();
-  const saved = captureDownloads();
-  await renderGallery([attempted], { onSaveConfirmed });
-  expect(buttonByText('未ダウンロードを ZIP で保存').disabled).toBe(false);
-  await act(async () => {
-    buttonByText('未ダウンロードを ZIP で保存').click();
-  });
-  await confirmZipSaved();
-  const files = unzipSync(new Uint8Array(await saved[0]!.blob.arrayBuffer()));
-  expect(Object.keys(files)).toEqual([imageFileName(attempted)]);
-  expect(onSaveConfirmed).toHaveBeenCalledWith('img-7');
-});
-
-it('disables zip actions when there is nothing to save and toggles pin from the thumbnail', async () => {
+it('disables pinned zip action when nothing is pinned, renders visual retention meter with byte limit and tab-close warning, and toggles pin', async () => {
   const onTogglePin = vi.fn();
   await renderGallery([], { onTogglePin });
-  expect(buttonByText('すべて ZIP で保存').disabled).toBe(true);
-  expect(buttonByText('未ダウンロードを ZIP で保存').disabled).toBe(true);
+  expect(zipButton().disabled).toBe(true);
+  expect(container.querySelector('.gallery-meter')).not.toBeNull();
+  expect(container.textContent).not.toContain('画像はこのタブのメモリにだけあり');
+  expect(container.textContent).toContain('タブを閉じると消去');
+  expect(container.textContent).toContain('0/30枚');
+  expect(container.textContent).toContain('0/80MB');
+  expect(container.querySelector('.gallery-meter-help summary')).not.toBeNull();
 
-  const only = image(4, true);
+  const only = image(4, { downloaded: true, pinned: false });
   await renderGallery([only], { onTogglePin });
-  expect(buttonByText('未ダウンロードを ZIP で保存').disabled).toBe(true);
+  expect(zipButton().disabled).toBe(true);
+  expect(container.querySelector('.gallery-meter-seg.is-saved')).not.toBeNull();
+
   const pin = container.querySelector('.thumb-pin') as HTMLButtonElement;
   expect(pin.getAttribute('aria-label')).toBe('生成画像 1をピン留め');
   expect(pin.getAttribute('aria-pressed')).toBe('false');

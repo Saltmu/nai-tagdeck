@@ -2,12 +2,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyImageRetention, createThumbnailUrl } from '../src/lib/imageHistory';
 
-function makeItem(id: string, bytes: number, downloaded = false, saveConfirmed = false, pinned = false) {
+function makeItem(id: string, bytes: number, downloaded = false, pinned = false) {
   return {
     id,
     blob: new Blob([new Uint8Array(bytes)], { type: 'image/png' }),
     downloaded,
-    saveConfirmed,
     pinned,
   };
 }
@@ -21,30 +20,30 @@ describe('applyImageRetention', () => {
     expect(res.evictedUndownloadedCount).toBe(0);
   });
 
-  it('evicts unconfirmed images oldest-first even if downloaded is true', () => {
-    // newest: n1, then d1 (downloaded via <a download>, not saveConfirmed), u2 (oldest)
+  it('prioritizes evicting oldest downloaded images over undownloaded ones', () => {
+    // newest: n1, then u1 (undownloaded), d1 (downloaded), u2 (oldest, undownloaded)
     const items = [
-      makeItem('n1', 100, false, false),
-      makeItem('d1', 100, true, false),
-      makeItem('u2', 100, false, false),
-    ];
-    const res = applyImageRetention(items, { maxCount: 2, maxBytes: 1000 });
-    expect(res.retained.map((x) => x.id)).toEqual(['n1', 'd1']);
-    expect(res.evicted.map((x) => x.id)).toEqual(['u2']);
-  });
-
-  it('prioritizes evicting oldest saveConfirmed images over unconfirmed ones', () => {
-    // newest: n1, then u1 (unconfirmed), s1 (saveConfirmed), u2 (oldest, unconfirmed)
-    const items = [
-      makeItem('n1', 100, false, false),
-      makeItem('u1', 100, false, false),
-      makeItem('s1', 100, true, true),
-      makeItem('u2', 100, false, false),
+      makeItem('n1', 100, false),
+      makeItem('u1', 100, false),
+      makeItem('d1', 100, true),
+      makeItem('u2', 100, false),
     ];
     const res = applyImageRetention(items, { maxCount: 3, maxBytes: 1000 });
     expect(res.retained.map((x) => x.id)).toEqual(['n1', 'u1', 'u2']);
-    expect(res.evicted.map((x) => x.id)).toEqual(['s1']);
+    expect(res.evicted.map((x) => x.id)).toEqual(['d1']);
     expect(res.evictedUndownloadedCount).toBe(0);
+  });
+
+  it('evicts oldest downloaded image first when multiple downloaded images exist', () => {
+    const items = [
+      makeItem('n1', 100, false),
+      makeItem('d1', 100, true),
+      makeItem('d2', 100, true),
+      makeItem('u1', 100, false),
+    ];
+    const res = applyImageRetention(items, { maxCount: 3, maxBytes: 1000 });
+    expect(res.retained.map((x) => x.id)).toEqual(['n1', 'd1', 'u1']);
+    expect(res.evicted.map((x) => x.id)).toEqual(['d2']);
   });
 
   it('evicts oldest undownloaded images when byte limit is exceeded and no downloaded images remain', () => {
@@ -61,19 +60,19 @@ describe('applyImageRetention', () => {
 
   it('keeps a pinned image and evicts an older unpinned image first', () => {
     const items = [
-      makeItem('n1', 100, false, false, false),
-      makeItem('p1', 100, false, false, true),
-      makeItem('u1', 100, false, false, false),
+      makeItem('n1', 100, false, false),
+      makeItem('p1', 100, false, true),
+      makeItem('u1', 100, false, false),
     ];
     const res = applyImageRetention(items, { maxCount: 2, maxBytes: 1000 });
     expect(res.retained.map((x) => x.id)).toEqual(['n1', 'p1']);
     expect(res.evicted.map((x) => x.id)).toEqual(['u1']);
   });
 
-  it('keeps a pinned image even when it is older and saveConfirmed, and evicts the unpinned image', () => {
+  it('keeps a pinned image even when it is older and downloaded, and evicts the unpinned image', () => {
     const items = [
-      makeItem('n1', 100, false, false, false),
-      makeItem('p1', 100, true, true, true),
+      makeItem('n1', 100, false, false),
+      makeItem('p1', 100, true, true),
     ];
     const res = applyImageRetention(items, { maxCount: 1, maxBytes: 1000 });
     expect(res.retained.map((x) => x.id)).toEqual(['p1']);
@@ -82,10 +81,10 @@ describe('applyImageRetention', () => {
 
   it('keeps a newly added image and evicts the oldest pinned image when the rest are pinned', () => {
     const items = [
-      makeItem('new', 100, false, false, false),
-      makeItem('p1', 100, false, false, true),
-      makeItem('p2', 100, false, false, true),
-      makeItem('p3', 100, false, false, true),
+      makeItem('new', 100, false, false),
+      makeItem('p1', 100, false, true),
+      makeItem('p2', 100, false, true),
+      makeItem('p3', 100, false, true),
     ];
     const res = applyImageRetention(items, { maxCount: 3, maxBytes: 1000 }, 1);
     expect(res.retained.map((x) => x.id)).toEqual(['new', 'p1', 'p2']);
@@ -94,31 +93,31 @@ describe('applyImageRetention', () => {
 
   it('evicts oldest pinned images when every image is pinned', () => {
     const items = [
-      makeItem('p1', 100, false, false, true),
-      makeItem('p2', 100, false, false, true),
-      makeItem('p3', 100, false, false, true),
+      makeItem('p1', 100, false, true),
+      makeItem('p2', 100, false, true),
+      makeItem('p3', 100, false, true),
     ];
     const res = applyImageRetention(items, { maxCount: 2, maxBytes: 1000 });
     expect(res.retained.map((x) => x.id)).toEqual(['p1', 'p2']);
     expect(res.evicted.map((x) => x.id)).toEqual(['p3']);
   });
 
-  it('evicts a saveConfirmed pinned image before other pinned images when none are unpinned', () => {
+  it('evicts a downloaded pinned image before other pinned images when none are unpinned', () => {
     const items = [
-      makeItem('p1', 100, false, false, true),
-      makeItem('s1', 100, true, true, true),
-      makeItem('p3', 100, false, false, true),
+      makeItem('p1', 100, false, true),
+      makeItem('d1', 100, true, true),
+      makeItem('p3', 100, false, true),
     ];
     const res = applyImageRetention(items, { maxCount: 2, maxBytes: 1000 });
     expect(res.retained.map((x) => x.id)).toEqual(['p1', 'p3']);
-    expect(res.evicted.map((x) => x.id)).toEqual(['s1']);
+    expect(res.evicted.map((x) => x.id)).toEqual(['d1']);
   });
 
   it('evicts unpinned images for the byte limit before a pinned image', () => {
     const items = [
-      makeItem('n1', 70, false, false, false),
-      makeItem('p1', 70, false, false, true),
-      makeItem('u1', 70, false, false, false),
+      makeItem('n1', 70, false, false),
+      makeItem('p1', 70, false, true),
+      makeItem('u1', 70, false, false),
     ];
     const res = applyImageRetention(items, { maxCount: 10, maxBytes: 100 });
     expect(res.retained.map((x) => x.id)).toEqual(['p1']);

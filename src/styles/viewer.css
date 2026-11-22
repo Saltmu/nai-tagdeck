@@ -122,6 +122,11 @@
   height: 40px;
 }
 
+.viewer-toolbar .icon-btn.is-downloaded {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
 .viewer-toolbar .icon {
   margin: auto;
   width: 22px;

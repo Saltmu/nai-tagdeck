@@ -213,3 +213,13 @@ export function PasteIcon() {
     </svg>
   );
 }
+
+/** 一時保存（時計）。 */
+export function TempIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <circle cx="10" cy="10" r="6.5" {...stroke} />
+      <path d="M10 6.5V10l2.4 1.6" {...stroke} />
+    </svg>
+  );
+}
