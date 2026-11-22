@@ -40,8 +40,10 @@ function focusWasInRemovedCharacter(element: HTMLElement | null): boolean {
   return element.closest('.editor-tab-wrap, .character') !== null;
 }
 
-function focusInsideTablist(element: EventTarget | null): element is HTMLElement {
-  return element instanceof HTMLElement && element.closest('.editor-tablist') !== null;
+function focusOnEditorTab(element: EventTarget | null): element is HTMLElement {
+  return element instanceof HTMLElement
+    && element.getAttribute('role') === 'tab'
+    && element.closest('.editor-tablist') !== null;
 }
 
 interface Props {
@@ -269,7 +271,7 @@ export function Editor({
     if (focusCopiedTab.current) {
       focusCopiedTab.current = false;
       copiedTabId.current = addedId;
-    } else if (addedId && focusInsideTablist(lastFocused.current)) {
+    } else if (addedId && focusOnEditorTab(lastFocused.current)) {
       pendingAddedTabFocus.current = addedId;
     }
     const copied = copiedTabId.current;
@@ -282,7 +284,7 @@ export function Editor({
       tabRefs.current.get(copied)?.focus();
     } else if (restored && selected === restored) {
       pendingAddedTabFocus.current = null;
-      if (focusInsideTablist(document.activeElement)) tabRefs.current.get(restored)?.focus();
+      if (focusOnEditorTab(document.activeElement)) tabRefs.current.get(restored)?.focus();
     } else if (pendingRemovedTabFocus.current) {
       const ready = selected === BASE || selected === NEGATIVE || ids.includes(selected);
       if (ready) {

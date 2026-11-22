@@ -353,6 +353,19 @@ describe('Editor tablist', () => {
     expect(document.activeElement).toBe(undo);
     expect(tabByName('B').getAttribute('aria-selected')).toBe('true');
     expect(names()).toEqual(['A', 'B', 'C', 'キャラ4']);
+
+    await act(async () => tabByName('B').click());
+    const remove = container.querySelector<HTMLButtonElement>('button[aria-label="B を削除"]')!;
+    await act(async () => remove.click());
+    expect(names()).toEqual(['A', 'C', 'キャラ4']);
+    const check = container.querySelector<HTMLInputElement>('input[aria-label="A を生成に含める"]')!;
+    check.focus();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    expect(names()).toEqual(['A', 'B', 'C', 'キャラ4']);
+    expect(document.activeElement).toBe(check);
+    expect(tabByName('B').getAttribute('aria-selected')).toBe('true');
   });
 });
 
