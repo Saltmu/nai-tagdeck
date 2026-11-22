@@ -364,20 +364,20 @@ it('restores character negative and generation only on the import step', async (
   expect(generation).toMatchObject({ steps: 28, seed: 42 });
 
   await run(() => api.dispatch({ type: 'add', target: BASE, category: 'appearance', tag: 'hat', weight: 1 }));
-  generation = { ...generation, seed: 99 };
+  generation = { ...generation, seed: 11 };
   await run(() => api.undo());
   expect(ws.base.appearance.map((tag) => tag.tag)).toEqual([]);
-  expect(generation).toMatchObject({ steps: 28, seed: 99 });
+  expect(generation).toMatchObject({ steps: 28, seed: 11 });
   expect(characterNegativePrompt).toBe('lowres');
 
   await run(() => api.undo());
   expect(names()).toEqual(['a', 'b', 'c', 'd']);
-  expect(generation).toMatchObject({ steps: 19, seed: 99 });
+  expect(generation).toMatchObject({ steps: 19, seed: 11 });
   expect(characterNegativePrompt).toBe('blurry');
 
   await run(() => api.redo());
   expect(ws.base.appearance).toEqual([]);
-  expect(generation).toMatchObject({ steps: 28, seed: 99 });
+  expect(generation).toMatchObject({ steps: 28, seed: 11 });
   expect(characterNegativePrompt).toBe('lowres');
 });
 

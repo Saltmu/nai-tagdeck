@@ -85,6 +85,37 @@ function extrasToApply(
   return extras;
 }
 
+/** Undo / Redo で実際に戻した項目だけを、反対側の履歴へ残す。 */
+function keptChange(change: ExtrasChange, applied: UndoExtras): ExtrasChange | undefined {
+  const before: UndoExtras = {};
+  const after: UndoExtras = {};
+  if (
+    applied.characterNegativePrompt !== undefined &&
+    change.before.characterNegativePrompt !== undefined &&
+    change.after.characterNegativePrompt !== undefined
+  ) {
+    before.characterNegativePrompt = change.before.characterNegativePrompt;
+    after.characterNegativePrompt = change.after.characterNegativePrompt;
+  }
+  if (applied.generation && change.before.generation && change.after.generation) {
+    const beforeGeneration: Partial<GenerationSettings> = {};
+    const afterGeneration: Partial<GenerationSettings> = {};
+    for (const key of Object.keys(applied.generation) as (keyof GenerationSettings)[]) {
+      const beforeValue = change.before.generation[key];
+      const afterValue = change.after.generation[key];
+      if (beforeValue === undefined || afterValue === undefined) continue;
+      beforeGeneration[key] = beforeValue as never;
+      afterGeneration[key] = afterValue as never;
+    }
+    if (Object.keys(afterGeneration).length > 0) {
+      before.generation = beforeGeneration;
+      after.generation = afterGeneration;
+    }
+  }
+  if (before.characterNegativePrompt === undefined && before.generation === undefined) return undefined;
+  return { before, after };
+}
+
 function freezeExtras(
   after: UndoExtras,
   current: { characterNegativePrompt: string; generation: GenerationSettings },
@@ -234,19 +265,21 @@ export function useTagUndo(
     const nextPast = pastRef.current.slice(0, -1);
     pastRef.current = nextPast;
     setPast(nextPast);
+    const undoSync = extrasSyncRef.current;
+    const undoPatch = step.extras && undoSync ? extrasToApply(step.extras, undoSync.capture(), 'undo') : undefined;
     const nextFuture = [
       ...futureRef.current,
-      { state: current, activePresetId: currentPresetId, extras: step.extras },
+      {
+        state: current,
+        activePresetId: currentPresetId,
+        extras: step.extras && undoPatch ? keptChange(step.extras, undoPatch) : undefined,
+      },
     ];
     futureRef.current = nextFuture;
     setFuture(nextFuture);
     lastActionRef.current = null;
     apply(step.before, step.activePresetId);
-    const undoSync = extrasSyncRef.current;
-    if (step.extras && undoSync) {
-      const patch = extrasToApply(step.extras, undoSync.capture(), 'undo');
-      if (patch.characterNegativePrompt !== undefined || patch.generation) undoSync.restore(patch);
-    }
+    if (undoPatch && (undoPatch.characterNegativePrompt !== undefined || undoPatch.generation)) undoSync?.restore(undoPatch);
     setStatus(`元に戻しました。元に戻せる操作は残り ${nextPast.length} 件です。`);
   }, [apply]);
 
@@ -258,19 +291,21 @@ export function useTagUndo(
     const nextFuture = futureRef.current.slice(0, -1);
     futureRef.current = nextFuture;
     setFuture(nextFuture);
+    const redoSync = extrasSyncRef.current;
+    const redoPatch = step.extras && redoSync ? extrasToApply(step.extras, redoSync.capture(), 'redo') : undefined;
     const nextPast = [
       ...pastRef.current,
-      { before: current, activePresetId: currentPresetId, extras: step.extras },
+      {
+        before: current,
+        activePresetId: currentPresetId,
+        extras: step.extras && redoPatch ? keptChange(step.extras, redoPatch) : undefined,
+      },
     ];
     pastRef.current = nextPast;
     setPast(nextPast);
     lastActionRef.current = null;
     apply(step.state, step.activePresetId);
-    const redoSync = extrasSyncRef.current;
-    if (step.extras && redoSync) {
-      const patch = extrasToApply(step.extras, redoSync.capture(), 'redo');
-      if (patch.characterNegativePrompt !== undefined || patch.generation) redoSync.restore(patch);
-    }
+    if (redoPatch && (redoPatch.characterNegativePrompt !== undefined || redoPatch.generation)) redoSync?.restore(redoPatch);
     setStatus(`やり直しました。やり直せる操作は残り ${nextFuture.length} 件です。`);
   }, [apply]);
 
