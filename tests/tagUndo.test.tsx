@@ -162,6 +162,28 @@ it('undoes weight changes, reordering, bulk toggle, quick picks, moves and repla
   await run(() => api.undo());
   expect(ws.base.unclassified.map((t) => t.tag)).toEqual(['loose']);
 
+  await run(() => api.dispatch({ type: 'addCharacter' }));
+  const charId = ws.characters[0]!.id;
+  await run(() => api.dispatch({
+    type: 'moveTag',
+    fromTarget: BASE,
+    fromCategory: 'appearance',
+    id: idOf('a'),
+    toTarget: charId,
+    toCategory: 'outfit',
+  }));
+  expect(names()).toEqual(['b', 'c', 'd']);
+  expect(ws.characters[0]!.tags.outfit.map((t) => t.tag)).toEqual(['a']);
+  await run(() => api.undo());
+  expect(names()).toEqual(['a', 'b', 'c', 'd']);
+  expect(ws.characters[0]!.tags.outfit).toEqual([]);
+  await run(() => api.redo());
+  expect(names()).toEqual(['b', 'c', 'd']);
+  expect(ws.characters[0]!.tags.outfit.map((t) => t.tag)).toEqual(['a']);
+  await run(() => api.undo());
+  await run(() => api.undo());
+  expect(ws.characters).toEqual([]);
+
   const replaced = emptyWorkspace();
   await run(() => api.dispatch({ type: 'replace', workspace: replaced }));
   expect(ws.base.appearance).toEqual([]);

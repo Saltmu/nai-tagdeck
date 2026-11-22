@@ -1,10 +1,24 @@
 import { memo, useCallback, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import type { PromptCategoryKey, WorkTag } from '../types';
+import type { PromptCategoryKey, TargetId, WorkTag } from '../types';
 import { categoryLabel } from '../lib/categories';
 import { WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP, clampWeight } from '../lib/prompt';
-import { highlightTag } from '../lib/tagSearch';
+import { aliasMatchesQuery, highlightTag } from '../lib/tagSearch';
+import { splitInteraction } from '../lib/interaction';
+import { normalize } from '../lib/tagText';
 import { WeightInput } from './WeightInput';
 import { BookPlusIcon, CheckIcon, CloseIcon, EditIcon } from './icons';
+
+export interface MoveTargetOption {
+  target: TargetId;
+  category: PromptCategoryKey;
+  label: string;
+}
+
+export interface MoveTargetGroup {
+  id: TargetId;
+  label: string;
+  options: readonly MoveTargetOption[];
+}
 
 interface Props {
   tag: WorkTag;
@@ -12,6 +26,8 @@ interface Props {
   onWeight: (id: string, weight: number) => void;
   onEdit: (id: string, tag: string) => string | null;
   onRemove: (id: string) => void;
+  /** 辞書に登録されている日本語名・よみ。 */
+  aliases?: string | readonly string[];
   /** 辞書にないタグのときだけ true。 */
   canRegister?: boolean;
   onRegister?: (tag: WorkTag) => void;
@@ -20,6 +36,9 @@ interface Props {
   /** 単語ベクトルで推定した移動先候補カテゴリ（ベースの未分類行に表示）。 */
   suggestedCategory?: PromptCategoryKey;
   onMoveCategory?: (id: string, to: PromptCategoryKey) => void;
+  /** 編集モードで表示するカテゴリ・ターゲット移動先一覧。 */
+  moveTargets?: readonly MoveTargetGroup[];
+  onMoveTag?: (id: string, toTarget: TargetId, toCategory: PromptCategoryKey) => void;
   /** 検索語。一致した範囲を目立たせる。 */
   query?: string;
   /** 並べ替えモード。 */
@@ -31,11 +50,31 @@ interface Props {
   onDrag?: (id: string, clientY: number) => void;
 }
 
-function TagLabel({ tag, query }: { tag: string; query: string }) {
-  const parts = highlightTag(tag, query);
+function moveOptionKey(target: TargetId, category: PromptCategoryKey): string {
+  return JSON.stringify([target, category]);
+}
+
+function HighlightText({ text, query }: { text: string; query: string }) {
+  const parts = highlightTag(text, query);
   return (
-    <span className="tag-name">
+    <>
       {parts.map((part, index) => (part.match ? <mark key={index}>{part.text}</mark> : <span key={index}>{part.text}</span>))}
+    </>
+  );
+}
+
+function TagLabel({ tag, query, title }: { tag: string; query: string; title?: string }) {
+  return (
+    <span className="tag-name" title={title || undefined}>
+      <HighlightText text={tag} query={query} />
+    </span>
+  );
+}
+
+function AliasLabel({ alias, query }: { alias: string; query: string }) {
+  return (
+    <span className="tag-alias">
+      <HighlightText text={alias} query={query} />
     </span>
   );
 }
@@ -46,11 +85,14 @@ export const TagRow = memo(function TagRow({
   onWeight,
   onEdit,
   onRemove,
+  aliases,
   canRegister,
   onRegister,
   moveDestinations,
   suggestedCategory,
   onMoveCategory,
+  moveTargets,
+  onMoveTag,
   query = '',
   sorting = false,
   canMoveUp = false,
@@ -60,6 +102,7 @@ export const TagRow = memo(function TagRow({
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(tag.tag);
+  const [pendingMove, setPendingMove] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const errorId = useId();
@@ -84,11 +127,30 @@ export const TagRow = memo(function TagRow({
   };
   const handleWeightChange = useCallback((weight: number) => onWeight(tag.id, weight), [onWeight, tag.id]);
   const step = (delta: number) => onWeight(tag.id, clampWeight(tag.weight + delta));
+  const isEditing = editing && !sorting;
+  const visibleMoveTargets = isEditing && moveTargets
+    ? (moveTargets[0]?.id !== 'base' && splitInteraction(tag.tag).interaction !== null
+        ? moveTargets.filter((group) => group.id !== 'base')
+        : moveTargets)
+    : undefined;
+  const selectedMove = isEditing && pendingMove && visibleMoveTargets
+    ? visibleMoveTargets
+        .flatMap((group) => group.options)
+        .find((opt) => moveOptionKey(opt.target, opt.category) === pendingMove)
+    : undefined;
+  const hasUnsavedRename = draft.trim() !== tag.tag.trim();
   const commit = () => {
     const result = onEdit(tag.id, draft);
     setError(result);
     if (!result) setEditing(false);
   };
+  const commitMove = () => {
+    if (!selectedMove || hasUnsavedRename || !onMoveTag) return;
+    onMoveTag(tag.id, selectedMove.target, selectedMove.category);
+  };
+  const aliasList = typeof aliases === 'string' ? (aliases ? [aliases] : []) : (aliases ?? []);
+  const aliasText = aliasList.join(' / ');
+  const aliasMatched = aliasList.length > 0 && normalize(query).length > 0 && aliasMatchesQuery(aliasList, query);
 
   return (
     <li className={`tag-row${tag.enabled ? '' : ' is-off'}${editing && !sorting ? ' is-editing' : ''}`}>
@@ -111,12 +173,48 @@ export const TagRow = memo(function TagRow({
               if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
             }}
           />
+          {visibleMoveTargets && visibleMoveTargets.length > 0 && onMoveTag && (
+            <>
+              <select
+                className="tag-edit-move"
+                aria-label={`${tag.tag} の移動先カテゴリ`}
+                value={selectedMove ? pendingMove : ''}
+                onChange={(e) => setPendingMove(e.target.value)}
+              >
+                <option value="" disabled>カテゴリ移動</option>
+                {visibleMoveTargets.length === 1
+                  ? visibleMoveTargets[0]!.options.map((opt) => {
+                      const key = moveOptionKey(opt.target, opt.category);
+                      return <option key={key} value={key}>{opt.label}</option>;
+                    })
+                  : visibleMoveTargets.map((group) => (
+                      <optgroup key={group.id} label={group.label}>
+                        {group.options.map((opt) => {
+                          const key = moveOptionKey(opt.target, opt.category);
+                          return <option key={key} value={key}>{`${group.label} / ${opt.label}`}</option>;
+                        })}
+                      </optgroup>
+                    ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-small"
+                aria-label={`${tag.tag} を移動`}
+                title={hasUnsavedRename ? 'タグ名の変更を先に保存してください' : undefined}
+                disabled={!selectedMove || hasUnsavedRename}
+                onClick={commitMove}
+              >
+                移動
+              </button>
+            </>
+          )}
           <button type="button" className="icon-btn" aria-label="保存" title="保存" onClick={commit}>
             <CheckIcon />
           </button>
           <button type="button" className="icon-btn" aria-label="キャンセル" title="キャンセル" onClick={() => setEditing(false)}>
             <CloseIcon />
           </button>
+          {aliasText && <span className="tag-alias tag-alias-edit">日本語名: {aliasText}</span>}
           {error && <span id={errorId} className="tag-edit-error" role="alert">{error}</span>}
         </div>
       ) : sorting ? (
@@ -125,12 +223,14 @@ export const TagRow = memo(function TagRow({
           onPointerDown={startDrag}
         >
           <span className="drag-handle" aria-hidden="true">||</span>
-          <TagLabel tag={tag.tag} query={query} />
+          <TagLabel tag={tag.tag} query={query} title={aliasText} />
+          {aliasMatched && aliasText && <AliasLabel alias={aliasText} query={query} />}
         </span>
       ) : (
         <label className="tag-check">
           <input type="checkbox" checked={tag.enabled} onChange={() => onToggle(tag.id)} />
-          <TagLabel tag={tag.tag} query={query} />
+          <TagLabel tag={tag.tag} query={query} title={aliasText} />
+          {aliasMatched && aliasText && <AliasLabel alias={aliasText} query={query} />}
         </label>
       )}
 
@@ -184,7 +284,7 @@ export const TagRow = memo(function TagRow({
           )}
           {!editing && (
             <button type="button" className="icon-btn" aria-label={`${tag.tag} を編集`} title="このタグを編集"
-              onClick={() => { setDraft(tag.tag); setError(null); setEditing(true); }}>
+              onClick={() => { setDraft(tag.tag); setPendingMove(''); setError(null); setEditing(true); }}>
               <EditIcon />
             </button>
           )}
@@ -222,6 +322,7 @@ export const TagRow = memo(function TagRow({
             </button>
           </div>
           )}
+          {!editing && (
           <button
             type="button"
             className="icon-btn icon-btn-danger"
@@ -230,6 +331,7 @@ export const TagRow = memo(function TagRow({
           >
             ✕
           </button>
+          )}
         </>
       )}
     </li>

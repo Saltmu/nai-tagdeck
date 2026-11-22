@@ -66,7 +66,7 @@ afterEach(async () => {
 });
 
 describe('Dialogs initial focus', () => {
-  it('focuses cancel button on danger confirm and primary button on normal confirm', async () => {
+  it('focuses cancel for danger or initialFocus cancel, and the primary button otherwise', async () => {
     const restore = stubDialog();
     let dialogs!: DialogApi;
     function Harness() {
@@ -95,6 +95,16 @@ describe('Dialogs initial focus', () => {
         (document.activeElement as HTMLButtonElement).click();
       });
       expect(await normalPromise).toBe(true);
+
+      let cancelFocusPromise!: Promise<boolean>;
+      await act(async () => {
+        cancelFocusPromise = dialogs.confirm('保存できましたか？', { okLabel: '保存できた', initialFocus: 'cancel' });
+      });
+      expect(document.activeElement?.textContent).toBe('キャンセル');
+      await act(async () => {
+        (document.activeElement as HTMLButtonElement).click();
+      });
+      expect(await cancelFocusPromise).toBe(false);
     } finally {
       restore();
     }
@@ -449,6 +459,7 @@ describe('ImageViewer keyboard and live region', () => {
       characterPrompts: [],
       createdAt: 1000,
       downloaded: false,
+      pinned: false,
     };
     try {
       await act(async () =>
@@ -463,6 +474,7 @@ describe('ImageViewer keyboard and live region', () => {
             onRemove={() => {}}
             onUseSeed={() => {}}
             onDownload={() => {}}
+            onTogglePin={() => {}}
           />,
         ),
       );

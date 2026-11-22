@@ -188,6 +188,22 @@ export function ToggleAllIcon({ enable }: { enable: boolean }) {
   );
 }
 
+/** ピン留め。filled のとき塗りつぶす。 */
+export function PinIcon({ filled = false }: { filled?: boolean }) {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path
+        d="M7.2 3.2h5.6l-.6 4.4 2.3 1.5v1.6H5.5V9.1l2.3-1.5z"
+        fill={filled ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path d="M10 10.7V17" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /** 貼り付け（クリップボード）。 */
 export function PasteIcon() {
   return (

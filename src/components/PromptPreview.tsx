@@ -1,5 +1,7 @@
+import { Fragment } from 'react';
+import type { GenerationMode } from '../lib/novelai';
+import { prefixFurryDataset, type CharacterPrompt } from '../lib/prompt';
 import type { WeightSyntax } from '../types';
-import type { CharacterPrompt } from '../lib/prompt';
 
 interface Props {
   basePrompt: string;
@@ -9,9 +11,22 @@ interface Props {
   onCopy: (text: string, label: string) => void;
   /** ネガティブのタグから組み立てた文面。 */
   negativePrompt: string;
+  /** 未指定はアニメ。ケモノのときだけ、送信時と同じ `fur dataset` をベース先頭に付ける。 */
+  mode?: GenerationMode;
+  /**
+   * 個別ネガティブを持たないキャラに使う共通文面。
+   * 未指定のときは共通分を出さない（個別ネガティブがあるキャラだけ出す）。
+   */
+  characterNegative?: string;
 }
 
-export function PromptPreview({ basePrompt, characterPrompts, syntax, onSyntaxChange, onCopy, negativePrompt }: Props) {
+export function PromptPreview({
+  basePrompt, characterPrompts, syntax, onSyntaxChange, onCopy, negativePrompt, mode = 'anime', characterNegative,
+}: Props) {
+  // ベースもキャラも空のケモノは生成しない。そのときは fur dataset だけを出さない。
+  const shownBase = mode === 'furry' && (basePrompt || characterPrompts.length > 0)
+    ? prefixFurryDataset(basePrompt)
+    : basePrompt;
   return (
     <div className="preview">
       <div>
@@ -29,29 +44,60 @@ export function PromptPreview({ basePrompt, characterPrompts, syntax, onSyntaxCh
               <button
                 type="button"
                 className="btn btn-small"
-                disabled={!basePrompt}
-                onClick={() => onCopy(basePrompt, characterPrompts.length ? 'ベース' : 'プロンプト全体')}
+                disabled={!shownBase}
+                onClick={() => onCopy(shownBase, characterPrompts.length ? 'ベース' : 'プロンプト全体')}
               >
                 コピー
               </button>
             </dt>
             <dd>
-              <output className={`preview-text${basePrompt ? '' : ' is-empty'}`}>
-                {basePrompt || 'ONのタグがありません'}
+              <output className={`preview-text${shownBase ? '' : ' is-empty'}`}>
+                {shownBase || 'ONのタグがありません'}
               </output>
             </dd>
           </div>
-          {characterPrompts.map((c) => (
-            <div className="preview-item" key={c.id}>
-              <dt>
-                {c.name}
-                <button type="button" className="btn btn-small" onClick={() => onCopy(c.prompt, c.name)}>
-                  コピー
-                </button>
-              </dt>
-              <dd><output className="preview-text">{c.prompt}</output></dd>
-            </div>
-          ))}
+          {characterPrompts.map((c) => {
+            const negative = c.negative !== undefined ? c.negative : characterNegative;
+            const showNegative = c.negative !== undefined || characterNegative !== undefined;
+            return (
+              <Fragment key={c.id}>
+                <div className="preview-item">
+                  <dt>
+                    {c.name}
+                    <button type="button" className="btn btn-small" onClick={() => onCopy(c.prompt, c.name)}>
+                      コピー
+                    </button>
+                  </dt>
+                  <dd>
+                    <output className="preview-text">{c.prompt}</output>
+                    {c.center && (
+                      <p className="hint">位置　横 {c.center.x}、縦 {c.center.y}</p>
+                    )}
+                  </dd>
+                </div>
+                {showNegative && (
+                  <div className="preview-item preview-negative">
+                    <dt>
+                      {c.name}のネガティブ
+                      <button
+                        type="button"
+                        className="btn btn-small"
+                        disabled={!negative}
+                        onClick={() => onCopy(negative ?? '', `${c.name}のネガティブ`)}
+                      >
+                        コピー
+                      </button>
+                    </dt>
+                    <dd>
+                      <output className={`preview-text${negative ? '' : ' is-empty'}`}>
+                        {negative || 'ネガティブなし'}
+                      </output>
+                    </dd>
+                  </div>
+                )}
+              </Fragment>
+            );
+          })}
           <div className="preview-item preview-negative">
             <dt>
               ネガティブ

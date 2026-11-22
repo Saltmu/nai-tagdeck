@@ -271,6 +271,22 @@
   max-width: 7rem;
 }
 
+.tag-edit-move {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tag-alias {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.tag-alias-edit {
+  flex-basis: 100%;
+}
+
 .tag-category-suggest {
   flex: none;
   border-color: var(--accent);

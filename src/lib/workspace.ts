@@ -2,6 +2,7 @@ import type { Character, PromptCategoryKey, TagGroups, TargetId, WorkTag, Worksp
 import { CHARACTER_CATEGORY_KEYS, LEGACY_DRESS_STATE_CATEGORY, PROMPT_CATEGORY_KEYS } from './categories';
 import { newId, normalizeId } from './id';
 import { clampWeight, parseTagList } from './prompt';
+import { splitInteraction } from './interaction';
 import { DEFAULT_NEGATIVE } from './novelai';
 import { normalize } from './tagText';
 import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
@@ -40,14 +41,22 @@ export type WorkspaceAction =
   | (TagAction & { target: TargetId; category: WorkspaceCategoryKey })
   | { type: 'addMany'; items: readonly AddTagItem[] }
   | { type: 'moveFromUnclassified'; target: TargetId; id: string; to: PromptCategoryKey }
+  | {
+      type: 'moveTag';
+      fromTarget: TargetId;
+      fromCategory: PromptCategoryKey;
+      id: string;
+      toTarget: TargetId;
+      toCategory: PromptCategoryKey;
+    }
   | { type: 'addCharacter' }
   | { type: 'duplicateCharacter'; id: string }
   | { type: 'removeCharacter'; id: string }
   | { type: 'renameCharacter'; id: string; name: string }
   /** null は個別指定を消し、共通のネガティブに戻す。 */
   | { type: 'setCharacterNegative'; id: string; negative: string | null }
-  /** null は位置指定を消す。 */
-  | { type: 'setCharacterCenter'; id: string; center: { x: number; y: number } | null }
+  /** null は位置指定を消す。mergeKey が同じ連続操作は履歴で 1 ステップにまとめる。 */
+  | { type: 'setCharacterCenter'; id: string; center: { x: number; y: number } | null; mergeKey?: string }
   | { type: 'toggleCharacter'; id: string }
   | { type: 'moveCharacter'; id: string; delta: -1 | 1 }
   | { type: 'replace'; workspace: Workspace }
@@ -272,6 +281,70 @@ function updateCharacter(state: Workspace, id: string, fn: (c: Character) => Cha
   return { ...state, characters };
 }
 
+function allowedPromptCategories(state: Workspace, target: TargetId): readonly PromptCategoryKey[] | null {
+  if (target === BASE) return PROMPT_CATEGORY_KEYS;
+  return state.characters.some((c) => c.id === target) ? CHARACTER_CATEGORY_KEYS : null;
+}
+
+function moveTagBetweenGroups(
+  state: Workspace,
+  fromTarget: TargetId,
+  fromCategory: PromptCategoryKey,
+  id: string,
+  toTarget: TargetId,
+  toCategory: PromptCategoryKey,
+): Workspace {
+  if (fromTarget === toTarget && fromCategory === toCategory) return state;
+  const fromKeys = allowedPromptCategories(state, fromTarget);
+  const toKeys = allowedPromptCategories(state, toTarget);
+  if (!fromKeys?.includes(fromCategory) || !toKeys?.includes(toCategory)) return state;
+
+  const sourceList = tagsOf(state, fromTarget, fromCategory);
+  const destList = tagsOf(state, toTarget, toCategory);
+  if (!sourceList || !destList) return state;
+
+  const tag = sourceList.find((t) => t.id === id);
+  if (!tag) return state;
+  if (fromTarget !== BASE && toTarget === BASE && splitInteraction(tag.tag).interaction !== null) return state;
+
+  const key = normalize(tag.tag);
+  const exists = destList.some((t) => normalize(t.tag) === key);
+  const nextSource = sourceList.filter((t) => t.id !== tag.id);
+  const nextDest = exists ? destList : [...destList, tag];
+
+  if (fromTarget === toTarget) {
+    if (fromTarget === BASE) {
+      return {
+        ...state,
+        base: { ...state.base, [fromCategory]: nextSource, [toCategory]: nextDest },
+      };
+    }
+    return updateCharacter(state, fromTarget, (character) => ({
+      ...character,
+      tags: { ...character.tags, [fromCategory]: nextSource, [toCategory]: nextDest },
+    }));
+  }
+
+  let next = state;
+  if (fromTarget === BASE) {
+    next = { ...next, base: { ...next.base, [fromCategory]: nextSource } };
+  } else {
+    next = updateCharacter(next, fromTarget, (character) => ({
+      ...character,
+      tags: { ...character.tags, [fromCategory]: nextSource },
+    }));
+  }
+  if (toTarget === BASE) {
+    next = { ...next, base: { ...next.base, [toCategory]: nextDest } };
+  } else {
+    next = updateCharacter(next, toTarget, (character) => ({
+      ...character,
+      tags: { ...character.tags, [toCategory]: nextDest },
+    }));
+  }
+  return next;
+}
+
 function applyTagAction(
   state: Workspace,
   action: TagAction & { target: TargetId; category: WorkspaceCategoryKey },
@@ -350,30 +423,17 @@ export function workspaceReducer(state: Workspace, action: WorkspaceAction): Wor
       return normalizeWorkspace(action.workspace);
     case 'commit':
       return action.workspace;
-    case 'moveFromUnclassified': {
-      const keys = action.target === BASE ? PROMPT_CATEGORY_KEYS : CHARACTER_CATEGORY_KEYS;
-      if (action.to === 'unclassified' || !keys.includes(action.to)) return state;
-      const move = (groups: TagGroups): TagGroups => {
-        const tag = groups.unclassified.find((t) => t.id === action.id);
-        if (!tag) return groups;
-        const key = normalize(tag.tag);
-        const destination = groups[action.to];
-        const exists = destination.some((t) => normalize(t.tag) === key);
-        return {
-          ...groups,
-          unclassified: groups.unclassified.filter((t) => t.id !== tag.id),
-          [action.to]: exists ? destination : [...destination, tag],
-        };
-      };
-      if (action.target === BASE) {
-        const base = move(state.base);
-        return base === state.base ? state : { ...state, base };
-      }
-      return updateCharacter(state, action.target, (character) => {
-        const tags = move(character.tags);
-        return tags === character.tags ? character : { ...character, tags };
-      });
-    }
+    case 'moveFromUnclassified':
+      return moveTagBetweenGroups(state, action.target, 'unclassified', action.id, action.target, action.to);
+    case 'moveTag':
+      return moveTagBetweenGroups(
+        state,
+        action.fromTarget,
+        action.fromCategory,
+        action.id,
+        action.toTarget,
+        action.toCategory,
+      );
     case 'addMany': {
       let next = state;
       for (const item of action.items) {

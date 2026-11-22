@@ -370,6 +370,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onReadPng={openPromptImport}
               characterNegative={settings.characterNegativePrompt}
               onCharacterNegativeChange={handleCharacterNegativeChange}
+              canvasSize={sizeOf(generation.size)}
               shown={tab === 'editor'}
             />
           </div>
@@ -383,7 +384,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onRemove={imageStore.remove}
               onClear={imageStore.clear}
               onUseSeed={applySeed}
-              onDownloaded={imageStore.markDownloaded}
+              onSaveConfirmed={imageStore.markSaved}
+              onTogglePin={imageStore.togglePinned}
               onPickPng={pickPng}
               onReadPng={openPromptImport}
             />
@@ -401,6 +403,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
                   onSyntaxChange={handleSyntaxChange}
                   onCopy={copy}
                   negativePrompt={negativePrompt}
+                  mode={generation.mode}
+                  characterNegative={settings.characterNegativePrompt}
                 />
               }
               generatePanel={

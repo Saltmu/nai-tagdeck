@@ -6,6 +6,7 @@ import { CHARACTER_CATEGORY_KEYS } from '../lib/categories';
 import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from '../lib/characterLimits';
 import { buildPrompt } from '../lib/prompt';
 import { CategorySection } from './CategorySection';
+import { CharacterCenterPicker, type PeerCharacterCenter } from './CharacterCenterPicker';
 import { NumberField } from './NumberField';
 import { useDialogs } from './Dialogs';
 
@@ -31,6 +32,14 @@ interface Props {
   filter?: TagFilter;
   /** 生成対象が ON のキャラクター数。複製を OFF で足すときの案内に使う。 */
   enabledCount: number;
+  /** 位置ピッカーの縦横比に使う出力画像サイズ。 */
+  canvasSize?: { width: number; height: number };
+  /** 位置ピッカー上に同時表示する他の ON キャラクター。 */
+  peerCenters?: readonly PeerCharacterCenter[];
+  /** タグ移動先に使うキャラクター一覧。 */
+  characterTargets?: readonly { id: string; label: string }[];
+  /** Editor から共有されるエイリアス索引。 */
+  aliasMap?: ReadonlyMap<string, readonly string[]>;
 }
 
 export function CharacterCard({
@@ -48,6 +57,10 @@ export function CharacterCard({
   onPoseAdded,
   filter,
   enabledCount,
+  canvasSize = { width: 832, height: 1216 },
+  peerCenters = [],
+  characterTargets,
+  aliasMap,
 }: Props) {
   const { id, enabled, tags } = character;
   const name = character.name.trim() || `キャラ${index + 1}`;
@@ -163,6 +176,20 @@ export function CharacterCard({
           位置を指定する
         </label>
         {character.center && (
+          <CharacterCenterPicker
+            characterName={name}
+            center={character.center}
+            canvasSize={canvasSize}
+            peers={peerCenters}
+            onChange={(center, mergeKey) => dispatch({
+              type: 'setCharacterCenter',
+              id,
+              center,
+              ...(mergeKey ? { mergeKey } : {}),
+            })}
+          />
+        )}
+        {character.center && (
           <div className="center-grid">
             <label className="field" htmlFor={`${id}-x`}>
               <span>横（0 が左、1 が右）</span>
@@ -221,6 +248,8 @@ export function CharacterCard({
             interactions={key === 'pose'}
             onAdded={key === 'pose' ? onPoseAdded : undefined}
             filter={filter}
+            characters={characterTargets}
+            aliasMap={aliasMap}
           />
         ))}
       </div>

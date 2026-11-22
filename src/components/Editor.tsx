@@ -11,7 +11,8 @@ import {
 } from '../lib/workspace';
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { saveCategoriesOpen } from '../lib/categoryOpen';
-import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
+import { buildPrompt } from '../lib/prompt';
+import { buildTagAliasMap, isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import { classifyEditorTag, createTagVectorIndex, type PromptTagCategory } from '../lib/tagClassification';
 import { DEFAULT_CHARACTER_NEGATIVE } from '../lib/novelai';
 import { normalize } from '../lib/tagText';
@@ -19,6 +20,7 @@ import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
 import { CategorySection, type BaseCategorySuggestion } from './CategorySection';
 import { CharacterCard } from './CharacterCard';
+import type { PeerCharacterCenter } from './CharacterCenterPicker';
 import { HistoryControls } from './HistoryControls';
 import { PresetBar } from './PresetBar';
 import { TagFilterBar } from './TagFilterBar';
@@ -72,6 +74,8 @@ interface Props {
   /** 個別指定がないキャラクターに付けるネガティブ。 */
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
+  /** 位置ピッカーの縦横比に使う出力画像サイズ。 */
+  canvasSize?: { width: number; height: number };
   /** 編集画面を開いている（false の間は他の画面を表示している）。 */
   shown: boolean;
 }
@@ -90,6 +94,7 @@ export function Editor({
   onReadPng,
   characterNegative,
   onCharacterNegativeChange,
+  canvasSize,
   shown,
 }: Props) {
   const vectorIndex = useMemo(() => createTagVectorIndex(dictionary.entries), [dictionary.entries]);
@@ -207,6 +212,24 @@ export function Editor({
   const activeIndex = characters.findIndex((c) => c.id === selected);
   const active = activeIndex >= 0 ? characters[activeIndex] : undefined;
   const activeId = active?.id;
+  const peerCenters = useMemo<PeerCharacterCenter[]>(() => {
+    if (!activeId) return [];
+    const activeCharacters = characters
+      .map((c, i) => ({
+        c,
+        name: c.name.trim() || `キャラ${i + 1}`,
+        hasPrompt: buildPrompt(c.tags, syntax, CHARACTER_CATEGORY_KEYS).length > 0,
+      }))
+      .filter(({ c, hasPrompt }) => c.enabled && hasPrompt);
+    const useCoords = activeCharacters.some(({ c }) => c.center !== undefined);
+    return activeCharacters
+      .filter(({ c }) => c.id !== activeId)
+      .map(({ c, name }) => ({
+        id: c.id,
+        name,
+        ...(c.center ? { center: c.center } : useCoords ? { center: { x: 0.5, y: 0.5 }, autoCenter: true } : {}),
+      }));
+  }, [characters, activeId, syntax]);
   const handlePoseAdded = useCallback(
     (tag: string) => {
       if (activeId) void offerPair(activeId, tag);
@@ -253,11 +276,16 @@ export function Editor({
       if (item.category === 'pose') handlePoseAdded(item.tag);
     }
   };
+  const aliasMap = useMemo(() => buildTagAliasMap(dictionary.entries), [dictionary.entries]);
+  const characterTargets = useMemo(
+    () => characters.map((c, i) => ({ id: c.id, label: `${i + 1}. ${c.name.trim() || `キャラ${i + 1}`}` })),
+    [characters],
+  );
   const paneTagLists: WorkTag[][] = negativeSelected
     ? [workspace.negative]
     : promptCategories.map((key) => (active ? active.tags[key] : workspace.base[key]));
   const matchCount = isTagFilterActive(tagFilter)
-    ? paneTagLists.reduce((sum, tags) => sum + visibleWorkTags(tags, tagFilter).length, 0)
+    ? paneTagLists.reduce((sum, tags) => sum + visibleWorkTags(tags, tagFilter, aliasMap).length, 0)
     : null;
 
   // 編集対象のタブはスクロールしてもヘッダーの直下に残す。張り付いている間だけ見た目を変え、
@@ -469,6 +497,7 @@ export function Editor({
             characterNegative={characterNegative}
             onCharacterNegativeChange={onCharacterNegativeChange}
             filter={tagFilter}
+            aliasMap={aliasMap}
           />
         ) : active ? (
           <CharacterCard
@@ -487,6 +516,10 @@ export function Editor({
             onPoseAdded={handlePoseAdded}
             filter={tagFilter}
             enabledCount={enabledCount}
+            canvasSize={canvasSize}
+            peerCenters={peerCenters}
+            characterTargets={characterTargets}
+            aliasMap={aliasMap}
           />
         ) : (
           <div className="category-grid editor-pane">
@@ -508,6 +541,8 @@ export function Editor({
                 onAdded={key === 'unclassified' ? clearBaseSuggestion : undefined}
                 suggestedCategories={key === 'unclassified' ? baseSuggestions : undefined}
                 filter={tagFilter}
+                characters={characterTargets}
+                aliasMap={aliasMap}
               />
             ))}
           </div>
@@ -540,6 +575,7 @@ interface NegativePaneProps {
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
   filter: TagFilter;
+  aliasMap: ReadonlyMap<string, readonly string[]>;
 }
 
 /** ネガティブはカテゴリに分けず、1つの並びで編集する。 */
@@ -555,6 +591,7 @@ function NegativePane({
   characterNegative,
   onCharacterNegativeChange,
   filter,
+  aliasMap,
 }: NegativePaneProps) {
   const id = useId();
   const [characterOpen, setCharacterOpen] = useState(false);
@@ -584,6 +621,7 @@ function NegativePane({
         notify={notify}
         onRegister={onRegister}
         filter={filter}
+        aliasMap={aliasMap}
       />
       <div className="negative-actions">
         <button type="button" className="btn btn-small" disabled={hasAllDefaults} onClick={addDefaults}>

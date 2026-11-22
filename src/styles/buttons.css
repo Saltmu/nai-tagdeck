@@ -84,3 +84,8 @@
   color: var(--text);
 }
 
+.icon-btn[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
