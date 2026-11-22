@@ -39,7 +39,14 @@ function isUndoFocusScopedControl(target: EventTarget | null): boolean {
 }
 
 function sameTag(a: WorkspaceAction, b: WorkspaceAction): boolean {
-  if (a.type === 'moveFromUnclassified' || b.type === 'moveFromUnclassified') return false;
+  if (
+    a.type === 'moveFromUnclassified' ||
+    b.type === 'moveFromUnclassified' ||
+    a.type === 'moveTag' ||
+    b.type === 'moveTag'
+  ) {
+    return false;
+  }
   if (!('id' in a) || !('id' in b) || !('target' in a) || !('target' in b)) return false;
   if (!('category' in a) || !('category' in b)) return false;
   return a.id === b.id && a.target === b.target && a.category === b.category;

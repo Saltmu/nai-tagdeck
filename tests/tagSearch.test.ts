@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { highlightTag, isTagFilterActive, tagMatchesQuery, visibleWorkTags } from '../src/lib/tagSearch';
+import {
+  aliasMatchesQuery,
+  buildTagAliasMap,
+  highlightTag,
+  isTagFilterActive,
+  tagMatchesQuery,
+  visibleWorkTags,
+} from '../src/lib/tagSearch';
 import type { WorkTag } from '../src/types';
 
 const tag = (id: string, name: string, enabled = true): WorkTag => ({ id, tag: name, enabled, weight: 1 });
@@ -60,5 +67,32 @@ describe('タグ検索', () => {
       { text: 'x', match: false },
       { text: 'Σ', match: true },
     ]);
+  });
+
+  it('辞書の日本語エイリアス（よみ含む）でも追加済みタグを絞り込める', () => {
+    const aliasMap = buildTagAliasMap([
+      { tag: 'blonde_hair', alias: '金髪 きんぱつ' },
+      { tag: 'blonde hair', alias: 'ブロンド' },
+      { tag: 'blue_eyes', alias: '青い目' },
+      { tag: 'hat', alias: '   ' },
+    ]);
+
+    expect(aliasMap.get('blonde hair')).toEqual(['金髪 きんぱつ', 'ブロンド']);
+    expect(aliasMap.has('hat')).toBe(false);
+    expect(aliasMatchesQuery(aliasMap.get('blonde hair'), 'ぶろんど')).toBe(true);
+    expect(tagMatchesQuery('blonde hair', 'きんぱつ', aliasMap.get('blonde hair'))).toBe(true);
+
+    const tags = [tag('a', 'blonde hair'), tag('b', 'blue eyes', false), tag('c', 'hat')];
+    expect(visibleWorkTags(tags, { query: '金髪', onlyEnabled: false }, aliasMap).map((item) => item.id)).toEqual(['a']);
+    expect(visibleWorkTags(tags, { query: '目', onlyEnabled: false }, aliasMap).map((item) => item.id)).toEqual(['b']);
+    expect(visibleWorkTags(tags, { query: '目', onlyEnabled: true }, aliasMap).map((item) => item.id)).toEqual([]);
+
+    const hugAliasMap = buildTagAliasMap([
+      { tag: 'hug', alias: '抱き合う ハグ' },
+      { tag: 'source#hug', alias: 'ハグする' },
+    ]);
+    const interactionTags = [tag('m', 'mutual#hug'), tag('s', 'source#hug')];
+    expect(visibleWorkTags(interactionTags, { query: '抱き合う', onlyEnabled: false }, hugAliasMap).map((item) => item.id)).toEqual(['m', 's']);
+    expect(visibleWorkTags(interactionTags, { query: 'ハグする', onlyEnabled: false }, hugAliasMap).map((item) => item.id)).toEqual(['s']);
   });
 });

@@ -12,7 +12,7 @@ import {
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { saveCategoriesOpen } from '../lib/categoryOpen';
 import { buildPrompt } from '../lib/prompt';
-import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
+import { buildTagAliasMap, isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import { classifyEditorTag, createTagVectorIndex, type PromptTagCategory } from '../lib/tagClassification';
 import { DEFAULT_CHARACTER_NEGATIVE } from '../lib/novelai';
 import { normalize } from '../lib/tagText';
@@ -276,11 +276,16 @@ export function Editor({
       if (item.category === 'pose') handlePoseAdded(item.tag);
     }
   };
+  const aliasMap = useMemo(() => buildTagAliasMap(dictionary.entries), [dictionary.entries]);
+  const characterTargets = useMemo(
+    () => characters.map((c, i) => ({ id: c.id, label: `${i + 1}. ${c.name.trim() || `キャラ${i + 1}`}` })),
+    [characters],
+  );
   const paneTagLists: WorkTag[][] = negativeSelected
     ? [workspace.negative]
     : promptCategories.map((key) => (active ? active.tags[key] : workspace.base[key]));
   const matchCount = isTagFilterActive(tagFilter)
-    ? paneTagLists.reduce((sum, tags) => sum + visibleWorkTags(tags, tagFilter).length, 0)
+    ? paneTagLists.reduce((sum, tags) => sum + visibleWorkTags(tags, tagFilter, aliasMap).length, 0)
     : null;
 
   // 編集対象のタブはスクロールしてもヘッダーの直下に残す。張り付いている間だけ見た目を変え、
@@ -492,6 +497,7 @@ export function Editor({
             characterNegative={characterNegative}
             onCharacterNegativeChange={onCharacterNegativeChange}
             filter={tagFilter}
+            aliasMap={aliasMap}
           />
         ) : active ? (
           <CharacterCard
@@ -512,6 +518,8 @@ export function Editor({
             enabledCount={enabledCount}
             canvasSize={canvasSize}
             peerCenters={peerCenters}
+            characterTargets={characterTargets}
+            aliasMap={aliasMap}
           />
         ) : (
           <div className="category-grid editor-pane">
@@ -533,6 +541,8 @@ export function Editor({
                 onAdded={key === 'unclassified' ? clearBaseSuggestion : undefined}
                 suggestedCategories={key === 'unclassified' ? baseSuggestions : undefined}
                 filter={tagFilter}
+                characters={characterTargets}
+                aliasMap={aliasMap}
               />
             ))}
           </div>
@@ -565,6 +575,7 @@ interface NegativePaneProps {
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
   filter: TagFilter;
+  aliasMap: ReadonlyMap<string, readonly string[]>;
 }
 
 /** ネガティブはカテゴリに分けず、1つの並びで編集する。 */
@@ -580,6 +591,7 @@ function NegativePane({
   characterNegative,
   onCharacterNegativeChange,
   filter,
+  aliasMap,
 }: NegativePaneProps) {
   const id = useId();
   const [characterOpen, setCharacterOpen] = useState(false);
@@ -609,6 +621,7 @@ function NegativePane({
         notify={notify}
         onRegister={onRegister}
         filter={filter}
+        aliasMap={aliasMap}
       />
       <div className="negative-actions">
         <button type="button" className="btn btn-small" disabled={hasAllDefaults} onClick={addDefaults}>
