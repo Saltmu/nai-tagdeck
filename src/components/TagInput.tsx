@@ -18,6 +18,7 @@ interface Props {
   placeholder?: string;
   entries: DictEntry[];
   onAdd: (tag: string, weight: number) => void;
+  onAddMany?: (items: ReadonlyArray<{ tag: string; weight: number }>) => void;
   onPick?: (tag: string, weight: number, category: CategoryKey) => void;
   /** 候補の表示・非表示が切り替わったとき（表示中のカテゴリを強調するのに使う）。 */
   onExpandedChange?: (expanded: boolean) => void;
@@ -27,7 +28,7 @@ interface Props {
   draftRef?: RefObject<TagInputDraft>;
 }
 
-export function TagInput({ category, label, placeholder, entries, onAdd, onPick, onExpandedChange, interactions, draftRef }: Props) {
+export function TagInput({ category, label, placeholder, entries, onAdd, onAddMany, onPick, onExpandedChange, interactions, draftRef }: Props) {
   const [text, setText] = useState(() => draftRef?.current.text ?? '');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -108,7 +109,15 @@ export function TagInput({ category, label, placeholder, entries, onAdd, onPick,
   const addRaw = () => {
     const parsed = parseTagList(text);
     if (parsed.length === 0) return;
-    for (const p of parsed) onAdd(withInteraction(p.tag, picked ?? splitInteraction(p.tag).interaction), p.weight);
+    const items = parsed.map((p) => ({
+      tag: withInteraction(p.tag, picked ?? splitInteraction(p.tag).interaction),
+      weight: p.weight,
+    }));
+    if (onAddMany) {
+      onAddMany(items);
+    } else {
+      for (const item of items) onAdd(item.tag, item.weight);
+    }
     reset();
   };
 

@@ -123,3 +123,23 @@ it('does not reopen suggestions when focus returns with the window', async () =>
   await focus();
   expect(input.getAttribute('aria-expanded')).toBe('true');
 });
+
+it('calls onAddMany once with parsed tags when provided', async () => {
+  const onAddMany = vi.fn();
+  await act(async () => root.render(
+    <TagInput category="pose" label="ポーズ" entries={entries} onAdd={onAdd} onAddMany={onAddMany} interactions />,
+  ));
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  await act(async () => {
+    setter.call(input, '1.2::standing::, target#hug');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const addButton = [...container.querySelectorAll('button')].find((b) => b.textContent === '追加')!;
+  await act(async () => addButton.click());
+  expect(onAddMany).toHaveBeenCalledTimes(1);
+  expect(onAddMany).toHaveBeenCalledWith([
+    { tag: 'standing', weight: 1.2 },
+    { tag: 'target#hug', weight: 1 },
+  ]);
+  expect(onAdd).not.toHaveBeenCalled();
+});

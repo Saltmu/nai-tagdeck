@@ -28,9 +28,17 @@ type TagAction =
   /** group のタグのうち tag だけを先頭に置き、ほかは外す。tag が null なら group のタグをすべて外す。 */
   | { type: 'pickOne'; group: readonly string[]; tag: string | null };
 
+export interface AddTagItem {
+  target: TargetId;
+  category: WorkspaceCategoryKey;
+  tag: string;
+  weight?: number;
+}
+
 export type WorkspaceAction =
   /** category が 'negative' のときは target によらずネガティブを操作する。 */
   | (TagAction & { target: TargetId; category: WorkspaceCategoryKey })
+  | { type: 'addMany'; items: readonly AddTagItem[] }
   | { type: 'moveFromUnclassified'; target: TargetId; id: string; to: PromptCategoryKey }
   | { type: 'addCharacter' }
   | { type: 'duplicateCharacter'; id: string }
@@ -264,6 +272,25 @@ function updateCharacter(state: Workspace, id: string, fn: (c: Character) => Cha
   return { ...state, characters };
 }
 
+function applyTagAction(
+  state: Workspace,
+  action: TagAction & { target: TargetId; category: WorkspaceCategoryKey },
+): Workspace {
+  const { target, category } = action;
+  if (category === 'negative') {
+    const negative = reduceTags(state.negative, action);
+    return negative === state.negative ? state : { ...state, negative };
+  }
+  if (target === BASE) {
+    const base = updateGroups(state.base, category, action);
+    return base === state.base ? state : { ...state, base };
+  }
+  return updateCharacter(state, target, (c) => {
+    const tags = updateGroups(c.tags, category, action);
+    return tags === c.tags ? c : { ...c, tags };
+  });
+}
+
 export function workspaceReducer(state: Workspace, action: WorkspaceAction): Workspace {
   switch (action.type) {
     case 'addCharacter': {
@@ -347,20 +374,14 @@ export function workspaceReducer(state: Workspace, action: WorkspaceAction): Wor
         return tags === character.tags ? character : { ...character, tags };
       });
     }
-    default: {
-      const { target, category } = action;
-      if (category === 'negative') {
-        const negative = reduceTags(state.negative, action);
-        return negative === state.negative ? state : { ...state, negative };
+    case 'addMany': {
+      let next = state;
+      for (const item of action.items) {
+        next = applyTagAction(next, { type: 'add', ...item });
       }
-      if (target === BASE) {
-        const base = updateGroups(state.base, category, action);
-        return base === state.base ? state : { ...state, base };
-      }
-      return updateCharacter(state, target, (c) => {
-        const tags = updateGroups(c.tags, category, action);
-        return tags === c.tags ? c : { ...c, tags };
-      });
+      return next;
     }
+    default:
+      return applyTagAction(state, action);
   }
 }

@@ -157,6 +157,24 @@ export const CategorySection = memo(function CategorySection({
     },
     [dispatch, target, category, onAdded],
   );
+  const handleAddMany = useCallback(
+    (items: ReadonlyArray<{ tag: string; weight: number }>) => {
+      if (items.length === 0) return;
+      if (items.length === 1) {
+        const item = items[0]!;
+        handleAdd(item.tag, item.weight);
+        return;
+      }
+      dispatch({
+        type: 'addMany',
+        items: items.map(({ tag, weight }) => ({ target, category, tag, weight })),
+      });
+      if (onAdded) {
+        for (const { tag } of items) onAdded(tag);
+      }
+    },
+    [dispatch, target, category, handleAdd, onAdded],
+  );
 
   const pasteTags = async () => {
     let clipboardText: string;
@@ -173,9 +191,10 @@ export const CategorySection = memo(function CategorySection({
       return;
     }
 
-    for (const { tag, weight } of parsed) {
-      dispatch({ type: 'add', target, category, tag, weight });
-    }
+    dispatch({
+      type: 'addMany',
+      items: parsed.map(({ tag, weight }) => ({ target, category, tag, weight })),
+    });
   };
 
   return (
@@ -332,6 +351,7 @@ export const CategorySection = memo(function CategorySection({
               interactions={interactions}
               draftRef={draftRef}
               onAdd={handleAdd}
+              onAddMany={handleAddMany}
             />
           )}
         </div>

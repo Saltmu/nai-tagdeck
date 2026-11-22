@@ -341,3 +341,27 @@ it('does not record an action that changes nothing', async () => {
   await run(() => api.dispatch({ type: 'move', target: BASE, category: 'appearance', id: idOf('d'), delta: 1 }));
   expect(api.canUndo).toBe(false);
 });
+
+it('undoes and redoes addMany across categories in a single step', async () => {
+  await run(() => api.dispatch({
+    type: 'addMany',
+    items: [
+      { target: BASE, category: 'appearance', tag: 'long hair', weight: 1.2 },
+      { target: BASE, category: 'outfit', tag: 'jacket', weight: 1 },
+      { target: BASE, category: 'background', tag: 'sunset', weight: 1.1 },
+    ],
+  }));
+  expect(names()).toEqual(['a', 'b', 'c', 'd', 'long hair']);
+  expect(ws.base.outfit.map((t) => t.tag)).toEqual(['jacket']);
+  expect(ws.base.background.map((t) => t.tag)).toEqual(['sunset']);
+
+  await run(() => api.undo());
+  expect(names()).toEqual(['a', 'b', 'c', 'd']);
+  expect(ws.base.outfit).toEqual([]);
+  expect(ws.base.background).toEqual([]);
+
+  await run(() => api.redo());
+  expect(names()).toEqual(['a', 'b', 'c', 'd', 'long hair']);
+  expect(ws.base.outfit.map((t) => t.tag)).toEqual(['jacket']);
+  expect(ws.base.background.map((t) => t.tag)).toEqual(['sunset']);
+});

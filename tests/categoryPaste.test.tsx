@@ -48,8 +48,13 @@ afterEach(() => {
 it('adds clipboard tags to the open category with their parsed weights', async () => {
   await paste(async () => '1.2::jacket::, shirt');
   expect(dispatch.mock.calls).toEqual([
-    [{ type: 'add', target: BASE, category: 'outfit', tag: 'jacket', weight: 1.2 }],
-    [{ type: 'add', target: BASE, category: 'outfit', tag: 'shirt', weight: 1 }],
+    [{
+      type: 'addMany',
+      items: [
+        { target: BASE, category: 'outfit', tag: 'jacket', weight: 1.2 },
+        { target: BASE, category: 'outfit', tag: 'shirt', weight: 1 },
+      ],
+    }],
   ]);
 });
 
