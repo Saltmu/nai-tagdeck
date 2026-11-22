@@ -192,24 +192,26 @@ export function Gallery({
           )}
         </div>
         <div className="gallery-meter-meta">
-          <span className="gallery-chip is-ephemeral" title="画像はこのタブのメモリにだけ保持されます。残したい画像はダウンロードしてください">
+          <span className="gallery-chip is-ephemeral">
             <TempIcon />
             <span>タブを閉じると消去</span>
           </span>
-          <span
-            className="gallery-chip is-pinned"
-            title="ピン留め画像は上限超過時に後から削除され（すべてピン留め時はDL操作済み・古い順）、ZIP 保存の対象になります"
-          >
+          <span className="gallery-chip is-pinned">
             <PinIcon filled />
             <span>ピン留め {pinnedCount}</span>
           </span>
-          <span
-            className="gallery-chip is-saved"
-            title="ダウンロードを開始した画像（保存完了はブラウザで確認）。上限超過時はピン留め以外からDL操作済み・古い順に削除"
-          >
+          <span className="gallery-chip is-saved">
             <DownloadIcon />
             <span>DL操作済 {downloadedCount}</span>
           </span>
+          <details className="gallery-meter-help">
+            <summary aria-label="履歴上限と削除ルールの詳細">?</summary>
+            <ul className="gallery-meter-rules">
+              <li>画像はタブのメモリにのみ保持され、閉じると消去されます。</li>
+              <li>上限（{MAX_IMAGE_HISTORY_COUNT}枚・{maxMb}MB）を超えると、ピン留め以外 → DL操作済 → 古い順に削除されます（すべてピン留め時も同じ順）。</li>
+              <li>DL操作済はダウンロード開始時に付きます（保存をキャンセルした場合も対象）。保存完了はブラウザで確認してください。</li>
+            </ul>
+          </details>
         </div>
       </div>
 

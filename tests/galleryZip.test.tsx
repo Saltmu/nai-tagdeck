@@ -165,6 +165,7 @@ it('disables pinned zip action when nothing is pinned, renders visual retention 
   expect(container.textContent).toContain('タブを閉じると消去');
   expect(container.textContent).toContain('0/30枚');
   expect(container.textContent).toContain('0/80MB');
+  expect(container.querySelector('.gallery-meter-help summary')).not.toBeNull();
 
   const only = image(4, { downloaded: true, pinned: false });
   await renderGallery([only], { onTogglePin });
