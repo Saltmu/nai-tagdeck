@@ -1,4 +1,5 @@
 import { unzipSync } from 'fflate';
+import { prefixFurryDataset } from './prompt';
 import { validateToken } from './token';
 
 /**
@@ -104,9 +105,7 @@ const NO_POSITION: Point = { x: 0, y: 0 };
  */
 export function buildGenerateRequest({ prompt, negative, characters, params, mode = 'anime' }: GenerateInput): GenerateRequest {
   // V5 のモード切替は専用 API パラメータではなく、ベースプロンプト先頭のタグで指定する。
-  const basePrompt = mode === 'furry' && !/^\s*fur[\s_]+dataset\s*(?:,|$)/i.test(prompt)
-    ? `fur dataset${prompt.trim() ? `, ${prompt.trim()}` : ''}`
-    : prompt;
+  const basePrompt = mode === 'furry' ? prefixFurryDataset(prompt) : prompt;
   const useCoords = characters.some((c) => c.center !== undefined);
   const pointOf = (c: CharacterInput): Point => c.center ?? (useCoords ? { x: 0.5, y: 0.5 } : NO_POSITION);
   const caption = (base: string, chars: readonly CharacterInput[], text: (c: CharacterInput) => string): V4Caption => ({
