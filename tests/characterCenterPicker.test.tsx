@@ -37,6 +37,13 @@ const mockPresets = (): PresetStore => ({
   ],
 });
 
+function pointerEvent(type: string, init: MouseEventInit & { pointerId?: number } = {}): MouseEvent {
+  const { pointerId = 1, ...mouseInit } = init;
+  const ev = new MouseEvent(type, mouseInit);
+  Object.defineProperty(ev, 'pointerId', { value: pointerId });
+  return ev;
+}
+
 beforeEach(() => {
   localStorage.clear();
   vi.stubGlobal(
@@ -85,13 +92,13 @@ function createMultiCharWorkspace(): Workspace {
 }
 
 describe('CharacterCenterPicker', () => {
-  it('renders canvas aspect ratio, peer markers, and syncs 5x5 grid, pointer drag, keyboard, and NumberField inputs', async () => {
+  it('renders canvas aspect ratio, peer markers, label stacking, pointerId filtering, and separate undo steps per drag', async () => {
     const initial = createMultiCharWorkspace();
     let latestWs = initial;
     const dictionary = mockDictionary();
     const presets = mockPresets();
 
-    function Harness({ size = { width: 1216, height: 832 } }: { size?: { width: number; height: number } }) {
+    function Harness({ size = { width: 768, height: 1344 } }: { size?: { width: number; height: number } }) {
       const [workspace, rawDispatch] = useReducer(workspaceReducer, initial);
       latestWs = workspace;
       const history = useTagUndo(workspace, rawDispatch);
@@ -126,24 +133,29 @@ describe('CharacterCenterPicker', () => {
 
     const stage = container.querySelector<HTMLDivElement>('.center-stage')!;
     expect(stage).not.toBeNull();
-    expect(stage.style.aspectRatio).toBe('1216 / 832');
-    expect(container.querySelector('.center-stage-caption')?.textContent).toContain('1216×832');
+    // 縦長 768×1344 の比率と最大幅制約（maxWidth: Math.round(768 * 200 / 1344) = 114px）
+    expect(stage.style.aspectRatio).toBe('768 / 1344');
+    expect(stage.style.maxWidth).toBe('114px');
+    expect(container.querySelector('.center-stage-caption')?.textContent).toContain('768×1344');
 
     // 自分（アリス）と他の ON キャラクター（ボブ、キャロル）が表示され、OFF のデイブは表示されない
     const activeMarker = stage.querySelector<HTMLElement>('.center-marker-active')!;
     expect(activeMarker.textContent).toBe('アリス');
     expect(activeMarker.style.left).toBe('50%');
     expect(activeMarker.style.top).toBe('50%');
+    expect(activeMarker.style.getPropertyValue('--stack-index')).toBe('0');
 
     const peerMarkers = [...stage.querySelectorAll<HTMLElement>('.center-marker-peer')];
     expect(peerMarkers.map((m) => m.textContent)).toEqual(['ボブ', 'キャロル']);
     expect(peerMarkers[0]!.style.left).toBe('80%');
     expect(peerMarkers[0]!.style.top).toBe('20%');
     expect(peerMarkers[0]!.classList.contains('is-auto')).toBe(false);
-    // キャロルは未指定なので (50%, 50%) に is-auto で表示
+    expect(peerMarkers[0]!.style.getPropertyValue('--stack-index')).toBe('0');
+    // キャロルは未指定なので (50%, 50%) に is-auto で表示され、アリスと座標が重なるため --stack-index が 1 にオフセットされる
     expect(peerMarkers[1]!.style.left).toBe('50%');
     expect(peerMarkers[1]!.style.top).toBe('50%');
     expect(peerMarkers[1]!.classList.contains('is-auto')).toBe(true);
+    expect(peerMarkers[1]!.style.getPropertyValue('--stack-index')).toBe('1');
 
     // 5×5 グリッドのセル B4 (x=0.3, y=0.7) をクリック
     const cellB4 = [...container.querySelectorAll<HTMLButtonElement>('.center-preset-cell')].find(
@@ -189,12 +201,7 @@ describe('CharacterCenterPicker', () => {
     });
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.5, y: 0.5 });
 
-    // フォーカスを一度外してからドラッグを開始すると、キーボード操作とは別ステップになり、ドラッグ中の連続移動は 1 ステップにまとまる
-    await act(async () => {
-      stage.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
-    });
-
-    // ポインターのクリック＆ドラッグ（小数第2位丸めと範囲外クランプ、1回のUndoにまとまること）
+    // ポインターのクリック＆ドラッグ（フォーカスを外さずに連続してドラッグしても各ドラッグが独立した Undo ステップになること）
     vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue({
       left: 100,
       top: 200,
@@ -207,12 +214,14 @@ describe('CharacterCenterPicker', () => {
       toJSON: () => ({}),
     });
 
+    // 1回目のドラッグ (pointerId: 10): (0.5, 0.5) -> (0.25, 0.25) -> (0.67, 1)
     await act(async () => {
       stage.dispatchEvent(
-        new MouseEvent('pointerdown', {
+        pointerEvent('pointerdown', {
           bubbles: true,
           cancelable: true,
           button: 0,
+          pointerId: 10,
           clientX: 150, // (150-100)/200 = 0.25
           clientY: 225, // (225-200)/100 = 0.25
         }),
@@ -220,23 +229,68 @@ describe('CharacterCenterPicker', () => {
     });
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.25, y: 0.25 });
 
+    // 別の指（pointerId: 99）の移動や終了は無視されること
     await act(async () => {
       window.dispatchEvent(
-        new MouseEvent('pointermove', {
+        pointerEvent('pointermove', {
           bubbles: true,
+          pointerId: 99,
+          clientX: 100,
+          clientY: 200,
+        }),
+      );
+      window.dispatchEvent(pointerEvent('pointerup', { bubbles: true, pointerId: 99 }));
+    });
+    expect(latestWs.characters[0]!.center).toEqual({ x: 0.25, y: 0.25 });
+
+    await act(async () => {
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          bubbles: true,
+          pointerId: 10,
           clientX: 233, // (233-100)/200 = 0.665 -> 0.67
           clientY: 350, // (350-200)/100 = 1.5 -> clamped to 1
         }),
       );
     });
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.67, y: 1 });
+    // 下端付近（y > 0.78）ではラベルが上に回るクラス is-above が付く
+    expect(activeMarker.classList.contains('is-above')).toBe(true);
 
     await act(async () => {
-      window.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+      window.dispatchEvent(pointerEvent('pointerup', { bubbles: true, pointerId: 10 }));
     });
 
-    // ドラッグ中の連続更新が 1 ステップで Undo され、ドラッグ直前の (0.5, 0.5) に戻ること
+    // 2回目のドラッグ (pointerId: 11): (0.67, 1) -> (0.1, 0.1) -> (0.2, 0.3)
+    await act(async () => {
+      stage.dispatchEvent(
+        pointerEvent('pointerdown', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          pointerId: 11,
+          clientX: 120,
+          clientY: 210,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          bubbles: true,
+          pointerId: 11,
+          clientX: 140,
+          clientY: 230,
+        }),
+      );
+      window.dispatchEvent(pointerEvent('pointerup', { bubbles: true, pointerId: 11 }));
+    });
+    expect(latestWs.characters[0]!.center).toEqual({ x: 0.2, y: 0.3 });
+
+    // 1回目の Undo で2回目のドラッグ前の (0.67, 1) に戻る
     const undoBtn = container.querySelector<HTMLButtonElement>('button[aria-label="元に戻す"]')!;
+    await act(async () => undoBtn.click());
+    expect(latestWs.characters[0]!.center).toEqual({ x: 0.67, y: 1 });
+
+    // 2回目の Undo で1回目のドラッグ前の (0.5, 0.5) に戻る
     await act(async () => undoBtn.click());
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.5, y: 0.5 });
   });

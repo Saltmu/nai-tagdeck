@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import type { CharacterCenter } from '../types';
 import { normalizeCenter } from '../lib/workspace';
 
@@ -12,7 +12,7 @@ export interface PeerCharacterCenter {
 interface Props {
   characterName: string;
   center: CharacterCenter;
-  onChange: (center: CharacterCenter) => void;
+  onChange: (center: CharacterCenter, mergeKey?: string) => void;
   /** 現在の出力画像サイズ。比率とラベルの表示に使う。 */
   canvasSize: { width: number; height: number };
   /** 他の ON キャラクターの位置一覧。 */
@@ -24,9 +24,15 @@ const GRID_COLS = ['A', 'B', 'C', 'D', 'E'] as const;
 const KEY_STEP = 0.05;
 const KEY_FINE_STEP = 0.01;
 const DEFAULT_CENTER: CharacterCenter = { x: 0.5, y: 0.5 };
+/** ステージの最大辺（px）。縦・横どちらの比率でもこの枠内に正確な縦横比で収める。 */
+const STAGE_MAX_PX = 200;
 
 function formatCoord(value: number): string {
   return value.toFixed(2);
+}
+
+function coordKey(c: CharacterCenter): string {
+  return `${formatCoord(c.x)},${formatCoord(c.y)}`;
 }
 
 /**
@@ -48,6 +54,7 @@ export function CharacterCenterPicker({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const dragCleanupRef = useRef<(() => void) | null>(null);
+  const dragSeqRef = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -55,7 +62,7 @@ export function CharacterCenterPicker({
     };
   }, []);
 
-  const updateFromClientPoint = (clientX: number, clientY: number) => {
+  const updateFromClientPoint = (clientX: number, clientY: number, mergeKey: string) => {
     const el = stageRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -63,7 +70,7 @@ export function CharacterCenterPicker({
     const rawX = (clientX - rect.left) / rect.width;
     const rawY = (clientY - rect.top) / rect.height;
     const next = normalizeCenter({ x: rawX, y: rawY });
-    if (next) onChangeRef.current(next);
+    if (next) onChangeRef.current(next, mergeKey);
   };
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -71,11 +78,15 @@ export function CharacterCenterPicker({
     e.preventDefault();
     dragCleanupRef.current?.();
     stageRef.current?.focus();
+    const pointerId = e.pointerId;
+    dragSeqRef.current += 1;
+    const mergeKey = `drag-${dragSeqRef.current}`;
     setDragging(true);
-    updateFromClientPoint(e.clientX, e.clientY);
+    updateFromClientPoint(e.clientX, e.clientY, mergeKey);
 
     const onMove = (ev: PointerEvent) => {
-      updateFromClientPoint(ev.clientX, ev.clientY);
+      if (ev.pointerId !== pointerId) return;
+      updateFromClientPoint(ev.clientX, ev.clientY, mergeKey);
     };
     const cleanup = () => {
       dragCleanupRef.current = null;
@@ -83,7 +94,8 @@ export function CharacterCenterPicker({
       window.removeEventListener('pointerup', onEnd);
       window.removeEventListener('pointercancel', onEnd);
     };
-    const onEnd = () => {
+    const onEnd = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
       setDragging(false);
       cleanup();
     };
@@ -116,12 +128,31 @@ export function CharacterCenterPicker({
         return;
     }
     e.preventDefault();
-    if (next) onChange(next);
+    if (next) onChange(next, 'key');
   };
 
-  const aspect = canvasSize.width > 0 && canvasSize.height > 0
-    ? `${canvasSize.width} / ${canvasSize.height}`
-    : '832 / 1216';
+  const validSize = canvasSize.width > 0 && canvasSize.height > 0
+    ? canvasSize
+    : { width: 832, height: 1216 };
+  const scale = STAGE_MAX_PX / Math.max(validSize.width, validSize.height);
+  const stageWidthPx = Math.round(validSize.width * scale);
+  const aspect = `${validSize.width} / ${validSize.height}`;
+
+  // 同じ座標に複数マーカーがあるとき、ラベルが重なって隠れないよう座標ごとの順番（stackIndex）を計算する。
+  // 操作中のキャラクターの基準スロットを 0 とし、同じ座標の他キャラは 1, 2... と下へずらす。
+  const peerSlots = useMemo(() => {
+    const counts = new Map<string, number>();
+    counts.set(coordKey(center), 1);
+    return peers.map((peer) => {
+      const pos = peer.center ?? DEFAULT_CENTER;
+      const key = coordKey(pos);
+      const slot = counts.get(key) ?? 0;
+      counts.set(key, slot + 1);
+      return { peer, pos, isAuto: peer.center === undefined, slot };
+    });
+  }, [center, peers]);
+
+  const activeNearBottom = center.y > 0.78;
 
   return (
     <div className="center-picker">
@@ -130,7 +161,7 @@ export function CharacterCenterPicker({
           <div
             ref={stageRef}
             className={`center-stage${dragging ? ' is-dragging' : ''}`}
-            style={{ aspectRatio: aspect }}
+            style={{ aspectRatio: aspect, maxWidth: `${stageWidthPx}px` }}
             tabIndex={0}
             role="group"
             data-undo-merge=""
@@ -139,14 +170,17 @@ export function CharacterCenterPicker({
             onKeyDown={handleKeyDown}
           >
             <div className="center-stage-grid" aria-hidden="true" />
-            {peers.map((peer) => {
-              const pos = peer.center ?? DEFAULT_CENTER;
-              const isAuto = peer.center === undefined;
+            {peerSlots.map(({ peer, pos, isAuto, slot }) => {
+              const nearBottom = pos.y > 0.78;
               return (
                 <div
                   key={peer.id}
-                  className={`center-marker center-marker-peer${isAuto ? ' is-auto' : ''}`}
-                  style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%` }}
+                  className={`center-marker center-marker-peer${isAuto ? ' is-auto' : ''}${nearBottom ? ' is-above' : ''}`}
+                  style={{
+                    left: `${pos.x * 100}%`,
+                    top: `${pos.y * 100}%`,
+                    ['--stack-index' as string]: slot,
+                  }}
                   title={`${peer.name}: (${formatCoord(pos.x)}, ${formatCoord(pos.y)})${isAuto ? '（未指定・中央）' : ''}`}
                 >
                   <span className="center-marker-dot" aria-hidden="true" />
@@ -155,8 +189,12 @@ export function CharacterCenterPicker({
               );
             })}
             <div
-              className="center-marker center-marker-active"
-              style={{ left: `${center.x * 100}%`, top: `${center.y * 100}%` }}
+              className={`center-marker center-marker-active${activeNearBottom ? ' is-above' : ''}`}
+              style={{
+                left: `${center.x * 100}%`,
+                top: `${center.y * 100}%`,
+                ['--stack-index' as string]: 0,
+              }}
               title={`${characterName}: (${formatCoord(center.x)}, ${formatCoord(center.y)})`}
             >
               <span className="center-marker-dot" aria-hidden="true" />
@@ -164,7 +202,7 @@ export function CharacterCenterPicker({
             </div>
           </div>
           <span className="center-stage-caption">
-            キャンバス比率 {canvasSize.width}×{canvasSize.height}
+            キャンバス比率 {validSize.width}×{validSize.height}
           </span>
         </div>
 

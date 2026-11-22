@@ -32,7 +32,7 @@ function isTextEntry(target: EventTarget | null): boolean {
   return !['button', 'checkbox', 'radio', 'range', 'file', 'color', 'submit', 'reset', 'image', 'hidden'].includes(type);
 }
 
-function isUndoMergedControl(target: EventTarget | null): boolean {
+function isUndoFocusScopedControl(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (isTextEntry(target)) return true;
   return target.closest('[data-undo-merge]') !== null;
@@ -111,16 +111,24 @@ export function useTagUndo(
       const activeControl = document.activeElement;
       const sameControl = activeControl !== null && activeControl === lastControlRef.current;
       const editing = sameControl && isTextEntry(activeControl);
-      const mergeControl = sameControl && isUndoMergedControl(activeControl);
+      const sameCenterMerge =
+        action.type === 'setCharacterCenter' &&
+        previous?.type === 'setCharacterCenter' &&
+        previous.id === action.id &&
+        (action.mergeKey !== undefined
+          ? action.mergeKey === previous.mergeKey &&
+            (action.mergeKey.startsWith('drag-') || (sameControl && now - lastAtRef.current < EDIT_MERGE_MS))
+          : previous.mergeKey === undefined && editing && now - lastAtRef.current < EDIT_MERGE_MS);
       const merge =
         previous !== null &&
         previous.type === action.type &&
-        (((action.type === 'renameCharacter' || action.type === 'setCharacterNegative' || action.type === 'setCharacterCenter') &&
-          previous.type === action.type &&
-          'id' in previous &&
-          previous.id === action.id &&
-          (action.type === 'setCharacterCenter' ? mergeControl : editing) &&
-          now - lastAtRef.current < EDIT_MERGE_MS) ||
+        (sameCenterMerge ||
+          ((action.type === 'renameCharacter' || action.type === 'setCharacterNegative') &&
+            previous.type === action.type &&
+            'id' in previous &&
+            previous.id === action.id &&
+            editing &&
+            now - lastAtRef.current < EDIT_MERGE_MS) ||
           (action.type === 'setWeight' &&
             previous.type === 'setWeight' &&
             sameTag(previous, action) &&
@@ -198,7 +206,7 @@ export function useTagUndo(
 
   useEffect(() => {
     const onFocusOut = (event: FocusEvent) => {
-      if (isUndoMergedControl(event.target)) {
+      if (isUndoFocusScopedControl(event.target)) {
         lastActionRef.current = null;
         lastControlRef.current = null;
       }

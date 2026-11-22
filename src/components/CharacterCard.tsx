@@ -175,10 +175,11 @@ export function CharacterCard({
             center={character.center}
             canvasSize={canvasSize}
             peers={peerCenters}
-            onChange={(center) => dispatch({
+            onChange={(center, mergeKey) => dispatch({
               type: 'setCharacterCenter',
               id,
               center,
+              ...(mergeKey ? { mergeKey } : {}),
             })}
           />
         )}
