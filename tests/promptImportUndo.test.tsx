@@ -189,6 +189,20 @@ it('confirms when a PNG would replace an edited negative that the active preset 
   expect(container.textContent).toContain('custom neg');
 });
 
+it('does not apply a PNG after saving fails while the confirmation is open', async () => {
+  await click(button('existing を削除'));
+  const dialog = await dropImport();
+  await click(button('適用', dialog));
+  expect(chooseDialog()?.textContent).toContain('変更が反映されていません');
+  vi.mocked(setKV).mockRejectedValue(new Error('disk'));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 400)); });
+  expect(container.textContent).toContain('保存できません');
+  expect(container.querySelector('.prompt-import-dialog')).toBeNull();
+  await click(button('反映せずに適用'));
+  expect(preview()).toBe('ONのタグがありません');
+  expect(field('steps')?.value).toBe('19');
+});
+
 it('saves the current preset before applying the image prompt', async () => {
   const dialog = await dropImport();
   await click(button('適用', dialog));

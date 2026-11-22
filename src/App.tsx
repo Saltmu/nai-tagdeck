@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type MouseEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
 import { SettingsView } from './components/SettingsView';
@@ -62,6 +62,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
   const [promptSource, setPromptSource] = useState<PromptSource | null>(null);
+  const importEpoch = useRef(0);
   const pngInput = useRef<HTMLInputElement>(null);
   // 広い画面では、画像エリアをクリックしたらドックを閉じる（バーは初期表示と同じ形で残る）
   const [dockCollapse, setDockCollapse] = useState(0);
@@ -91,6 +92,16 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     setActiveId: presets.setActiveId,
   }, extrasSync);
   const dispatch = tagUndo.dispatch;
+  const forgetExternalRef = useRef(tagUndo.forgetExternal);
+  forgetExternalRef.current = tagUndo.forgetExternal;
+  const editGeneration = useCallback((patch: Partial<GenerationSettings>) => {
+    forgetExternalRef.current({ generation: patch });
+    updateGeneration(patch);
+  }, [updateGeneration]);
+  const editCharacterNegative = useCallback((characterNegativePrompt: string) => {
+    forgetExternalRef.current({ characterNegativePrompt });
+    updateSettings({ characterNegativePrompt });
+  }, [updateSettings]);
   const openEditor = useCallback(() => setTab('editor'), []);
   const firstRunReady = dictionary.loaded && !dictionary.error &&
     [persistence, settingsPersistence, generationPersistence, ...presets.persistence].every((state) => state.loaded && !state.error);
@@ -136,14 +147,14 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
 
   const applySeed = useCallback(
     (seed: number) => {
-      updateGeneration({ seed });
+      editGeneration({ seed });
       show(`シード ${seed} を次の生成に使います`);
     },
-    [updateGeneration, show],
+    [editGeneration, show],
   );
 
   const { getBackup, importBackup } = useBackupTransfer({
-    dictionary, presets, workspace, dispatch, settings, updateSettings, generation, updateGeneration,
+    dictionary, presets, workspace, dispatch, settings, updateSettings, generation, updateGeneration: editGeneration,
   });
   const openSettings = useCallback(() => setTab('settings'), []);
   const { blocker, startGenerate } = useGenerationControls({
@@ -162,19 +173,20 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     },
     [firstRunReady],
   );
-  const handleCharacterNegativeChange = useCallback(
-    (characterNegativePrompt: string) => updateSettings({ characterNegativePrompt }),
-    [updateSettings],
-  );
+  const handleCharacterNegativeChange = editCharacterNegative;
   const handleSyntaxChange = useCallback(
     (weightSyntax: WeightSyntax) => updateSettings({ weightSyntax }),
     [updateSettings],
   );
   const handleSizeChange = useCallback(
-    (size: SizeKey) => updateGeneration({ size }),
-    [updateGeneration],
+    (size: SizeKey) => editGeneration({ size }),
+    [editGeneration],
   );
+  useEffect(() => {
+    if (!firstRunReady || !promptSource) importEpoch.current += 1;
+  }, [firstRunReady, promptSource]);
   const applyPrompt = async (result: PromptImport, applyGeneration: boolean) => {
+    const epoch = importEpoch.current;
     const active = presets.presets.find((preset) => preset.id === presets.activeId) ?? null;
     const nextGeneration = applyGeneration ? normalizeGeneration({ ...generation, ...result.generation.values }) : null;
     const generationPatch: Partial<GenerationSettings> = {};
@@ -208,7 +220,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       action,
       okLabel: '適用',
     });
-    if (!choice) return false;
+    if (!choice || epoch !== importEpoch.current) return false;
     if (choice === 'save' && active) presets.setPresets(overwritePreset(presets.presets, active.id, workspace));
     const nextMode = nextGeneration?.mode ?? generation.mode;
     const extras: UndoExtras = {};
@@ -366,7 +378,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               generatePanel={
                 <GeneratePanel
                   generation={generation}
-                  onGenerationChange={updateGeneration}
+                  onGenerationChange={editGeneration}
                   generator={generator}
                   token={token}
                   onOpenSettings={openSettings}

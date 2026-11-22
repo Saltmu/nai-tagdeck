@@ -381,6 +381,30 @@ it('restores character negative and generation only on the import step', async (
   expect(characterNegativePrompt).toBe('lowres');
 });
 
+it('keeps a manual generation value that matches an earlier import', async () => {
+  let generation: GenerationSettings = { ...DEFAULT_GENERATION, steps: 19 };
+  const sync: UndoExtrasSync = {
+    capture: () => ({ characterNegativePrompt: '', generation: { ...generation } }),
+    restore: (extras: UndoExtras) => {
+      if (extras.generation) generation = { ...generation, ...extras.generation };
+    },
+  };
+  function ExtrasHarness({ initial }: { initial: Workspace }) {
+    const [workspace, dispatch] = useReducer(workspaceReducer, initial);
+    ws = workspace;
+    api = useTagUndo(workspace, dispatch, undefined, sync);
+    return null;
+  }
+  await act(async () => root.render(<ExtrasHarness initial={ws} />));
+  await run(() => api.dispatch({ type: 'replace', workspace: emptyWorkspace() }, { generation: { steps: 28 } }));
+  await run(() => api.dispatch({ type: 'replace', workspace: emptyWorkspace() }, { generation: { steps: 23 } }));
+  generation = { ...generation, steps: 28 };
+  await run(() => api.forgetExternal({ generation: { steps: 28 } }));
+  await run(() => api.undo());
+  await run(() => api.undo());
+  expect(generation.steps).toBe(28);
+});
+
 it('does not record an action that changes nothing', async () => {
   await run(() => api.dispatch({ type: 'move', target: BASE, category: 'appearance', id: idOf('d'), delta: 1 }));
   expect(api.canUndo).toBe(false);

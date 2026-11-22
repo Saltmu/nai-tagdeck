@@ -85,6 +85,40 @@ function extrasToApply(
   return extras;
 }
 
+/** 履歴の外で変えた項目は、以降の Undo / Redo で戻さない。 */
+function stripEdited(change: ExtrasChange | undefined, edited: UndoExtras): ExtrasChange | undefined {
+  if (!change) return undefined;
+  const before: UndoExtras = {
+    ...change.before,
+    generation: change.before.generation ? { ...change.before.generation } : undefined,
+  };
+  const after: UndoExtras = {
+    ...change.after,
+    generation: change.after.generation ? { ...change.after.generation } : undefined,
+  };
+  if (edited.characterNegativePrompt !== undefined) {
+    delete before.characterNegativePrompt;
+    delete after.characterNegativePrompt;
+  }
+  if (edited.generation) {
+    for (const key of Object.keys(edited.generation) as (keyof GenerationSettings)[]) {
+      delete before.generation?.[key];
+      delete after.generation?.[key];
+    }
+  }
+  if (before.generation && Object.keys(before.generation).length === 0) delete before.generation;
+  if (after.generation && Object.keys(after.generation).length === 0) delete after.generation;
+  if (
+    before.characterNegativePrompt === undefined &&
+    before.generation === undefined &&
+    after.characterNegativePrompt === undefined &&
+    after.generation === undefined
+  ) {
+    return undefined;
+  }
+  return { before, after };
+}
+
 /** Undo / Redo で実際に戻した項目だけを、反対側の履歴へ残す。 */
 function keptChange(change: ExtrasChange, applied: UndoExtras): ExtrasChange | undefined {
   const before: UndoExtras = {};
@@ -340,12 +374,23 @@ export function useTagUndo(
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  const forgetExternal = useCallback((edited: UndoExtras) => {
+    if (!pastRef.current.some((step) => step.extras) && !futureRef.current.some((step) => step.extras)) return;
+    const nextPast = pastRef.current.map((step) => ({ ...step, extras: stripEdited(step.extras, edited) }));
+    const nextFuture = futureRef.current.map((step) => ({ ...step, extras: stripEdited(step.extras, edited) }));
+    pastRef.current = nextPast;
+    futureRef.current = nextFuture;
+    setPast(nextPast);
+    setFuture(nextFuture);
+  }, []);
+
   const canUndo = past.length > 0;
   const canRedo = future.length > 0;
   return {
     dispatch: trackedDispatch,
     undo,
     redo,
+    forgetExternal,
     canUndo,
     canRedo,
     status,
