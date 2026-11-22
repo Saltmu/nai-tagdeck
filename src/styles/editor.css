@@ -267,9 +267,13 @@
   min-width: min(8rem, 100%);
 }
 
-.tag-category-move,
-.tag-edit-move {
+.tag-category-move {
   max-width: 7rem;
+}
+
+.tag-edit-move {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .tag-alias {
