@@ -70,6 +70,13 @@ it('ケモノモードでは送信時と同じ fur dataset を表示し、コピ
   expect(onCopy).toHaveBeenCalledWith('fur dataset', 'ベース');
 });
 
+it('ケモノでもベースもキャラも空のときは fur dataset を出さず、コピーできない', async () => {
+  await render({ mode: 'furry', basePrompt: '', characterPrompts: [] });
+  const base = item('ベース');
+  expect(base.querySelector('output')?.textContent).toBe('ONのタグがありません');
+  expect(button('コピー', base).disabled).toBe(true);
+});
+
 it('アニメモードではベースをそのまま出し、空のときはコピーできない', async () => {
   await render({ mode: 'anime', basePrompt: '' });
   const base = item('ベース');

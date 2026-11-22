@@ -23,7 +23,10 @@ interface Props {
 export function PromptPreview({
   basePrompt, characterPrompts, syntax, onSyntaxChange, onCopy, negativePrompt, mode = 'anime', characterNegative,
 }: Props) {
-  const shownBase = mode === 'furry' ? prefixFurryDataset(basePrompt) : basePrompt;
+  // ベースもキャラも空のケモノは生成しない。そのときは fur dataset だけを出さない。
+  const shownBase = mode === 'furry' && (basePrompt || characterPrompts.length > 0)
+    ? prefixFurryDataset(basePrompt)
+    : basePrompt;
   return (
     <div className="preview">
       <div>
