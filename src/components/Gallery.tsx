@@ -153,7 +153,7 @@ export function Gallery({
       <div
         className="gallery-meter"
         role="group"
-        aria-label={`タブ内一時保存 ${images.length}/${MAX_IMAGE_HISTORY_COUNT}枚（ピン留め保護 ${pinnedCount}枚、保存済み ${downloadedCount}枚）`}
+        aria-label={`タブ内一時保存 ${images.length}/${MAX_IMAGE_HISTORY_COUNT}枚（ピン留め ${pinnedCount}枚、DL操作済み ${downloadedCount}枚）`}
       >
         <div className="gallery-meter-bar" aria-hidden="true">
           {pinnedCount > 0 && (
@@ -180,13 +180,19 @@ export function Gallery({
             <TempIcon />
             <span>タブ一時保存</span>
           </span>
-          <span className="gallery-chip is-pinned" title="ピン留め画像は自動削除から保護され、ZIP 保存の対象になります">
+          <span
+            className="gallery-chip is-pinned"
+            title="ピン留め画像は上限超過時に後から削除され（すべてピン留め時はDL操作済み・古い順）、ZIP 保存の対象になります"
+          >
             <PinIcon filled />
-            <span>保護 {pinnedCount}</span>
+            <span>ピン留め {pinnedCount}</span>
           </span>
-          <span className="gallery-chip is-saved" title="上限時はピン留め以外から、保存済み・古い順に自動削除">
+          <span
+            className="gallery-chip is-saved"
+            title="ダウンロードを開始した画像（保存完了はブラウザで確認）。上限超過時はピン留め以外からDL操作済み・古い順に削除"
+          >
             <DownloadIcon />
-            <span>保存済 {downloadedCount}</span>
+            <span>DL操作済 {downloadedCount}</span>
           </span>
         </div>
       </div>
@@ -237,7 +243,7 @@ export function Gallery({
                   className={`btn thumb-pin${img.pinned ? ' is-pinned' : ''}`}
                   aria-pressed={img.pinned}
                   aria-label={`生成画像 ${images.length - i}をピン留め`}
-                  title={img.pinned ? 'ピン留めを外す' : '自動削除から保護して ZIP 保存対象にする'}
+                  title={img.pinned ? 'ピン留めを外す' : 'ピン留め（上限超過時に後から削除・ZIP保存対象）'}
                   onClick={() => onTogglePin(img.id)}
                 >
                   <PinIcon filled={img.pinned} />
@@ -245,8 +251,8 @@ export function Gallery({
                 <button
                   type="button"
                   className={`btn thumb-download${img.downloaded ? ' is-downloaded' : ''}`}
-                  aria-label={`生成画像 ${images.length - i}のPNGを${img.downloaded ? '再ダウンロード（ダウンロード済み）' : 'ダウンロード'}`}
-                  title={img.downloaded ? 'PNGを再ダウンロード（ダウンロード済み）' : 'PNGをダウンロード'}
+                  aria-label={`生成画像 ${images.length - i}のPNGを${img.downloaded ? '再ダウンロード（DL操作済み）' : 'ダウンロード'}`}
+                  title={img.downloaded ? 'PNGを再ダウンロード（DL操作済み）' : 'PNGをダウンロード'}
                   onClick={() => downloadImage(img)}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

@@ -317,7 +317,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
               className="icon-btn"
               aria-pressed={image.pinned}
               aria-label="ピン留め"
-              title={image.pinned ? 'ピン留めを外す' : '履歴の自動削除から保護する'}
+              title={image.pinned ? 'ピン留めを外す' : 'ピン留め（上限超過時に後から削除・ZIP保存対象）'}
               onClick={onTogglePin}
             >
               <PinIcon filled={image.pinned} />
