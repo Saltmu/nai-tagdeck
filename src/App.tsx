@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type MouseEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
 import { SettingsView } from './components/SettingsView';
@@ -13,7 +13,7 @@ import { useDictionary } from './hooks/useDictionary';
 import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWorkspace';
 import { Toast, type ToastHandle } from './components/Toast';
 import { useToken } from './hooks/useToken';
-import { useTagUndo } from './hooks/useTagUndo';
+import { useTagUndo, type UndoExtras, type UndoExtrasSync } from './hooks/useTagUndo';
 import { useImages } from './hooks/useImages';
 import { useGenerator } from './hooks/useGenerator';
 import { usePresets } from './hooks/usePresets';
@@ -21,14 +21,17 @@ import { useBackupTransfer } from './hooks/useBackupTransfer';
 import { useGenerationControls } from './hooks/useGenerationControls';
 import { useLatestImageNotice } from './hooks/useLatestImageNotice';
 import { useFirstRun } from './hooks/useFirstRun';
-import { isEmptyWorkspace } from './lib/presets';
+import { confirmUnsavedChanges, type UnsavedChoice } from './components/confirmUnsaved';
+import { useDialogs } from './components/Dialogs';
+import { isEmptyWorkspace, overwritePreset, sameWorkspace, sameWorkTags } from './lib/presets';
 import { isDefaultSettings } from './lib/settings';
-import { isDefaultGeneration, sizeOf, type SizeKey } from './lib/generation';
+import { isDefaultGeneration, normalizeGeneration, sizeOf, type GenerationSettings, type SizeKey } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
 import { importedBaseForMode, type PromptImport } from './lib/promptImport';
+import { defaultNegativeTags } from './lib/workspace';
 import type { WeightSyntax } from './types';
 
 type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
@@ -59,6 +62,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
   const [promptSource, setPromptSource] = useState<PromptSource | null>(null);
+  const confirmAbortRef = useRef<AbortController | null>(null);
   const pngInput = useRef<HTMLInputElement>(null);
   // 広い画面では、画像エリアをクリックしたらドックを閉じる（バーは初期表示と同じ形で残る）
   const [dockCollapse, setDockCollapse] = useState(0);
@@ -66,10 +70,33 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     if ((e.target as Element).closest('.dock')) return;
     if (window.matchMedia?.('(min-width: 1100px)').matches) setDockCollapse((n) => n + 1);
   };
+  const dialogs = useDialogs();
+  const settingsRef = useRef(settings);
+  const generationRef = useRef(generation);
+  const workspaceRef = useRef(workspace);
+  const presetsRef = useRef(presets);
+  const entriesRef = useRef(dictionary.entries);
+  settingsRef.current = settings;
+  generationRef.current = generation;
+  workspaceRef.current = workspace;
+  presetsRef.current = presets;
+  entriesRef.current = dictionary.entries;
+  const extrasSync = useMemo<UndoExtrasSync>(() => ({
+    capture: () => ({
+      characterNegativePrompt: settingsRef.current.characterNegativePrompt,
+      generation: { ...generationRef.current },
+    }),
+    restore: (extras) => {
+      if (extras.characterNegativePrompt !== undefined) {
+        updateSettings({ characterNegativePrompt: extras.characterNegativePrompt });
+      }
+      if (extras.generation) updateGeneration(extras.generation);
+    },
+  }), [updateGeneration, updateSettings]);
   const tagUndo = useTagUndo(workspace, rawDispatch, {
     activeId: presets.activeId,
     setActiveId: presets.setActiveId,
-  });
+  }, extrasSync);
   const dispatch = tagUndo.dispatch;
   const openEditor = useCallback(() => setTab('editor'), []);
   const firstRunReady = dictionary.loaded && !dictionary.error &&
@@ -154,19 +181,94 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     (size: SizeKey) => updateGeneration({ size }),
     [updateGeneration],
   );
-  const applyPrompt = (result: PromptImport, applyGeneration: boolean) => {
-    setPromptSource(null);
-    const nextMode = applyGeneration ? (result.generation.values.mode ?? generation.mode) : generation.mode;
-    dispatch({ type: 'replace', workspace: {
-      base: importedBaseForMode(result, nextMode),
-      characters: result.characters,
-      negative: result.negative ?? workspace.negative,
-    } });
-    presets.setActiveId(null);
-    if (result.characterNegative !== undefined) updateSettings({ characterNegativePrompt: result.characterNegative });
-    if (applyGeneration) updateGeneration(result.generation.values);
+  useEffect(() => {
+    if (!firstRunReady && promptSource !== null) setPromptSource(null);
+    return () => { confirmAbortRef.current?.abort(); };
+  }, [firstRunReady, promptSource]);
+  const applyPrompt = async (result: PromptImport, applyGeneration: boolean) => {
+    const currentWorkspace = workspaceRef.current;
+    const store = presetsRef.current;
+    const currentSettings = settingsRef.current;
+    const currentGeneration = generationRef.current;
+    const currentEntries = entriesRef.current;
+    const active = store.presets.find((preset) => preset.id === store.activeId) ?? null;
+    const nextGeneration = applyGeneration ? normalizeGeneration({ ...currentGeneration, ...result.generation.values }) : null;
+    const generationPatch: Partial<GenerationSettings> = {};
+    if (nextGeneration) {
+      for (const key of Object.keys(result.generation.values) as (keyof GenerationSettings)[]) {
+        const value = nextGeneration[key];
+        if (value !== undefined && !Object.is(value, currentGeneration[key])) generationPatch[key] = value as never;
+      }
+    }
+    const generationChanges = Object.keys(generationPatch).length > 0;
+    const negativeChanges = result.negative !== undefined && !sameWorkTags(result.negative, currentWorkspace.negative);
+    // 古いプリセットはネガティブを持たず、空の作業状態もネガティブを見ない。PNG が編集済みの全体ネガティブを置き換えるときだけ、ここで確認する。
+    const negativeUnsaved = negativeChanges
+      && !sameWorkTags(currentWorkspace.negative, defaultNegativeTags())
+      && (active === null || active.workspace.negative === undefined);
+    const dirty = (active ? !sameWorkspace(active.workspace, currentWorkspace) : !isEmptyWorkspace(currentWorkspace)) || negativeUnsaved;
+    const nextCharacterNegative = result.characterNegative !== undefined && result.characterNegative !== currentSettings.characterNegativePrompt
+      ? result.characterNegative
+      : null;
+    let choice: UnsavedChoice | null = 'proceed';
+    if (dirty) {
+      const also = [
+        negativeChanges ? '全体ネガティブ' : '',
+        nextCharacterNegative !== null ? '共通のキャラ用ネガティブ' : '',
+        generationChanges ? '生成設定' : '',
+      ].filter(Boolean);
+      const action = also.length > 0
+        ? `画像のプロンプトを適用しますか？作業中のベースとキャラクターを置き換え、${also.join('と')}も更新します。`
+        : '画像のプロンプトを適用しますか？作業中のベースとキャラクターを置き換えます。';
+      confirmAbortRef.current?.abort();
+      const controller = new AbortController();
+      confirmAbortRef.current = controller;
+      try {
+        choice = await confirmUnsavedChanges(dialogs, {
+          dirty,
+          activeName: active?.name ?? null,
+          action,
+          okLabel: '適用',
+          signal: controller.signal,
+        });
+      } finally {
+        if (confirmAbortRef.current === controller) confirmAbortRef.current = null;
+      }
+      if (!choice || controller.signal.aborted) return false;
+      // 確認を開いている間にバックアップや辞書更新などで状態が変わっていたら、古い前提のまま適用せずプレビューへ戻す。
+      if (
+        currentWorkspace !== workspaceRef.current
+        || store.presets !== presetsRef.current.presets
+        || store.activeId !== presetsRef.current.activeId
+        || currentSettings !== settingsRef.current
+        || currentGeneration !== generationRef.current
+        || currentEntries !== entriesRef.current
+      ) {
+        show('確認中に内容が更新されたため、適用を中止しました。もう一度適用してください');
+        return false;
+      }
+    }
+    if (choice === 'save' && active) {
+      store.setPresets(overwritePreset(store.presets, active.id, currentWorkspace));
+    }
+    const nextMode = nextGeneration?.mode ?? currentGeneration.mode;
+    const extras: UndoExtras = {};
+    if (nextCharacterNegative !== null) extras.characterNegativePrompt = nextCharacterNegative;
+    if (generationChanges) extras.generation = generationPatch;
+    dispatch({
+      type: 'replace',
+      workspace: {
+        base: importedBaseForMode(result, nextMode),
+        characters: result.characters,
+        negative: result.negative ?? currentWorkspace.negative,
+      },
+    }, extras);
+    store.setActiveId(null);
     openEditor();
-    show('画像のプロンプトを読み込みました');
+    show(choice === 'save' && active
+      ? `プリセット「${active.name}」に変更を上書きし、画像のプロンプトを読み込みました`
+      : '画像のプロンプトを読み込みました');
+    return true;
   };
 
   const headerRef = useRef<HTMLElement>(null);

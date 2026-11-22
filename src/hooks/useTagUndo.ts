@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch } from 'react';
+import type { GenerationSettings } from '../lib/generation';
 import type { Workspace } from '../types';
 import { workspaceReducer, type WorkspaceAction } from '../lib/workspace';
 
@@ -8,14 +9,34 @@ const DRAG_MERGE_MS = 500;
 /** 重み入力とキャラクター名は、この間隔を空けるか欄を離れたら別のステップにする。 */
 const EDIT_MERGE_MS = 3000;
 
+/** PNG 読み込みなど、ワークスペースと同時に変えた値。指定した項目だけをそのステップで戻す。 */
+export interface UndoExtras {
+  characterNegativePrompt?: string;
+  /** 適用で値が変わった生成項目だけ。 */
+  generation?: Partial<GenerationSettings>;
+}
+
+interface ExtrasChange {
+  before: UndoExtras;
+  after: UndoExtras;
+}
+
+/** 変更前の値を取り、Undo / Redo で指定項目だけ戻す。 */
+export interface UndoExtrasSync {
+  capture: () => { characterNegativePrompt: string; generation: GenerationSettings };
+  restore: (extras: UndoExtras) => void;
+}
+
 interface PastStep {
   before: Workspace;
   activePresetId: string | null;
+  extras?: ExtrasChange;
 }
 
 interface FutureStep {
   state: Workspace;
   activePresetId: string | null;
+  extras?: ExtrasChange;
 }
 
 export interface PresetSelectionSync {
@@ -52,17 +73,48 @@ function sameTag(a: WorkspaceAction, b: WorkspaceAction): boolean {
   return a.id === b.id && a.target === b.target && a.category === b.category;
 }
 
+function freezeExtras(
+  after: UndoExtras,
+  current: { characterNegativePrompt: string; generation: GenerationSettings },
+): ExtrasChange | undefined {
+  const before: UndoExtras = {};
+  const frozen: UndoExtras = {};
+  if (after.characterNegativePrompt !== undefined && after.characterNegativePrompt !== current.characterNegativePrompt) {
+    before.characterNegativePrompt = current.characterNegativePrompt;
+    frozen.characterNegativePrompt = after.characterNegativePrompt;
+  }
+  if (after.generation !== undefined) {
+    const beforeGeneration: Partial<GenerationSettings> = {};
+    const afterGeneration: Partial<GenerationSettings> = {};
+    for (const key of Object.keys(after.generation) as (keyof GenerationSettings)[]) {
+      const value = after.generation[key];
+      if (value === undefined || Object.is(value, current.generation[key])) continue;
+      beforeGeneration[key] = current.generation[key] as never;
+      afterGeneration[key] = value as never;
+    }
+    if (Object.keys(afterGeneration).length > 0) {
+      before.generation = beforeGeneration;
+      frozen.generation = afterGeneration;
+    }
+  }
+  if (frozen.characterNegativePrompt === undefined && frozen.generation === undefined) return undefined;
+  return { before, after: frozen };
+}
+
 /**
  * ワークスペース操作を 1 ステップずつ取り消す・やり直す。
  * 入力中の重み、キャラクター名、個別ネガティブ、位置、ドラッグ中の並び替えだけを 1 ステップにまとめる。
  * 欄を離れる、または 3 秒空くと、そのまとまりは終わる。
  * テキスト入力中の Ctrl/Cmd+Z は入力欄に任せ、ダイアログ表示中は反応しない。
  * 永続化の読み込みなど、この dispatch を通らない置換は履歴を捨てる。
+ * 第2引数で渡した共通キャラネガティブと生成設定は、適用時に変わった項目だけをそのステップの Undo / Redo で戻す。
+ * 生成設定や共通キャラネガティブの手入力は履歴に入らないため、Undo 時は適用前の値へ戻す。
  */
 export function useTagUndo(
   workspace: Workspace,
   dispatch: Dispatch<WorkspaceAction>,
   preset?: PresetSelectionSync,
+  extrasSync?: UndoExtrasSync,
 ) {
   const [past, setPast] = useState<PastStep[]>([]);
   const [future, setFuture] = useState<FutureStep[]>([]);
@@ -72,6 +124,7 @@ export function useTagUndo(
   const ownedRef = useRef(workspace);
   const activeIdRef = useRef<string | null>(preset?.activeId ?? null);
   const setActiveIdRef = useRef(preset?.setActiveId);
+  const extrasSyncRef = useRef(extrasSync);
   const lastActionRef = useRef<WorkspaceAction | null>(null);
   const lastControlRef = useRef<Element | null>(null);
   const lastAtRef = useRef(0);
@@ -79,6 +132,7 @@ export function useTagUndo(
   futureRef.current = future;
   activeIdRef.current = preset?.activeId ?? null;
   setActiveIdRef.current = preset?.setActiveId;
+  extrasSyncRef.current = extrasSync;
 
   // 永続化の読み込みなど、このフックを通らない更新は履歴と対応しないので捨てる。
   if (workspace !== ownedRef.current) {
@@ -105,11 +159,13 @@ export function useTagUndo(
     [dispatch],
   );
 
-  const trackedDispatch = useCallback<Dispatch<WorkspaceAction>>(
-    (action) => {
+  const trackedDispatch = useCallback(
+    (action: WorkspaceAction, extras?: UndoExtras) => {
       const before = ownedRef.current;
       const after = workspaceReducer(before, action);
-      if (after === before) {
+      const sync = extrasSyncRef.current;
+      const extrasChange = extras && sync ? freezeExtras(extras, sync.capture()) : undefined;
+      if (after === before && !extrasChange) {
         dispatch(action);
         return;
       }
@@ -127,6 +183,7 @@ export function useTagUndo(
             (action.mergeKey.startsWith('drag-') || (sameControl && now - lastAtRef.current < EDIT_MERGE_MS))
           : previous.mergeKey === undefined && editing && now - lastAtRef.current < EDIT_MERGE_MS);
       const merge =
+        !extrasChange &&
         previous !== null &&
         previous.type === action.type &&
         (sameCenterMerge ||
@@ -151,7 +208,7 @@ export function useTagUndo(
       if (!merge || pastRef.current.length === 0) {
         const next = [
           ...pastRef.current,
-          { before, activePresetId: activeIdRef.current },
+          { before, activePresetId: activeIdRef.current, extras: extrasChange },
         ];
         if (next.length > HISTORY_LIMIT) next.shift();
         pastRef.current = next;
@@ -162,8 +219,11 @@ export function useTagUndo(
         setFuture([]);
       }
       setStatus('');
-      ownedRef.current = after;
-      dispatch({ type: 'commit', workspace: after });
+      if (after !== before) {
+        ownedRef.current = after;
+        dispatch({ type: 'commit', workspace: after });
+      }
+      if (extrasChange) sync?.restore(extrasChange.after);
     },
     [dispatch],
   );
@@ -178,12 +238,13 @@ export function useTagUndo(
     setPast(nextPast);
     const nextFuture = [
       ...futureRef.current,
-      { state: current, activePresetId: currentPresetId },
+      { state: current, activePresetId: currentPresetId, extras: step.extras },
     ];
     futureRef.current = nextFuture;
     setFuture(nextFuture);
     lastActionRef.current = null;
     apply(step.before, step.activePresetId);
+    if (step.extras) extrasSyncRef.current?.restore(step.extras.before);
     setStatus(`元に戻しました。元に戻せる操作は残り ${nextPast.length} 件です。`);
   }, [apply]);
 
@@ -197,12 +258,13 @@ export function useTagUndo(
     setFuture(nextFuture);
     const nextPast = [
       ...pastRef.current,
-      { before: current, activePresetId: currentPresetId },
+      { before: current, activePresetId: currentPresetId, extras: step.extras },
     ];
     pastRef.current = nextPast;
     setPast(nextPast);
     lastActionRef.current = null;
     apply(step.state, step.activePresetId);
+    if (step.extras) extrasSyncRef.current?.restore(step.extras.after);
     setStatus(`やり直しました。やり直せる操作は残り ${nextFuture.length} 件です。`);
   }, [apply]);
 

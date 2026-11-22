@@ -79,6 +79,11 @@ export function mergePresets(existing: readonly Preset[], incoming: readonly Pre
   return sortPresets([...byId.values()]);
 }
 
+/** 並び・ON/OFF・重みまで同じか。id は比べない。 */
+export function sameWorkTags(a: readonly WorkTag[] | undefined, b: readonly WorkTag[] | undefined): boolean {
+  return sameTagList(a, b);
+}
+
 function sameTagList(a: readonly WorkTag[] | undefined, b: readonly WorkTag[] | undefined): boolean {
   const lenA = a?.length ?? 0;
   const lenB = b?.length ?? 0;

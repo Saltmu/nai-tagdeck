@@ -39,6 +39,13 @@ function button(text: string, scope: ParentNode = container): HTMLButtonElement 
 }
 
 const click = (node: HTMLElement) => act(async () => node.click());
+/** 作業中のタグがあるときは、適用のあと未保存の確認も進める。 */
+async function acceptImport(scope: ParentNode) {
+  await click(button('適用', scope));
+  const confirm = container.querySelector<HTMLDialogElement>('dialog.app-dialog-confirm');
+  if (!confirm?.open) throw new Error('未保存の確認が出ていません');
+  await click(button('適用', confirm));
+}
 const preview = () => container.querySelector('output.preview-text')?.textContent;
 
 async function pick(file: File) {
@@ -118,7 +125,7 @@ it('retains the workspace on cancel or error, then applies a drop and only the s
   expect(dialog.textContent).toContain('ステップ');
   expect(dialog.textContent).toContain('キャラクター一覧は空になります');
   await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
-  await click(button('適用', dialog));
+  await acceptImport(dialog);
   expect(container.querySelector('.tab-editor')?.getAttribute('aria-current')).toBe('page');
   expect(requestImages).not.toHaveBeenCalled();
   expect(preview()).toBe('blazer, standing, 1.2::custom tag::');
@@ -156,7 +163,7 @@ it('opens the shared PNG picker from preset actions and imports into the workspa
   expect(dialog.textContent).toContain('キャラ1　1件（未分類 0件）衣装 1件');
   expect(dialog.textContent).toContain('キャラ2　1件（未分類 1件）');
   expect(preview()).toBe('existing');
-  await click(button('適用', dialog));
+  await acceptImport(dialog);
   expect(container.querySelector('.tab-editor')?.getAttribute('aria-current')).toBe('page');
   expect([...container.querySelectorAll('.preview-item:not(.preview-negative) output')].map((output) => output.textContent))
     .toEqual(['standing', 'blazer', 'other tag']);
@@ -168,7 +175,7 @@ it('reads the viewer PNG and leaves generation settings alone when the option is
   await click(container.querySelector<HTMLButtonElement>('.thumb-btn')!);
   await click(button('プロンプトを読み込む', container.querySelector('.viewer')!));
   expect(container.querySelector('dialog')?.textContent).toContain('ベース　3件（未分類 1件）');
-  await click(button('適用', container.querySelector('dialog')!));
+  await acceptImport(container.querySelector('dialog')!);
   await click(button('生成する（Ctrl+Enter）'));
   expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
     input: 'blazer, standing, 1.2::custom tag::',
@@ -185,7 +192,7 @@ it('ignores an older read that completes after cancellation and a new selection'
   await click(button('キャンセル', container.querySelector('dialog')!));
   await pick(imageFile(pngFixture({ prompt: 'fresh tag' }), 'fresh.png'));
   await act(async () => finish(imageBytes.buffer));
-  await click(button('適用', container.querySelector('dialog')!));
+  await acceptImport(container.querySelector('dialog')!);
   expect(preview()).toBe('fresh tag');
 });
 
@@ -200,14 +207,14 @@ it('accepts a PNG dropped anywhere on the editor and toggles dragging state', as
   await drop(imageFile(pngFixture({ prompt: 'editor dropped tag' }), 'editor.png'), editor);
   expect(editor.classList.contains('is-dragging')).toBe(false);
   expect(container.querySelector('dialog')?.textContent).toContain('editor.png');
-  await click(button('適用', container.querySelector('dialog')!));
+  await acceptImport(container.querySelector('dialog')!);
   expect(preview()).toBe('editor dropped tag');
 });
 
 it('preserves fur dataset at the start even with classified tags when generation settings are not applied in anime mode', async () => {
   const furryBytes = pngFixture({ v4_prompt: caption('fur dataset, blazer, wolf') });
   await drop(imageFile(furryBytes, 'furry.png'));
-  await click(button('適用', container.querySelector('dialog')!));
+  await acceptImport(container.querySelector('dialog')!);
   expect(preview()).toBe('fur dataset, blazer, wolf');
   await click(button('生成する（Ctrl+Enter）'));
   expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
@@ -217,7 +224,7 @@ it('preserves fur dataset at the start even with classified tags when generation
   await drop(imageFile(furryBytes, 'furry.png'));
   const dialog = container.querySelector('dialog')!;
   await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
-  await click(button('適用', dialog));
+  await acceptImport(dialog);
   expect(preview()).toBe('fur dataset, blazer, wolf');
   await click(container.querySelector<HTMLButtonElement>('.preview-item button')!);
   expect(writeText).toHaveBeenCalledWith('fur dataset, blazer, wolf');
@@ -232,7 +239,7 @@ it('allows generating after importing a fur-dataset-only base with character tag
   await drop(imageFile(charOnlyFurryBytes, 'char-furry.png'));
   const dialog = container.querySelector('dialog')!;
   await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
-  await click(button('適用', dialog));
+  await acceptImport(dialog);
   expect(preview()).toBe('fur dataset');
   const characterNegative = [...container.querySelectorAll('.preview-item')].find((node) => node.querySelector('dt')?.textContent?.includes('キャラ1のネガティブ'));
   expect(characterNegative?.querySelector('output')?.textContent).toBe('lowres, aliasing, ');
@@ -250,7 +257,7 @@ it('imports and generates a fur-dataset-only PNG without character tags without 
   await drop(imageFile(furOnlyBytes, 'fur-only.png'));
   const dialog = container.querySelector('dialog')!;
   await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
-  await click(button('適用', dialog));
+  await acceptImport(dialog);
   expect(preview()).toBe('fur dataset');
   await click(button('生成する（Ctrl+Enter）'));
   expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
