@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import { type MouseEvent, type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
 import { SettingsView } from './components/SettingsView';
@@ -169,11 +169,29 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     show('画像のプロンプトを読み込みました');
   };
 
+  const headerRef = useRef<HTMLElement>(null);
+  // 固定ヘッダーの高さに合わせて .app の上余白を揃える（Android Firefox での sticky ちらつき回避のため fixed 化）
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const publish = () => {
+      const height = el.getBoundingClientRect().height;
+      if (height > 0) document.documentElement.style.setProperty('--header-height', `${height}px`);
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(el, { box: 'border-box' });
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty('--header-height');
+    };
+  }, []);
+
   const showWorkbench = tab === 'editor' || tab === 'generate';
 
   return (
     <div className="app">
-      <header className="app-header" data-occludes>
+      <header ref={headerRef} className="app-header" data-occludes>
         <h1 className="app-title" aria-label="nai-tagdeck">
           <img className="brand-icon" src={`${import.meta.env.BASE_URL}brand/icon.svg`} width="24" height="24" alt="" />
           <img className="brand-wordmark" src={`${import.meta.env.BASE_URL}brand/wordmark.svg`} width="108" height="24" alt="" />
