@@ -367,6 +367,69 @@ describe('Editor tablist', () => {
     expect(document.activeElement).toBe(check);
     expect(tabByName('B').getAttribute('aria-selected')).toBe('true');
   });
+
+  it('moves focus to the restored tab when redo disables the focused generation checkbox', async () => {
+    const dictionary: Dictionary = {
+      entries: [],
+      loaded: true,
+      error: null,
+      save: async () => {},
+      saveMany: async () => {},
+      remove: async () => {},
+      importEntries: async () => 0,
+      restoreInitial: async () => 0,
+    };
+    let initial = emptyWorkspace();
+    for (let i = 0; i < 6; i++) {
+      initial = workspaceReducer(initial, { type: 'addCharacter' });
+      initial = workspaceReducer(initial, {
+        type: 'renameCharacter',
+        id: initial.characters.at(-1)!.id,
+        name: `C${i + 1}`,
+      });
+    }
+    initial = workspaceReducer(initial, { type: 'toggleCharacter', id: initial.characters[5]!.id });
+    function Harness() {
+      const [workspace, rawDispatch] = useReducer(workspaceReducer, initial);
+      const history = useTagUndo(workspace, rawDispatch);
+      return (
+        <DialogProvider>
+          <Editor
+            workspace={workspace}
+            dispatch={history.dispatch}
+            history={history}
+            loaded
+            dictionary={dictionary}
+            syntax="brace"
+            onCopy={() => {}}
+            notify={() => {}}
+            presets={mockPresets()}
+            characterNegative=""
+            onCharacterNegativeChange={() => {}}
+            shown
+          />
+        </DialogProvider>
+      );
+    }
+    await act(async () => root.render(<Harness />));
+    const tabByName = (name: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>('.editor-tab-character')].find((tab) => tab.textContent === name)!;
+    await act(async () => tabByName('C1').click());
+    const duplicate = container.querySelector<HTMLButtonElement>('button[aria-label="C1 を複製"]')!;
+    await act(async () => duplicate.click());
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    const check = container.querySelector<HTMLInputElement>('input[aria-label="C6 を生成に含める"]')!;
+    expect(check.disabled).toBe(false);
+    check.focus();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: true, bubbles: true }));
+    });
+    expect(check.disabled).toBe(true);
+    expect(document.activeElement).toBe(tabByName('C1（コピー）'));
+    expect(tabByName('C1（コピー）').getAttribute('aria-selected')).toBe('true');
+  });
 });
 
 describe('ImageViewer keyboard and live region', () => {
