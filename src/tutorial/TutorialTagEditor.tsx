@@ -4,6 +4,7 @@ import { TagInput } from '../components/TagInput';
 import { PromptPreview } from '../components/PromptPreview';
 import { categoryLabel } from '../lib/categories';
 import { buildCharacterPrompts, buildPrompt } from '../lib/prompt';
+import { normalize } from '../lib/tagText';
 import { BASE, type WorkspaceAction } from '../lib/workspace';
 import type { TutorialStepId } from './tutorialData';
 
@@ -74,9 +75,9 @@ export function TutorialTagEditor({
   );
 
   const handleBaseAdd = (tag: string, weight: number) => {
-    const normalized = tag.trim().toLowerCase();
+    const normalized = normalize(tag);
     const alreadyEnabled = workspace.base.background.some(
-      (t) => t.enabled && t.tag.toLowerCase() === normalized,
+      (t) => t.enabled && normalize(t.tag) === normalized,
     );
     if (alreadyEnabled) {
       onBackgroundDuplicate(tag);

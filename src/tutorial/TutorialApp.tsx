@@ -45,9 +45,22 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [tokenStorage, setTokenStorage] = useState<TokenStorage>('session');
   const [savedToken, setSavedToken] = useState<string | null>(null);
-  const [sampleLoaded, setSampleLoaded] = useState(false);
+  const needsInitialSample = useMemo(() => {
+    const id = TUTORIAL_STEPS[initial.stepIndex]?.id;
+    return (
+      id === 'editor-add-background' ||
+      id === 'editor-toggle-hat' ||
+      id === 'generate-run' ||
+      id === 'complete'
+    );
+  }, [initial.stepIndex]);
+  const [sampleLoaded, setSampleLoaded] = useState(needsInitialSample);
   const [syntax, setSyntax] = useState<WeightSyntax>('numeric');
-  const [workspace, dispatch] = useReducer(workspaceReducer, undefined, emptyWorkspace);
+  const [workspace, dispatch] = useReducer(
+    workspaceReducer,
+    needsInitialSample,
+    (load) => (load ? createTutorialSampleWorkspace() : emptyWorkspace()),
+  );
   const entries = useMemo(() => createTutorialDictionary(), []);
   const [sizeKey, setSizeKey] = useState<(typeof SIZE_OPTIONS)[number]['key']>('portrait');
   const [generated, setGenerated] = useState(false);
