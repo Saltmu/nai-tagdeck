@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../src/lib/categories';
 import { sampleDictionary } from '../src/lib/sampleDictionary';
-import {
-  classifyEditorTag,
-  createTagVectorIndex,
-  evaluateTagVectorClassification,
-  predictTagCategory,
-} from '../src/lib/tagClassification';
+import { classifyEditorTag, createTagVectorIndex, predictTagCategory } from '../src/lib/tagClassification';
+import { evaluateTagVectorClassification } from '../src/lib/tagClassificationEval';
 import type { DictEntry } from '../src/types';
 
 function entry(tag: string, category: DictEntry['category'], id = `${category}:${tag}`): DictEntry {
