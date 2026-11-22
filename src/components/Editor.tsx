@@ -279,11 +279,11 @@ export function Editor({
   const aliasMap = useMemo(() => buildTagAliasMap(dictionary.entries), [dictionary.entries]);
   const characterTargets = useMemo(() => {
     const raw = characters.map((c, i) => ({ id: c.id, name: c.name.trim() || `キャラ${i + 1}` }));
-    const counts = new Map<string, number>();
+    const counts = new Map<string, number>([['ベース', 1]]);
     for (const item of raw) counts.set(item.name, (counts.get(item.name) ?? 0) + 1);
     return raw.map((item, i) => ({
       id: item.id,
-      label: (counts.get(item.name) ?? 0) > 1 ? `${item.name} (${i + 1}番目)` : item.name,
+      label: (counts.get(item.name) ?? 0) > 1 ? `${item.name} (キャラ${i + 1})` : item.name,
     }));
   }, [characters]);
   const paneTagLists: WorkTag[][] = negativeSelected

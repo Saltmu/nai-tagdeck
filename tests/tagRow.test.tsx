@@ -118,12 +118,46 @@ it('shows alias only as title tooltip by default, and renders inline alias or mo
   expect(moveButton.disabled).toBe(true);
 
   await act(async () => {
-    select.value = '1:0';
+    select.value = JSON.stringify(['c1', 'appearance']);
     select.dispatchEvent(new Event('change', { bubbles: true }));
   });
   expect(onMoveTag).not.toHaveBeenCalled();
   expect(moveButton.disabled).toBe(false);
 
+  // タグ名を変更している間は移動ボタンを無効化し、元に戻せば再度有効になる
+  const nameInput = container.querySelector<HTMLInputElement>('input[aria-label="1girl のタグを編集"]')!;
+  await act(async () => {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    set?.call(nameInput, '2girls');
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(moveButton.disabled).toBe(true);
+  await act(async () => {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    set?.call(nameInput, '1girl');
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(moveButton.disabled).toBe(false);
+
+  // moveTargets の並び順が変わっても target ID に基づいて正しい移動先へ送る
+  const reorderedTargets: MoveTargetGroup[] = [
+    { id: 'c2', label: 'キャラ2', options: [{ target: 'c2', category: 'appearance', label: '外見' }] },
+    { id: 'c1', label: 'キャラ1', options: [{ target: 'c1', category: 'appearance', label: '外見' }] },
+  ];
+  await act(async () => root.render(
+    <ul>
+      <TagRow
+        tag={tag}
+        aliases={['女の子 / おんなのこ']}
+        moveTargets={reorderedTargets}
+        onMoveTag={onMoveTag}
+        onToggle={() => {}}
+        onWeight={() => {}}
+        onEdit={onEdit}
+        onRemove={onRemove}
+      />
+    </ul>,
+  ));
   await act(async () => moveButton.click());
   expect(onMoveTag).toHaveBeenCalledWith('1', 'c1', 'appearance');
 });

@@ -49,6 +49,10 @@ interface Props {
   onDrag?: (id: string, clientY: number) => void;
 }
 
+function moveOptionKey(target: TargetId, category: PromptCategoryKey): string {
+  return JSON.stringify([target, category]);
+}
+
 function HighlightText({ text, query }: { text: string; query: string }) {
   const parts = highlightTag(text, query);
   return (
@@ -122,16 +126,18 @@ export const TagRow = memo(function TagRow({
   };
   const handleWeightChange = useCallback((weight: number) => onWeight(tag.id, weight), [onWeight, tag.id]);
   const step = (delta: number) => onWeight(tag.id, clampWeight(tag.weight + delta));
+  const selectedMove = moveTargets
+    ?.flatMap((group) => group.options)
+    .find((opt) => moveOptionKey(opt.target, opt.category) === pendingMove);
+  const hasUnsavedRename = draft.trim() !== tag.tag.trim();
   const commit = () => {
     const result = onEdit(tag.id, draft);
     setError(result);
     if (!result) setEditing(false);
   };
   const commitMove = () => {
-    if (!pendingMove || !moveTargets || !onMoveTag) return;
-    const [groupIdx, optIdx] = pendingMove.split(':').map(Number);
-    const opt = moveTargets[groupIdx ?? -1]?.options[optIdx ?? -1];
-    if (opt) onMoveTag(tag.id, opt.target, opt.category);
+    if (!selectedMove || hasUnsavedRename || !onMoveTag) return;
+    onMoveTag(tag.id, selectedMove.target, selectedMove.category);
   };
   const aliasList = typeof aliases === 'string' ? (aliases ? [aliases] : []) : (aliases ?? []);
   const aliasText = aliasList.join(' / ');
@@ -163,19 +169,21 @@ export const TagRow = memo(function TagRow({
               <select
                 className="tag-edit-move"
                 aria-label={`${tag.tag} の移動先カテゴリ`}
-                value={pendingMove}
+                value={selectedMove ? pendingMove : ''}
                 onChange={(e) => setPendingMove(e.target.value)}
               >
                 <option value="" disabled>カテゴリ移動</option>
                 {moveTargets.length === 1
-                  ? moveTargets[0]!.options.map((opt, optIdx) => (
-                      <option key={`${opt.target}:${opt.category}`} value={`0:${optIdx}`}>{opt.label}</option>
-                    ))
-                  : moveTargets.map((group, groupIdx) => (
+                  ? moveTargets[0]!.options.map((opt) => {
+                      const key = moveOptionKey(opt.target, opt.category);
+                      return <option key={key} value={key}>{opt.label}</option>;
+                    })
+                  : moveTargets.map((group) => (
                       <optgroup key={group.id} label={group.label}>
-                        {group.options.map((opt, optIdx) => (
-                          <option key={`${opt.target}:${opt.category}`} value={`${groupIdx}:${optIdx}`}>{opt.label}</option>
-                        ))}
+                        {group.options.map((opt) => {
+                          const key = moveOptionKey(opt.target, opt.category);
+                          return <option key={key} value={key}>{opt.label}</option>;
+                        })}
                       </optgroup>
                     ))}
               </select>
@@ -183,7 +191,8 @@ export const TagRow = memo(function TagRow({
                 type="button"
                 className="btn btn-small"
                 aria-label={`${tag.tag} を移動`}
-                disabled={!pendingMove}
+                title={hasUnsavedRename ? 'タグ名の変更を先に保存してください' : undefined}
+                disabled={!selectedMove || hasUnsavedRename}
                 onClick={commitMove}
               >
                 移動
