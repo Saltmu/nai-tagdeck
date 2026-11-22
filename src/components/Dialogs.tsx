@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 /** window.confirm / prompt / alert の代わりに、アプリ内で描画するダイアログ。 */
 export interface DialogApi {
@@ -99,9 +99,23 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
   const input = useRef<HTMLInputElement>(null);
   const primary = useRef<HTMLButtonElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [value, setValue] = useState(request.kind === 'prompt' ? request.defaultValue : '');
+  const [scrollable, setScrollable] = useState(false);
   const settled = useRef(false);
   const id = useId();
+
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const overflows = () => element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
+    const update = () => setScrollable(overflows());
+    update();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [request]);
 
   useEffect(() => {
     const d = dialog.current;
@@ -160,11 +174,17 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
             {request.title}
           </h2>
         )}
-        <p id={`${id}-msg`} className="app-dialog-message">
-          {request.message}
-        </p>
-        {request.kind === 'confirm' && request.details && (
-          <div className="app-dialog-details">{request.details}</div>
+        {request.kind === 'confirm' ? (
+          <div ref={scrollRef} className="app-dialog-scroll" tabIndex={scrollable ? 0 : undefined}>
+            <p id={`${id}-msg`} className="app-dialog-message">
+              {request.message}
+            </p>
+            {request.details && <div className="app-dialog-details">{request.details}</div>}
+          </div>
+        ) : (
+          <p id={`${id}-msg`} className="app-dialog-message">
+            {request.message}
+          </p>
         )}
         {request.kind === 'prompt' && (
           <input

@@ -83,6 +83,7 @@ it('欠けたセクションは補完内容を示し、辞書のスキップ件�
   expect(message()).not.toContain('辞書のうち');
   expect(details()).toBeNull();
   expect(container.querySelector('dialog')?.className).toContain('app-dialog-confirm');
+  expect(container.querySelector('.app-dialog-scroll')?.getAttribute('tabindex')).toBeNull();
   expect(focus).toHaveBeenCalledWith({ preventScroll: true });
   focus.mockRestore();
   await act(async () => button('読み込む').click());
@@ -109,6 +110,33 @@ it('辞書の不正な行だけをスキップ件数にし、キャンセルで�
   expect(message()).not.toContain('version がないため');
   await act(async () => button('キャンセル').click());
   expect(onImport).not.toHaveBeenCalled();
+});
+
+it('溢れた確認文はキーボードでスクロールできる', async () => {
+  const scrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+  const clientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+  Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+    configurable: true,
+    get() { return (this as HTMLElement).classList.contains('app-dialog-scroll') ? 800 : 0; },
+  });
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+    configurable: true,
+    get() { return (this as HTMLElement).classList.contains('app-dialog-scroll') ? 120 : 0; },
+  });
+  try {
+    await mount();
+    await chooseFile(JSON.stringify({
+      kind: 'backup',
+      dictionary: [{ tag: 'smile', category: 'appearance' }],
+      presets: [],
+      workspace: {},
+      settings: {},
+    }), 'partial.json');
+    expect(container.querySelector('.app-dialog-scroll')?.getAttribute('tabindex')).toBe('0');
+  } finally {
+    if (scrollHeight) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', scrollHeight);
+    if (clientHeight) Object.defineProperty(HTMLElement.prototype, 'clientHeight', clientHeight);
+  }
 });
 
 it('バックアップでないファイルは確認を出さずエラーを出す', async () => {
