@@ -39,23 +39,6 @@ export interface TagRoutingResult {
   suggestedCategory: PromptTagCategory | null;
 }
 
-export interface MisclassifiedEntry {
-  tag: string;
-  expected: PromptTagCategory;
-  predicted: PromptTagCategory;
-  score: number;
-  margin: number;
-}
-
-export interface ClassificationEvaluation {
-  total: number;
-  correct: number;
-  wrong: number;
-  unclassified: number;
-  accuracy: number;
-  misclassified: MisclassifiedEntry[];
-}
-
 const TIE_EPSILON = 1e-12;
 
 export function dictionaryCategories(entries: readonly DictEntry[]): Map<string, Set<CategoryKey>> {
@@ -81,7 +64,14 @@ export function classifyTag(
   return candidates.length === 1 ? candidates[0]! : 'unclassified';
 }
 
-function unitVector(words: readonly string[], wordWeights: ReadonlyMap<string, number>): Map<string, number> | null {
+/**
+ * 単語列を TF × 語重みの L2 正規化ベクトルにする。
+ * 実行時の索引と Leave-One-Out 評価で同じ正規化を使う。
+ */
+export function weightedUnitVector(
+  words: readonly string[],
+  weightOf: (word: string) => number,
+): Map<string, number> | null {
   if (words.length === 0) return null;
   const counts = new Map<string, number>();
   for (const word of words) {
@@ -90,8 +80,7 @@ function unitVector(words: readonly string[], wordWeights: ReadonlyMap<string, n
   const weighted = new Map<string, number>();
   let normSq = 0;
   for (const [word, tf] of counts) {
-    // 辞書にない語は 1 カテゴリ相当の重み（1）で保持し、一致率の過大評価を防ぐ
-    const value = tf * (wordWeights.get(word) ?? 1);
+    const value = tf * weightOf(word);
     weighted.set(word, value);
     normSq += value * value;
   }
@@ -101,6 +90,21 @@ function unitVector(words: readonly string[], wordWeights: ReadonlyMap<string, n
     weighted.set(word, value / norm);
   }
   return weighted;
+}
+
+function unitVector(words: readonly string[], wordWeights: ReadonlyMap<string, number>): Map<string, number> | null {
+  // 辞書にない語は 1 カテゴリ相当の重み（1）で保持し、一致率の過大評価を防ぐ
+  return weightedUnitVector(words, (word) => wordWeights.get(word) ?? 1);
+}
+
+/** 正規化済み疎ベクトル同士の内積。両方が単位ベクトルならコサイン類似度になる。 */
+export function sparseCosine(query: ReadonlyMap<string, number>, doc: ReadonlyMap<string, number>): number {
+  let dot = 0;
+  for (const [word, qVal] of query) {
+    const dVal = doc.get(word);
+    if (dVal !== undefined) dot += qVal * dVal;
+  }
+  return dot;
 }
 
 /**
@@ -149,7 +153,7 @@ export function createTagVectorIndex(entries: readonly DictEntry[]): TagVectorIn
   return { byTag, wordWeights, vectors, byWord };
 }
 
-function selectBestCategory(
+export function selectBestCategory(
   similarities: Array<{ category: PromptTagCategory; sim: number }>,
   topK: number,
   minScore: number,
@@ -231,11 +235,7 @@ export function predictTagCategory(
   const similarities: Array<{ category: PromptTagCategory; sim: number }> = [];
   for (const idx of candidateIndices) {
     const doc = index.vectors[idx]!;
-    let dot = 0;
-    for (const [word, qVal] of queryVector) {
-      const dVal = doc.weights.get(word);
-      if (dVal !== undefined) dot += qVal * dVal;
-    }
+    const dot = sparseCosine(queryVector, doc.weights);
     if (dot > 0) similarities.push({ category: doc.category, sim: dot });
   }
 
@@ -266,165 +266,4 @@ export function classifyEditorTag(
   if (!prediction) return { category: 'unclassified', suggestedCategory: null };
   if (mode === 'auto') return { category: prediction.category, suggestedCategory: null };
   return { category: 'unclassified', suggestedCategory: prediction.category };
-}
-
-/**
- * 辞書の対象タグを1件ずつ隠して単語ベクトル分類の精度を評価する（Leave-One-Out）。
- */
-export function evaluateTagVectorClassification(
-  entries: readonly DictEntry[],
-  allowed: readonly PromptCategoryKey[],
-  config?: TagVectorConfig,
-): ClassificationEvaluation {
-  const allowedSet = new Set<PromptTagCategory>();
-  for (const key of allowed) {
-    if (key !== 'unclassified') allowedSet.add(key);
-  }
-
-  const indexed = getIndexedEntries(entries);
-  const nonNegative = indexed.filter((item) => item.entry.category !== 'negative');
-  const wordCatCounts = new Map<string, Map<PromptTagCategory, number>>();
-  const byNormalizedTag = new Map<string, Array<{ category: PromptTagCategory; words: Set<string> }>>();
-  for (const item of nonNegative) {
-    const cat = item.entry.category as PromptTagCategory;
-    const uniqueWords = new Set(item.tagWords);
-    const sameTag = byNormalizedTag.get(item.tag);
-    if (sameTag) sameTag.push({ category: cat, words: uniqueWords });
-    else byNormalizedTag.set(item.tag, [{ category: cat, words: uniqueWords }]);
-
-    for (const word of uniqueWords) {
-      let counts = wordCatCounts.get(word);
-      if (!counts) {
-        counts = new Map();
-        wordCatCounts.set(word, counts);
-      }
-      counts.set(cat, (counts.get(cat) ?? 0) + 1);
-    }
-  }
-
-  const targets = nonNegative.filter((item) => allowedSet.has(item.entry.category as PromptTagCategory));
-  const postings = new Map<string, number[]>();
-  targets.forEach((item, idx) => {
-    for (const word of new Set(item.tagWords)) {
-      const list = postings.get(word);
-      if (list) list.push(idx);
-      else postings.set(word, [idx]);
-    }
-  });
-
-  const topK = config?.topK ?? VECTOR_TOP_K;
-  const minScore = config?.minScore ?? VECTOR_MIN_SCORE;
-  const minMargin = config?.minMargin ?? VECTOR_MIN_MARGIN;
-
-  let correct = 0;
-  let wrong = 0;
-  let unclassified = 0;
-  const misclassified: MisclassifiedEntry[] = [];
-
-  for (let i = 0; i < targets.length; i++) {
-    const hidden = targets[i]!;
-    const expected = hidden.entry.category as PromptTagCategory;
-    // 本番判定では同名タグが辞書に存在しない前提になるため、正規化名が一致する全エントリを重み計算からも除外する
-    const heldOutEntries = byNormalizedTag.get(hidden.tag) ?? [];
-    const heldOutWordCounts = new Map<string, Map<PromptTagCategory, number>>();
-    for (const entry of heldOutEntries) {
-      for (const word of entry.words) {
-        let counts = heldOutWordCounts.get(word);
-        if (!counts) {
-          counts = new Map();
-          heldOutWordCounts.set(word, counts);
-        }
-        counts.set(entry.category, (counts.get(entry.category) ?? 0) + 1);
-      }
-    }
-
-    const weightOf = (word: string): number => {
-      const counts = wordCatCounts.get(word);
-      if (!counts) return 1;
-      const excluded = heldOutWordCounts.get(word);
-      let categories = counts.size;
-      if (excluded) {
-        for (const [cat, removed] of excluded) {
-          if ((counts.get(cat) ?? 0) <= removed) categories--;
-        }
-      }
-      return categories <= 1 ? 1 : 1 / categories;
-    };
-
-    const vecOf = (words: readonly string[]): Map<string, number> | null => {
-      if (words.length === 0) return null;
-      const tfMap = new Map<string, number>();
-      for (const w of words) tfMap.set(w, (tfMap.get(w) ?? 0) + 1);
-      const weighted = new Map<string, number>();
-      let normSq = 0;
-      for (const [w, tf] of tfMap) {
-        const val = tf * weightOf(w);
-        weighted.set(w, val);
-        normSq += val * val;
-      }
-      if (normSq === 0) return null;
-      const norm = Math.sqrt(normSq);
-      for (const [w, val] of weighted) weighted.set(w, val / norm);
-      return weighted;
-    };
-
-    const queryVec = vecOf(hidden.tagWords);
-    if (!queryVec) {
-      unclassified++;
-      continue;
-    }
-
-    const candidates = new Set<number>();
-    for (const word of queryVec.keys()) {
-      const list = postings.get(word);
-      if (!list) continue;
-      for (const idx of list) {
-        if (idx !== i && targets[idx]!.tag !== hidden.tag) candidates.add(idx);
-      }
-    }
-
-    if (candidates.size === 0) {
-      unclassified++;
-      continue;
-    }
-
-    const sims: Array<{ category: PromptTagCategory; sim: number }> = [];
-    for (const idx of candidates) {
-      const doc = targets[idx]!;
-      const docVec = vecOf(doc.tagWords);
-      if (!docVec) continue;
-      let dot = 0;
-      for (const [w, qv] of queryVec) {
-        const dv = docVec.get(w);
-        if (dv !== undefined) dot += qv * dv;
-      }
-      if (dot > 0) sims.push({ category: doc.entry.category as PromptTagCategory, sim: dot });
-    }
-
-    const prediction = selectBestCategory(sims, topK, minScore, minMargin);
-    if (!prediction) {
-      unclassified++;
-    } else if (prediction.category === expected) {
-      correct++;
-    } else {
-      wrong++;
-      misclassified.push({
-        tag: hidden.entry.tag,
-        expected,
-        predicted: prediction.category,
-        score: prediction.score,
-        margin: prediction.margin,
-      });
-    }
-  }
-
-  const classified = correct + wrong;
-  return {
-    total: targets.length,
-    correct,
-    wrong,
-    unclassified,
-    accuracy: classified > 0 ? correct / classified : 0,
-    misclassified,
-  };
 }

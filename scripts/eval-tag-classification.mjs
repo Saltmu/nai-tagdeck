@@ -14,9 +14,9 @@ try {
     VECTOR_MIN_SCORE,
     VECTOR_TOP_K,
     createTagVectorIndex,
-    evaluateTagVectorClassification,
     predictTagCategory,
   } = await server.ssrLoadModule('/src/lib/tagClassification.ts');
+  const { evaluateTagVectorClassification } = await server.ssrLoadModule('/src/lib/tagClassificationEval.ts');
 
   const entries = sampleDictionary();
   const base = evaluateTagVectorClassification(entries, PROMPT_CATEGORY_KEYS);
