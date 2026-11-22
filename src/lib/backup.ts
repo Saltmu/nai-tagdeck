@@ -86,25 +86,26 @@ export function parseBackup(text: string): ParsedBackup {
   };
 }
 
-/** 読み込み確認の本文。セクションの補完と、辞書の行スキップを分けて書く。 */
+/** 読み込み確認の本文。補完内容は summary、辞書の行エラーはスクロールする details に分ける。 */
 export function backupImportMessage(
   fileName: string,
   data: Pick<Backup, 'dictionary' | 'presets'>,
   warnings: readonly string[],
   dictionaryErrors: readonly string[],
-): string {
-  const lines = [
+): { summary: string; details: string } {
+  const summary = [
     `${fileName} を読み込みます。`,
     `・辞書 ${data.dictionary.length}件、プリセット ${data.presets.length}件を追加・上書きします`,
     '・作業中のタグと設定（ネガティブ・生成の設定）は置き換わります',
     ...warnings.map((warning) => `・${warning}`),
   ];
+  const details: string[] = [];
   if (dictionaryErrors.length > 0) {
-    lines.push(`・辞書のうち ${dictionaryErrors.length}件は読めなかったためスキップします`);
-    for (const error of dictionaryErrors.slice(0, MAX_DICTIONARY_ERRORS_SHOWN)) lines.push(`・${error}`);
+    summary.push(`・辞書のうち ${dictionaryErrors.length}件は読めなかったためスキップします`);
+    for (const error of dictionaryErrors.slice(0, MAX_DICTIONARY_ERRORS_SHOWN)) details.push(`・${error}`);
     const rest = dictionaryErrors.length - MAX_DICTIONARY_ERRORS_SHOWN;
-    if (rest > 0) lines.push(`・ほか ${rest}件`);
+    if (rest > 0) details.push(`・ほか ${rest}件`);
   }
-  lines.push('', 'よろしいですか？');
-  return lines.join('\n');
+  summary.push('', 'よろしいですか？');
+  return { summary: summary.join('\n'), details: details.join('\n') };
 }

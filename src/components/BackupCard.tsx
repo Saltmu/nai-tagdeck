@@ -24,8 +24,10 @@ export function BackupCard({ getData, onImport, notify }: Props) {
     }
     setError(null);
     const { data, warnings, dictionaryErrors } = parsed;
-    const ok = await dialogs.confirm(backupImportMessage(file.name, data, warnings, dictionaryErrors), {
+    const message = backupImportMessage(file.name, data, warnings, dictionaryErrors);
+    const ok = await dialogs.confirm(message.summary, {
       okLabel: '読み込む',
+      details: message.details || undefined,
     });
     if (!ok) return;
     try {

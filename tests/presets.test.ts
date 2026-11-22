@@ -207,15 +207,17 @@ describe('backup', () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) throw new Error(parsed.error);
     const message = backupImportMessage('partial.json', parsed.data, parsed.warnings, parsed.dictionaryErrors);
-    expect(message).toContain('・version がないため、version 1 として読み込みます');
-    expect(message).toContain('・generation がないため、初期の生成設定で補います');
-    expect(message).toContain('・辞書 1件、プリセット 0件を追加・上書きします');
-    expect(message).toContain('・辞書のうち 1件は読めなかったためスキップします');
-    expect(message).toContain('・1件目: tag が空です');
-    expect(message).not.toContain('辞書のうち 2件');
+    expect(message.summary).toContain('・version がないため、version 1 として読み込みます');
+    expect(message.summary).toContain('・generation がないため、初期の生成設定で補います');
+    expect(message.summary).toContain('・辞書 1件、プリセット 0件を追加・上書きします');
+    expect(message.summary).toContain('・辞書のうち 1件は読めなかったためスキップします');
+    expect(message.summary).not.toContain('辞書のうち 2件');
+    expect(message.details).toBe('・1件目: tag が空です');
     const many = Array.from({ length: 12 }, () => 'n件目: tag が空です');
-    expect(backupImportMessage('a.json', parsed.data, [], many)).toContain('・ほか 2件');
-    expect(backupImportMessage('a.json', parsed.data, [], many).match(/tag が空です/g)).toHaveLength(10);
+    const capped = backupImportMessage('a.json', parsed.data, [], many);
+    expect(capped.summary).toContain('・辞書のうち 12件は読めなかったためスキップします');
+    expect(capped.details).toContain('・ほか 2件');
+    expect(capped.details.match(/tag が空です/g)).toHaveLength(10);
   });
 });
 

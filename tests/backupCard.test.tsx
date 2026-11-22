@@ -19,6 +19,10 @@ function message(): string {
   return container.querySelector('.app-dialog-message')?.textContent ?? '';
 }
 
+function details(): string | null {
+  return container.querySelector('.app-dialog-details')?.textContent ?? null;
+}
+
 function button(text: string): HTMLButtonElement {
   const found = Array.from(container.querySelectorAll('button')).find((node) => node.textContent?.trim() === text);
   if (!found) throw new Error(`Button missing: ${text}`);
@@ -64,6 +68,7 @@ async function mount(onImport = vi.fn(async () => {}), notify = vi.fn()) {
 }
 
 it('欠けたセクションは補完内容を示し、辞書のスキップ件数には数えない', async () => {
+  const focus = vi.spyOn(HTMLElement.prototype, 'focus');
   const { onImport, notify } = await mount();
   await chooseFile(JSON.stringify({
     kind: 'backup',
@@ -76,6 +81,10 @@ it('欠けたセクションは補完内容を示し、辞書のスキップ件�
   expect(message()).toContain('・generation がないため、初期の生成設定で補います');
   expect(message()).toContain('・辞書 1件、プリセット 0件を追加・上書きします');
   expect(message()).not.toContain('辞書のうち');
+  expect(details()).toBeNull();
+  expect(container.querySelector('dialog')?.className).toContain('app-dialog-confirm');
+  expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+  focus.mockRestore();
   await act(async () => button('読み込む').click());
   expect(onImport).toHaveBeenCalledTimes(1);
   expect(notify).toHaveBeenCalledWith('バックアップを読み込みました');
@@ -94,7 +103,9 @@ it('辞書の不正な行だけをスキップ件数にし、キャンセルで�
     generation: {},
   }), 'dict.json');
   expect(message()).toContain('・辞書のうち 1件は読めなかったためスキップします');
-  expect(message()).toContain('・1件目: tag が空です');
+  expect(message()).not.toContain('1件目: tag が空です');
+  expect(details()).toBe('・1件目: tag が空です');
+  expect(container.querySelector('.app-dialog-details')).not.toBeNull();
   expect(message()).not.toContain('version がないため');
   await act(async () => button('キャンセル').click());
   expect(onImport).not.toHaveBeenCalled();

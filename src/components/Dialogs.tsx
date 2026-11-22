@@ -39,10 +39,12 @@ export interface ConfirmOptions {
   okLabel?: string;
   /** 削除など、取り消せない操作のとき赤いボタンにする。 */
   danger?: boolean;
+  /** 本文の下に、高さ制限つきで出す詳細。 */
+  details?: string;
 }
 
 type Request = { id: number } & (
-  | { kind: 'confirm'; message: string; okLabel?: string; danger?: boolean; resolve: (v: boolean) => void }
+  | { kind: 'confirm'; message: string; okLabel?: string; danger?: boolean; details?: string; resolve: (v: boolean) => void }
   | { kind: 'prompt'; message: string; defaultValue: string; okLabel?: string; resolve: (v: string | null) => void }
   | { kind: 'alert'; message: string; resolve: () => void }
   | ({ kind: 'choose'; message: string; choices: readonly Choice[]; resolve: (v: string | null) => void } & ChooseOptions)
@@ -104,10 +106,14 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
   useEffect(() => {
     const d = dialog.current;
     if (d && !d.open) d.showModal();
-    // autoFocus は showModal より先に効いてしまい、先頭の「キャンセル」にフォーカスが移るので、開いた後で当て直す
-    if (request.kind === 'prompt') input.current?.select();
-    else if (request.kind === 'confirm' && request.danger) cancel.current?.focus();
-    else primary.current?.focus();
+    // autoFocus は showModal より先に効いてしまい、先頭の「キャンセル」にフォーカスが移るので、開いた後で当て直す。
+    // preventScroll は、長い確認文の先頭を画面外へ押し出さないため。
+    const focusWithoutScroll = (element: HTMLElement | null) => element?.focus({ preventScroll: true });
+    if (request.kind === 'prompt') {
+      focusWithoutScroll(input.current);
+      input.current?.select();
+    } else if (request.kind === 'confirm' && request.danger) focusWithoutScroll(cancel.current);
+    else focusWithoutScroll(primary.current);
   }, [request]);
 
   // choice: choose で押されたボタンの値（Enter で主ボタンを押したときは省略）
@@ -131,7 +137,7 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
   return (
     <dialog
       ref={dialog}
-      className="app-dialog"
+      className={request.kind === 'confirm' ? 'app-dialog app-dialog-confirm' : 'app-dialog'}
       aria-labelledby={request.kind === 'choose' && request.title ? `${id}-title` : `${id}-msg`}
       aria-describedby={request.kind === 'choose' && request.title ? `${id}-msg` : undefined}
       onClick={(e) => {
@@ -157,6 +163,9 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
         <p id={`${id}-msg`} className="app-dialog-message">
           {request.message}
         </p>
+        {request.kind === 'confirm' && request.details && (
+          <div className="app-dialog-details">{request.details}</div>
+        )}
         {request.kind === 'prompt' && (
           <input
             ref={input}
