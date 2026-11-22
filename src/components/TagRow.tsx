@@ -222,6 +222,7 @@ export const TagRow = memo(function TagRow({
             </button>
           </div>
           )}
+          {!editing && (
           <button
             type="button"
             className="icon-btn icon-btn-danger"
@@ -230,6 +231,7 @@ export const TagRow = memo(function TagRow({
           >
             ✕
           </button>
+          )}
         </>
       )}
     </li>
