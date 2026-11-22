@@ -19,6 +19,7 @@ import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
 import { CategorySection, type BaseCategorySuggestion } from './CategorySection';
 import { CharacterCard } from './CharacterCard';
+import type { PeerCharacterCenter } from './CharacterCenterPicker';
 import { HistoryControls } from './HistoryControls';
 import { PresetBar } from './PresetBar';
 import { TagFilterBar } from './TagFilterBar';
@@ -72,6 +73,8 @@ interface Props {
   /** 個別指定がないキャラクターに付けるネガティブ。 */
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
+  /** 位置ピッカーの縦横比に使う出力画像サイズ。 */
+  canvasSize?: { width: number; height: number };
   /** 編集画面を開いている（false の間は他の画面を表示している）。 */
   shown: boolean;
 }
@@ -90,6 +93,7 @@ export function Editor({
   onReadPng,
   characterNegative,
   onCharacterNegativeChange,
+  canvasSize,
   shown,
 }: Props) {
   const vectorIndex = useMemo(() => createTagVectorIndex(dictionary.entries), [dictionary.entries]);
@@ -207,6 +211,16 @@ export function Editor({
   const activeIndex = characters.findIndex((c) => c.id === selected);
   const active = activeIndex >= 0 ? characters[activeIndex] : undefined;
   const activeId = active?.id;
+  const peerCenters = useMemo<PeerCharacterCenter[]>(
+    () =>
+      activeId
+        ? characters
+            .map((c, i) => ({ c, name: c.name.trim() || `キャラ${i + 1}` }))
+            .filter(({ c }) => c.id !== activeId && c.enabled)
+            .map(({ c, name }) => ({ id: c.id, name, ...(c.center ? { center: c.center } : {}) }))
+        : [],
+    [characters, activeId],
+  );
   const handlePoseAdded = useCallback(
     (tag: string) => {
       if (activeId) void offerPair(activeId, tag);
@@ -487,6 +501,8 @@ export function Editor({
             onPoseAdded={handlePoseAdded}
             filter={tagFilter}
             enabledCount={enabledCount}
+            canvasSize={canvasSize}
+            peerCenters={peerCenters}
           />
         ) : (
           <div className="category-grid editor-pane">

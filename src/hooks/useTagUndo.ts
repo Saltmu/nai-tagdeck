@@ -32,6 +32,12 @@ function isTextEntry(target: EventTarget | null): boolean {
   return !['button', 'checkbox', 'radio', 'range', 'file', 'color', 'submit', 'reset', 'image', 'hidden'].includes(type);
 }
 
+function isUndoMergedControl(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (isTextEntry(target)) return true;
+  return target.closest('[data-undo-merge]') !== null;
+}
+
 function sameTag(a: WorkspaceAction, b: WorkspaceAction): boolean {
   if (a.type === 'moveFromUnclassified' || b.type === 'moveFromUnclassified') return false;
   if (!('id' in a) || !('id' in b) || !('target' in a) || !('target' in b)) return false;
@@ -60,6 +66,7 @@ export function useTagUndo(
   const activeIdRef = useRef<string | null>(preset?.activeId ?? null);
   const setActiveIdRef = useRef(preset?.setActiveId);
   const lastActionRef = useRef<WorkspaceAction | null>(null);
+  const lastControlRef = useRef<Element | null>(null);
   const lastAtRef = useRef(0);
   pastRef.current = past;
   futureRef.current = future;
@@ -101,7 +108,10 @@ export function useTagUndo(
       }
       const now = Date.now();
       const previous = lastActionRef.current;
-      const editing = isTextEntry(document.activeElement);
+      const activeControl = document.activeElement;
+      const sameControl = activeControl !== null && activeControl === lastControlRef.current;
+      const editing = sameControl && isTextEntry(activeControl);
+      const mergeControl = sameControl && isUndoMergedControl(activeControl);
       const merge =
         previous !== null &&
         previous.type === action.type &&
@@ -109,7 +119,7 @@ export function useTagUndo(
           previous.type === action.type &&
           'id' in previous &&
           previous.id === action.id &&
-          editing &&
+          (action.type === 'setCharacterCenter' ? mergeControl : editing) &&
           now - lastAtRef.current < EDIT_MERGE_MS) ||
           (action.type === 'setWeight' &&
             previous.type === 'setWeight' &&
@@ -121,6 +131,7 @@ export function useTagUndo(
             sameTag(previous, action) &&
             now - lastAtRef.current < DRAG_MERGE_MS));
       lastActionRef.current = action;
+      lastControlRef.current = activeControl;
       lastAtRef.current = now;
       if (!merge || pastRef.current.length === 0) {
         const next = [
@@ -187,7 +198,10 @@ export function useTagUndo(
 
   useEffect(() => {
     const onFocusOut = (event: FocusEvent) => {
-      if (isTextEntry(event.target)) lastActionRef.current = null;
+      if (isUndoMergedControl(event.target)) {
+        lastActionRef.current = null;
+        lastControlRef.current = null;
+      }
     };
     document.addEventListener('focusout', onFocusOut);
     return () => document.removeEventListener('focusout', onFocusOut);

@@ -268,6 +268,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onReadPng={openPromptImport}
               characterNegative={settings.characterNegativePrompt}
               onCharacterNegativeChange={handleCharacterNegativeChange}
+              canvasSize={sizeOf(generation.size)}
               shown={tab === 'editor'}
             />
           </div>

@@ -199,6 +199,182 @@
   gap: 0.5rem;
 }
 
+.center-picker {
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.center-picker-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.center-stage-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1 1 11rem;
+  max-width: 14rem;
+}
+
+.center-stage {
+  position: relative;
+  width: 100%;
+  max-height: 13rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+  overflow: hidden;
+}
+
+.center-stage:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.center-stage-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 20% 20%;
+}
+
+.center-stage-grid::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, transparent calc(50% - 0.5px), var(--muted) calc(50% - 0.5px), var(--muted) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(50% - 0.5px), var(--muted) calc(50% - 0.5px), var(--muted) calc(50% + 0.5px), transparent calc(50% + 0.5px));
+  opacity: 0.45;
+}
+
+.center-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.center-marker-dot {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
+.center-marker-label {
+  margin-top: 0.1rem;
+  padding: 0.05rem 0.3rem;
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.center-marker-active {
+  z-index: 2;
+}
+
+.center-marker-active .center-marker-dot {
+  width: 0.95rem;
+  height: 0.95rem;
+  background: var(--accent);
+}
+
+.center-marker-active .center-marker-label {
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+}
+
+.center-marker-peer {
+  z-index: 1;
+  opacity: 0.88;
+}
+
+.center-marker-peer .center-marker-dot {
+  background: var(--muted);
+}
+
+.center-marker-peer.is-auto .center-marker-dot {
+  background: var(--surface);
+  border: 2px dashed var(--muted);
+}
+
+.center-marker-peer .center-marker-label {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.center-stage-caption {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.center-preset-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1 1 11rem;
+}
+
+.center-preset-title {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.center-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.center-preset-cell {
+  min-height: 2rem;
+  padding: 0.15rem 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.center-preset-cell:hover {
+  border-color: var(--accent);
+}
+
+.center-preset-cell.is-selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
 .icon-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
