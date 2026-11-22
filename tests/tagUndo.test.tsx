@@ -3,7 +3,8 @@ import { act, useReducer } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { HistoryControls } from '../src/components/HistoryControls';
-import { useTagUndo } from '../src/hooks/useTagUndo';
+import { useTagUndo, type UndoExtras, type UndoExtrasSync } from '../src/hooks/useTagUndo';
+import { DEFAULT_GENERATION, type GenerationSettings } from '../src/lib/generation';
 import { BASE, emptyWorkspace, newCharacter, workspaceReducer, type WorkspaceAction } from '../src/lib/workspace';
 import type { Workspace } from '../src/types';
 
@@ -335,6 +336,49 @@ it('restores and redoes activePresetId alongside workspace replacement', async (
   expect(ws.base.appearance).toEqual([]);
   expect(setActiveId).toHaveBeenLastCalledWith('preset-b');
   expect(activeId).toBe('preset-b');
+});
+
+it('restores character negative and generation only on the import step', async () => {
+  let generation: GenerationSettings = { ...DEFAULT_GENERATION, steps: 19, seed: 11 };
+  let characterNegativePrompt = 'blurry';
+  const sync: UndoExtrasSync = {
+    capture: () => ({ characterNegativePrompt, generation: { ...generation } }),
+    restore: (extras: UndoExtras) => {
+      if (extras.characterNegativePrompt !== undefined) characterNegativePrompt = extras.characterNegativePrompt;
+      if (extras.generation) generation = { ...extras.generation };
+    },
+  };
+  function ExtrasHarness({ initial }: { initial: Workspace }) {
+    const [workspace, dispatch] = useReducer(workspaceReducer, initial);
+    ws = workspace;
+    api = useTagUndo(workspace, dispatch, undefined, sync);
+    return null;
+  }
+  await act(async () => root.render(<ExtrasHarness initial={ws} />));
+  await run(() => api.dispatch(
+    { type: 'replace', workspace: emptyWorkspace() },
+    { characterNegativePrompt: 'lowres', generation: { ...generation, steps: 28, seed: 42 } },
+  ));
+  expect(ws.base.appearance).toEqual([]);
+  expect(characterNegativePrompt).toBe('lowres');
+  expect(generation.steps).toBe(28);
+
+  await run(() => api.dispatch({ type: 'add', target: BASE, category: 'appearance', tag: 'hat', weight: 1 }));
+  generation = { ...generation, steps: 22 };
+  await run(() => api.undo());
+  expect(ws.base.appearance.map((tag) => tag.tag)).toEqual([]);
+  expect(generation.steps).toBe(22);
+  expect(characterNegativePrompt).toBe('lowres');
+
+  await run(() => api.undo());
+  expect(names()).toEqual(['a', 'b', 'c', 'd']);
+  expect(generation).toMatchObject({ steps: 19, seed: 11 });
+  expect(characterNegativePrompt).toBe('blurry');
+
+  await run(() => api.redo());
+  expect(ws.base.appearance).toEqual([]);
+  expect(generation).toMatchObject({ steps: 28, seed: 42 });
+  expect(characterNegativePrompt).toBe('lowres');
 });
 
 it('does not record an action that changes nothing', async () => {

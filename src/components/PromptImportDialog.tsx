@@ -13,7 +13,7 @@ interface Props {
   source: PromptSource;
   entries: readonly DictEntry[];
   onCancel: () => void;
-  onApply: (result: PromptImport, applyGeneration: boolean) => void;
+  onApply: (result: PromptImport, applyGeneration: boolean) => boolean | Promise<boolean>;
 }
 
 type ImportState = { source: PromptSource; entries: readonly DictEntry[] } &
@@ -37,6 +37,7 @@ export function PromptImportDialog({ source, entries, onCancel, onApply }: Props
   const id = useId();
   const [read, setRead] = useState<ImportState | null>(null);
   const [applyGeneration, setApplyGeneration] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const element = dialog.current;
@@ -58,8 +59,24 @@ export function PromptImportDialog({ source, entries, onCancel, onApply }: Props
   const error = state && 'error' in state ? state.error : undefined;
   const settingsAvailable = !!result?.generation.labels.length;
   const cancel = () => {
+    if (busy) return;
     dialog.current?.close();
     onCancel();
+  };
+  // 未保存確認を待つ Promise を click から返すと、確認を押す前に呼び出し側が終わってしまう。
+  const apply = () => {
+    if (!result || busy) return;
+    setBusy(true);
+    void (async () => {
+      try {
+        const applied = await onApply(result, settingsAvailable && applyGeneration);
+        if (applied) dialog.current?.close();
+        else setBusy(false);
+      } catch (cause) {
+        setBusy(false);
+        throw cause;
+      }
+    })();
   };
 
   return (
@@ -67,6 +84,7 @@ export function PromptImportDialog({ source, entries, onCancel, onApply }: Props
       ref={dialog}
       className="app-dialog prompt-import-dialog"
       aria-labelledby={id}
+      inert={busy}
       onCancel={(e) => { e.preventDefault(); cancel(); }}
       onClose={onCancel}
     >
@@ -108,12 +126,9 @@ export function PromptImportDialog({ source, entries, onCancel, onApply }: Props
         </div>
       )}
       <div className="app-dialog-actions">
-        <button type="button" className="btn" onClick={cancel} autoFocus>{error ? '閉じる' : 'キャンセル'}</button>
+        <button type="button" className="btn" onClick={cancel} disabled={busy} autoFocus>{error ? '閉じる' : 'キャンセル'}</button>
         {result && (
-          <button type="button" className="btn btn-primary" onClick={() => {
-            dialog.current?.close();
-            onApply(result, settingsAvailable && applyGeneration);
-          }}>
+          <button type="button" className="btn btn-primary" onClick={apply} disabled={busy}>
             適用
           </button>
         )}

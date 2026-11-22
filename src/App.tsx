@@ -13,7 +13,7 @@ import { useDictionary } from './hooks/useDictionary';
 import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWorkspace';
 import { Toast, type ToastHandle } from './components/Toast';
 import { useToken } from './hooks/useToken';
-import { useTagUndo } from './hooks/useTagUndo';
+import { useTagUndo, type UndoExtras, type UndoExtrasSync } from './hooks/useTagUndo';
 import { useImages } from './hooks/useImages';
 import { useGenerator } from './hooks/useGenerator';
 import { usePresets } from './hooks/usePresets';
@@ -21,9 +21,11 @@ import { useBackupTransfer } from './hooks/useBackupTransfer';
 import { useGenerationControls } from './hooks/useGenerationControls';
 import { useLatestImageNotice } from './hooks/useLatestImageNotice';
 import { useFirstRun } from './hooks/useFirstRun';
-import { isEmptyWorkspace } from './lib/presets';
+import { confirmUnsavedChanges } from './components/confirmUnsaved';
+import { useDialogs } from './components/Dialogs';
+import { isEmptyWorkspace, overwritePreset, sameWorkspace } from './lib/presets';
 import { isDefaultSettings } from './lib/settings';
-import { isDefaultGeneration, sizeOf, type SizeKey } from './lib/generation';
+import { isDefaultGeneration, normalizeGeneration, sameGeneration, sizeOf, type SizeKey } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
@@ -66,10 +68,27 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     if ((e.target as Element).closest('.dock')) return;
     if (window.matchMedia?.('(min-width: 1100px)').matches) setDockCollapse((n) => n + 1);
   };
+  const dialogs = useDialogs();
+  const settingsRef = useRef(settings);
+  const generationRef = useRef(generation);
+  settingsRef.current = settings;
+  generationRef.current = generation;
+  const extrasSync = useMemo<UndoExtrasSync>(() => ({
+    capture: () => ({
+      characterNegativePrompt: settingsRef.current.characterNegativePrompt,
+      generation: { ...generationRef.current },
+    }),
+    restore: (extras) => {
+      if (extras.characterNegativePrompt !== undefined) {
+        updateSettings({ characterNegativePrompt: extras.characterNegativePrompt });
+      }
+      if (extras.generation) updateGeneration(extras.generation);
+    },
+  }), [updateGeneration, updateSettings]);
   const tagUndo = useTagUndo(workspace, rawDispatch, {
     activeId: presets.activeId,
     setActiveId: presets.setActiveId,
-  });
+  }, extrasSync);
   const dispatch = tagUndo.dispatch;
   const openEditor = useCallback(() => setTab('editor'), []);
   const firstRunReady = dictionary.loaded && !dictionary.error &&
@@ -154,19 +173,48 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     (size: SizeKey) => updateGeneration({ size }),
     [updateGeneration],
   );
-  const applyPrompt = (result: PromptImport, applyGeneration: boolean) => {
-    setPromptSource(null);
-    const nextMode = applyGeneration ? (result.generation.values.mode ?? generation.mode) : generation.mode;
-    dispatch({ type: 'replace', workspace: {
-      base: importedBaseForMode(result, nextMode),
-      characters: result.characters,
-      negative: result.negative ?? workspace.negative,
-    } });
+  const applyPrompt = async (result: PromptImport, applyGeneration: boolean) => {
+    const active = presets.presets.find((preset) => preset.id === presets.activeId) ?? null;
+    const dirty = active ? !sameWorkspace(active.workspace, workspace) : !isEmptyWorkspace(workspace);
+    const nextGeneration = applyGeneration ? normalizeGeneration({ ...generation, ...result.generation.values }) : null;
+    const generationChanges = nextGeneration !== null && !sameGeneration(nextGeneration, generation);
+    const nextCharacterNegative = result.characterNegative !== undefined && result.characterNegative !== settings.characterNegativePrompt
+      ? result.characterNegative
+      : null;
+    const also = [
+      nextCharacterNegative !== null ? '共通のキャラ用ネガティブ' : '',
+      generationChanges ? '生成設定' : '',
+    ].filter(Boolean);
+    const action = also.length > 0
+      ? `画像のプロンプトを適用しますか？作業中のベースとキャラクターを置き換え、${also.join('と')}も更新します。`
+      : '画像のプロンプトを適用しますか？作業中のベースとキャラクターを置き換えます。';
+    const choice = await confirmUnsavedChanges(dialogs, {
+      dirty,
+      activeName: active?.name ?? null,
+      action,
+      okLabel: '適用',
+    });
+    if (!choice) return false;
+    if (choice === 'save' && active) presets.setPresets(overwritePreset(presets.presets, active.id, workspace));
+    const nextMode = nextGeneration?.mode ?? generation.mode;
+    const extras: UndoExtras = {};
+    if (nextCharacterNegative !== null) extras.characterNegativePrompt = nextCharacterNegative;
+    if (nextGeneration && generationChanges) extras.generation = nextGeneration;
+    dispatch({
+      type: 'replace',
+      workspace: {
+        base: importedBaseForMode(result, nextMode),
+        characters: result.characters,
+        negative: result.negative ?? workspace.negative,
+      },
+    }, extras);
     presets.setActiveId(null);
-    if (result.characterNegative !== undefined) updateSettings({ characterNegativePrompt: result.characterNegative });
-    if (applyGeneration) updateGeneration(result.generation.values);
+    setPromptSource(null);
     openEditor();
-    show('画像のプロンプトを読み込みました');
+    show(choice === 'save' && active
+      ? `プリセット「${active.name}」に変更を上書きし、画像のプロンプトを読み込みました`
+      : '画像のプロンプトを読み込みました');
+    return true;
   };
 
   const headerRef = useRef<HTMLElement>(null);

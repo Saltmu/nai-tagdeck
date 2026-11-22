@@ -14,6 +14,7 @@ import {
 } from '../lib/presets';
 import { emptyWorkspace, type WorkspaceAction } from '../lib/workspace';
 import { scrollOptionIntoList } from '../lib/browser';
+import { confirmUnsavedChanges } from './confirmUnsaved';
 import { useDialogs } from './Dialogs';
 import { EditorActions } from './EditorActions';
 import { MoreIcon } from './icons';
@@ -38,13 +39,12 @@ export function PresetBar({ store, workspace, dispatch, notify, onPickPng }: Pro
    * 進んでよければ true。
    */
   const confirmDiscard = async (action: string, okLabel: string) => {
-    if (!dirty) return true;
-    if (!active) return dialogs.confirm(`今のタグはプリセットに保存されていません。${action}`, { okLabel });
-    const choice = await dialogs.choose(`プリセット「${active.name}」に変更が反映されていません。${action}`, [
-      // メッセージの「反映されていません」と同じ言葉で、今のプリセットに反映してから進むかどうかを示す
-      { value: 'discard', label: `反映せずに${okLabel}` },
-      { value: 'save', label: `変更を反映してから${okLabel}`, primary: true },
-    ]);
+    const choice = await confirmUnsavedChanges(dialogs, {
+      dirty,
+      activeName: active?.name ?? null,
+      action,
+      okLabel,
+    });
     if (choice === 'save') overwrite();
     return choice !== null;
   };
