@@ -18,6 +18,7 @@ const presets: PresetStore = {
   presets: [],
   persistence: [],
   setPresets: () => {},
+  commitPresets: async () => false,
   activeId: null,
   setActiveId: () => {},
 };

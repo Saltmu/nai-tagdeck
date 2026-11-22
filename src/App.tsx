@@ -32,7 +32,7 @@ import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icon
 import { copyText } from './lib/browser';
 import { importedBaseForMode, type PromptImport } from './lib/promptImport';
 import { defaultNegativeTags } from './lib/workspace';
-import type { WeightSyntax } from './types';
+import type { Settings, WeightSyntax } from './types';
 
 type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
 
@@ -73,8 +73,12 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const dialogs = useDialogs();
   const settingsRef = useRef(settings);
   const generationRef = useRef(generation);
+  const workspaceRef = useRef(workspace);
+  const presetsRef = useRef(presets);
   settingsRef.current = settings;
   generationRef.current = generation;
+  workspaceRef.current = workspace;
+  presetsRef.current = presets;
   const extrasSync = useMemo<UndoExtrasSync>(() => ({
     capture: () => ({
       characterNegativePrompt: settingsRef.current.characterNegativePrompt,
@@ -101,6 +105,12 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const editCharacterNegative = useCallback((characterNegativePrompt: string) => {
     forgetExternalRef.current({ characterNegativePrompt });
     updateSettings({ characterNegativePrompt });
+  }, [updateSettings]);
+  const replaceExternalSettings = useCallback((patch: Partial<Settings>) => {
+    if (patch.characterNegativePrompt !== undefined) {
+      forgetExternalRef.current({ characterNegativePrompt: patch.characterNegativePrompt });
+    }
+    updateSettings(patch);
   }, [updateSettings]);
   const openEditor = useCallback(() => setTab('editor'), []);
   const firstRunReady = dictionary.loaded && !dictionary.error &&
@@ -154,7 +164,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   );
 
   const { getBackup, importBackup } = useBackupTransfer({
-    dictionary, presets, workspace, dispatch, settings, updateSettings, generation, updateGeneration: editGeneration,
+    dictionary, presets, workspace, dispatch, settings, updateSettings: replaceExternalSettings, generation, updateGeneration: editGeneration,
   });
   const openSettings = useCallback(() => setTab('settings'), []);
   const { blocker, startGenerate } = useGenerationControls({
@@ -186,61 +196,81 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     if (!firstRunReady || !promptSource) importEpoch.current += 1;
   }, [firstRunReady, promptSource]);
   const applyPrompt = async (result: PromptImport, applyGeneration: boolean) => {
-    const epoch = importEpoch.current;
-    const active = presets.presets.find((preset) => preset.id === presets.activeId) ?? null;
-    const nextGeneration = applyGeneration ? normalizeGeneration({ ...generation, ...result.generation.values }) : null;
-    const generationPatch: Partial<GenerationSettings> = {};
-    if (nextGeneration) {
-      for (const key of Object.keys(result.generation.values) as (keyof GenerationSettings)[]) {
-        const value = nextGeneration[key];
-        if (value !== undefined && !Object.is(value, generation[key])) generationPatch[key] = value as never;
+    for (;;) {
+      const epoch = importEpoch.current;
+      const currentWorkspace = workspaceRef.current;
+      const store = presetsRef.current;
+      const currentSettings = settingsRef.current;
+      const currentGeneration = generationRef.current;
+      const active = store.presets.find((preset) => preset.id === store.activeId) ?? null;
+      const nextGeneration = applyGeneration ? normalizeGeneration({ ...currentGeneration, ...result.generation.values }) : null;
+      const generationPatch: Partial<GenerationSettings> = {};
+      if (nextGeneration) {
+        for (const key of Object.keys(result.generation.values) as (keyof GenerationSettings)[]) {
+          const value = nextGeneration[key];
+          if (value !== undefined && !Object.is(value, currentGeneration[key])) generationPatch[key] = value as never;
+        }
       }
+      const generationChanges = Object.keys(generationPatch).length > 0;
+      const negativeChanges = result.negative !== undefined && !sameWorkTags(result.negative, currentWorkspace.negative);
+      // 古いプリセットはネガティブを持たず、空の作業状態もネガティブを見ない。PNG が編集済みの全体ネガティブを置き換えるときだけ、ここで確認する。
+      const negativeUnsaved = negativeChanges
+        && !sameWorkTags(currentWorkspace.negative, defaultNegativeTags())
+        && (active === null || active.workspace.negative === undefined);
+      const dirty = (active ? !sameWorkspace(active.workspace, currentWorkspace) : !isEmptyWorkspace(currentWorkspace)) || negativeUnsaved;
+      const nextCharacterNegative = result.characterNegative !== undefined && result.characterNegative !== currentSettings.characterNegativePrompt
+        ? result.characterNegative
+        : null;
+      const also = [
+        negativeChanges ? '全体ネガティブ' : '',
+        nextCharacterNegative !== null ? '共通のキャラ用ネガティブ' : '',
+        generationChanges ? '生成設定' : '',
+      ].filter(Boolean);
+      const action = also.length > 0
+        ? `画像のプロンプトを適用しますか？作業中のベースとキャラクターを置き換え、${also.join('と')}も更新します。`
+        : '画像のプロンプトを適用しますか？作業中のベースとキャラクターを置き換えます。';
+      const choice = await confirmUnsavedChanges(dialogs, {
+        dirty,
+        activeName: active?.name ?? null,
+        action,
+        okLabel: '適用',
+      });
+      if (!choice || epoch !== importEpoch.current) return false;
+      // 確認を開いている間にバックアップなどが終わっていたら、その状態で聞き直す。
+      const moved = () => currentWorkspace !== workspaceRef.current
+        || store.presets !== presetsRef.current.presets
+        || store.activeId !== presetsRef.current.activeId
+        || currentSettings !== settingsRef.current
+        || currentGeneration !== generationRef.current;
+      if (moved()) continue;
+      if (choice === 'save' && active) {
+        const nextPresets = overwritePreset(store.presets, active.id, currentWorkspace);
+        const saved = await store.commitPresets(nextPresets);
+        if (epoch !== importEpoch.current) return false;
+        if (moved()) continue;
+        if (!saved) return false;
+        presetsRef.current.setPresets(nextPresets);
+      }
+      const nextMode = nextGeneration?.mode ?? currentGeneration.mode;
+      const extras: UndoExtras = {};
+      if (nextCharacterNegative !== null) extras.characterNegativePrompt = nextCharacterNegative;
+      if (generationChanges) extras.generation = generationPatch;
+      dispatch({
+        type: 'replace',
+        workspace: {
+          base: importedBaseForMode(result, nextMode),
+          characters: result.characters,
+          negative: result.negative ?? currentWorkspace.negative,
+        },
+      }, extras);
+      presetsRef.current.setActiveId(null);
+      setPromptSource(null);
+      openEditor();
+      show(choice === 'save' && active
+        ? `プリセット「${active.name}」に変更を上書きし、画像のプロンプトを読み込みました`
+        : '画像のプロンプトを読み込みました');
+      return true;
     }
-    const generationChanges = Object.keys(generationPatch).length > 0;
-    const negativeChanges = result.negative !== undefined && !sameWorkTags(result.negative, workspace.negative);
-    // 古いプリセットはネガティブを持たず、空の作業状態もネガティブを見ない。PNG が編集済みの全体ネガティブを置き換えるときだけ、ここで確認する。
-    const negativeUnsaved = negativeChanges
-      && !sameWorkTags(workspace.negative, defaultNegativeTags())
-      && (active === null || active.workspace.negative === undefined);
-    const dirty = (active ? !sameWorkspace(active.workspace, workspace) : !isEmptyWorkspace(workspace)) || negativeUnsaved;
-    const nextCharacterNegative = result.characterNegative !== undefined && result.characterNegative !== settings.characterNegativePrompt
-      ? result.characterNegative
-      : null;
-    const also = [
-      negativeChanges ? '全体ネガティブ' : '',
-      nextCharacterNegative !== null ? '共通のキャラ用ネガティブ' : '',
-      generationChanges ? '生成設定' : '',
-    ].filter(Boolean);
-    const action = also.length > 0
-      ? `画像のプロンプトを適用しますか？作業中のベースとキャラクターを置き換え、${also.join('と')}も更新します。`
-      : '画像のプロンプトを適用しますか？作業中のベースとキャラクターを置き換えます。';
-    const choice = await confirmUnsavedChanges(dialogs, {
-      dirty,
-      activeName: active?.name ?? null,
-      action,
-      okLabel: '適用',
-    });
-    if (!choice || epoch !== importEpoch.current) return false;
-    if (choice === 'save' && active) presets.setPresets(overwritePreset(presets.presets, active.id, workspace));
-    const nextMode = nextGeneration?.mode ?? generation.mode;
-    const extras: UndoExtras = {};
-    if (nextCharacterNegative !== null) extras.characterNegativePrompt = nextCharacterNegative;
-    if (generationChanges) extras.generation = generationPatch;
-    dispatch({
-      type: 'replace',
-      workspace: {
-        base: importedBaseForMode(result, nextMode),
-        characters: result.characters,
-        negative: result.negative ?? workspace.negative,
-      },
-    }, extras);
-    presets.setActiveId(null);
-    setPromptSource(null);
-    openEditor();
-    show(choice === 'save' && active
-      ? `プリセット「${active.name}」に変更を上書きし、画像のプロンプトを読み込みました`
-      : '画像のプロンプトを読み込みました');
-    return true;
   };
 
   const headerRef = useRef<HTMLElement>(null);

@@ -4,12 +4,20 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { DialogProvider } from '../src/components/Dialogs';
-import { getKV, listEntries, setKV } from '../src/lib/db';
+import { toBackupJSON, type Backup } from '../src/lib/backup';
+import { getKV, listEntries, replaceAllEntries, setKV } from '../src/lib/db';
+import { normalizeGeneration } from '../src/lib/generation';
 import { createPreset } from '../src/lib/presets';
+import { DEFAULT_SETTINGS } from '../src/lib/settings';
 import { normalizeWorkspace } from '../src/lib/workspace';
 import { caption, pngFixture } from './promptImportFixture';
 
-vi.mock('../src/lib/db', () => ({ getKV: vi.fn(), listEntries: vi.fn(), setKV: vi.fn() }));
+vi.mock('../src/lib/db', () => ({
+  getKV: vi.fn(),
+  listEntries: vi.fn(),
+  replaceAllEntries: vi.fn(),
+  setKV: vi.fn(),
+}));
 vi.mock('../src/lib/novelai', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/novelai')>(),
   requestImages: vi.fn(),
@@ -51,6 +59,20 @@ const openNegative = () => click(container.querySelector<HTMLButtonElement>('.ed
 const chooseDialog = () => Array.from(container.querySelectorAll('dialog'))
   .find((dialog) => dialog.textContent?.includes('変更が反映されていません'));
 
+async function importBackup(data: Backup) {
+  await click(button('設定'));
+  const input = container.querySelector<HTMLInputElement>('input[accept*="json"]');
+  if (!input) throw new Error('バックアップの入力がありません');
+  const file = new File([toBackupJSON(data)], 'backup.json', { type: 'application/json' });
+  await act(async () => {
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const confirm = container.querySelector('dialog.app-dialog-confirm');
+  if (!confirm) throw new Error('バックアップ確認がありません');
+  await click(button('読み込む', confirm));
+}
+
 async function dropImport() {
   const target = container.querySelector('.png-drop-zone')!;
   const event = new Event('drop', { bubbles: true, cancelable: true });
@@ -78,6 +100,7 @@ beforeEach(async () => {
     activePreset: preset.id,
   })[key as 'workspace'] as never);
   vi.mocked(setKV).mockResolvedValue(undefined);
+  vi.mocked(replaceAllEntries).mockResolvedValue(undefined);
   vi.mocked(listEntries).mockResolvedValue([
     { id: '1', tag: 'standing', category: 'pose', alias: '', default_weight: 1, sort_order: 0, updated_at: '' },
   ]);
@@ -201,6 +224,83 @@ it('does not apply a PNG after saving fails while the confirmation is open', asy
   await click(button('反映せずに適用'));
   expect(preview()).toBe('ONのタグがありません');
   expect(field('steps')?.value).toBe('19');
+});
+
+it('does not replace the workspace when the preset save fails', async () => {
+  const dialog = await dropImport();
+  await click(button('適用', dialog));
+  vi.mocked(setKV).mockImplementation(async (key: string) => {
+    if (key === 'presets') throw new Error('preset-disk');
+  });
+  await click(button('変更を反映してから適用', chooseDialog()!));
+  expect(preview()).toBe('existing');
+  expect(container.textContent).toContain('保存できません');
+  expect(container.querySelector('.toast')?.textContent ?? '').not.toContain('上書き');
+  expect(container.querySelector('.prompt-import-dialog')).toBeNull();
+  expect(setKV).toHaveBeenCalledWith('presets', expect.anything());
+  expect(vi.mocked(setKV).mock.calls.some(([key, saved]) => key === 'workspace' && JSON.stringify(saved).includes('standing'))).toBe(false);
+});
+
+it('asks again when a backup lands while the PNG confirmation is open', async () => {
+  let release!: () => void;
+  vi.mocked(replaceAllEntries).mockImplementation(() => new Promise<void>((resolve) => { release = resolve; }));
+  const added = createPreset('追加', normalizeWorkspace({
+    base: { quality: [{ tag: 'backup-tag', enabled: true, weight: 1 }] },
+  }));
+  await click(button('設定'));
+  const input = container.querySelector<HTMLInputElement>('input[accept*="json"]');
+  if (!input) throw new Error('バックアップの入力がありません');
+  const file = new File([toBackupJSON({
+    dictionary: [],
+    presets: [preset, added],
+    workspace: normalizeWorkspace({ base: { quality: [{ tag: 'backup-tag' }] } }),
+    settings: { ...DEFAULT_SETTINGS, characterNegativePrompt: 'blurry' },
+    generation: normalizeGeneration({ steps: 19, seed: 11 }),
+  })], 'backup.json', { type: 'application/json' });
+  await act(async () => {
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await click(button('読み込む', container.querySelector('dialog.app-dialog-confirm')!));
+  if (!release) throw new Error('辞書の保存が始まっていません');
+
+  await click(button('編集'));
+  const dialog = await dropImport();
+  await click(button('適用', dialog));
+  expect(chooseDialog()?.textContent).toContain('プリセット「基本」');
+  await act(async () => { release(); });
+  expect(preview()).toBe('backup-tag');
+
+  await click(button('変更を反映してから適用', chooseDialog()!));
+  const again = container.querySelector('dialog.app-dialog-confirm');
+  expect(again?.textContent).toContain('今のタグはプリセットに保存されていません');
+  await click(button('適用', again!));
+  expect(preview()).toBe('standing');
+  const search = container.querySelector<HTMLInputElement>('.preset-search input');
+  if (!search) throw new Error('プリセット検索がありません');
+  await act(async () => { search.focus(); });
+  expect(container.textContent).toContain('追加');
+});
+
+it('keeps a shared character negative that a later backup set to the same value', async () => {
+  const dialog = await dropImport();
+  await click(button('適用', dialog));
+  await click(button('反映せずに適用', chooseDialog()!));
+  await importBackup({
+    dictionary: [],
+    presets: [preset],
+    workspace: normalizeWorkspace({ base: { quality: [{ tag: 'backup-tag' }] } }),
+    settings: { ...DEFAULT_SETTINGS, characterNegativePrompt: 'imported neg' },
+    generation: normalizeGeneration({ steps: 28, seed: 42, size: 'square' }),
+  });
+  expect(preview()).toBe('backup-tag');
+  await click(button('編集'));
+  await click(button('元に戻す'));
+  expect(preview()).toBe('standing');
+  await click(button('元に戻す'));
+  expect(preview()).toBe('existing');
+  await openNegative();
+  expect(field('character-text')?.value).toBe('imported neg');
 });
 
 it('saves the current preset before applying the image prompt', async () => {

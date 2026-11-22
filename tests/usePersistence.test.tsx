@@ -14,12 +14,20 @@ let value: unknown;
 let change: (value: unknown) => void;
 let renders = 0;
 
-function Harness({ storageKey = 'workspace', onLoad }: { storageKey?: KVKey; onLoad?: (raw: unknown, apply: (v: unknown) => void) => Promise<void> | void }) {
+function Harness({
+  storageKey = 'workspace',
+  onLoad,
+  commitRef,
+}: {
+  storageKey?: KVKey;
+  onLoad?: (raw: unknown, apply: (v: unknown) => void) => Promise<void> | void;
+  commitRef?: { current: (next: unknown) => Promise<boolean> };
+}) {
   renders += 1;
   const [stored, setStored] = useState<unknown>('initial');
   change = setStored;
   value = stored;
-  state = usePersistence(storageKey, stored, (raw) => (onLoad ? onLoad(raw, setStored) : setStored(raw)), 20);
+  state = usePersistence(storageKey, stored, (raw) => (onLoad ? onLoad(raw, setStored) : setStored(raw)), 20, commitRef);
   return null;
 }
 
@@ -184,6 +192,40 @@ describe('persistent state', () => {
     expect(setKV).toHaveBeenCalledTimes(2);
     expect(setKV).toHaveBeenNthCalledWith(1, 'workspace', 'B');
     expect(setKV).toHaveBeenNthCalledWith(2, 'workspace', 'A');
+  });
+
+  it('commits through the same queue before the debounce and does not let that debounce overwrite it', async () => {
+    const commitRef: { current: (next: unknown) => Promise<boolean> } = { current: async () => false };
+    vi.mocked(getKV).mockResolvedValue('saved');
+    await act(async () => root.render(<Harness commitRef={commitRef} />));
+    await act(async () => change('debounced'));
+    expect(setKV).not.toHaveBeenCalled();
+    let saved = false;
+    await act(async () => { saved = await commitRef.current('final'); });
+    expect(saved).toBe(true);
+    expect(setKV).toHaveBeenCalledTimes(1);
+    expect(setKV).toHaveBeenCalledWith('workspace', 'final');
+    await tick();
+    expect(setKV).toHaveBeenCalledTimes(1);
+    await act(async () => change('final'));
+    await tick();
+    expect(setKV).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a failed commit and still saves the value on screen', async () => {
+    const commitRef: { current: (next: unknown) => Promise<boolean> } = { current: async () => false };
+    vi.mocked(getKV).mockResolvedValue('saved');
+    vi.mocked(setKV)
+      .mockRejectedValueOnce(new Error('preset-disk'))
+      .mockResolvedValue(undefined);
+    await act(async () => root.render(<Harness commitRef={commitRef} />));
+    await act(async () => change('debounced'));
+    let saved = true;
+    await act(async () => { saved = await commitRef.current('final'); });
+    expect(saved).toBe(false);
+    expect(state.error).toBeNull();
+    expect(setKV).toHaveBeenLastCalledWith('workspace', 'debounced');
+    expect(value).toBe('debounced');
   });
 
   it('discards a queued visibility flush when app data is reset', async () => {
