@@ -345,7 +345,7 @@ it('restores character negative and generation only on the import step', async (
     capture: () => ({ characterNegativePrompt, generation: { ...generation } }),
     restore: (extras: UndoExtras) => {
       if (extras.characterNegativePrompt !== undefined) characterNegativePrompt = extras.characterNegativePrompt;
-      if (extras.generation) generation = { ...extras.generation };
+      if (extras.generation) generation = { ...generation, ...extras.generation };
     },
   };
   function ExtrasHarness({ initial }: { initial: Workspace }) {
@@ -357,27 +357,31 @@ it('restores character negative and generation only on the import step', async (
   await act(async () => root.render(<ExtrasHarness initial={ws} />));
   await run(() => api.dispatch(
     { type: 'replace', workspace: emptyWorkspace() },
-    { characterNegativePrompt: 'lowres', generation: { ...generation, steps: 28, seed: 42 } },
+    { characterNegativePrompt: 'lowres', generation: { steps: 28 } },
   ));
   expect(ws.base.appearance).toEqual([]);
   expect(characterNegativePrompt).toBe('lowres');
   expect(generation.steps).toBe(28);
+  expect(generation.seed).toBe(11);
 
   await run(() => api.dispatch({ type: 'add', target: BASE, category: 'appearance', tag: 'hat', weight: 1 }));
-  generation = { ...generation, steps: 22 };
+  generation = { ...generation, seed: 99 };
   await run(() => api.undo());
   expect(ws.base.appearance.map((tag) => tag.tag)).toEqual([]);
-  expect(generation.steps).toBe(22);
+  expect(generation.steps).toBe(28);
+  expect(generation.seed).toBe(99);
   expect(characterNegativePrompt).toBe('lowres');
 
   await run(() => api.undo());
   expect(names()).toEqual(['a', 'b', 'c', 'd']);
-  expect(generation).toMatchObject({ steps: 19, seed: 11 });
+  expect(generation.steps).toBe(19);
+  expect(generation.seed).toBe(99);
   expect(characterNegativePrompt).toBe('blurry');
 
   await run(() => api.redo());
   expect(ws.base.appearance).toEqual([]);
-  expect(generation).toMatchObject({ steps: 28, seed: 42 });
+  expect(generation.steps).toBe(28);
+  expect(generation.seed).toBe(99);
   expect(characterNegativePrompt).toBe('lowres');
 });
 

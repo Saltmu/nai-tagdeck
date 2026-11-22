@@ -156,6 +156,38 @@ it('asks before replacing unsaved preset edits and undoes the imported settings 
   expect((container.querySelector('.preset-search input') as HTMLInputElement).value).toBe('');
 });
 
+it('confirms when a PNG would replace an edited negative that the active preset does not store', async () => {
+  await act(async () => root.unmount());
+  const legacy = createPreset('旧', normalizeWorkspace({
+    base: { quality: [{ tag: 'existing', enabled: true, weight: 1 }] },
+    negative: [],
+  }));
+  delete legacy.workspace.negative;
+  vi.mocked(getKV).mockImplementation(async (key) => ({
+    workspace: {
+      base: { quality: [{ tag: 'existing' }] },
+      negative: [{ tag: 'custom neg', enabled: true, weight: 1 }],
+    },
+    generation: { seed: 11, steps: 19 },
+    settings: { characterNegativePrompt: 'blurry' },
+    presets: [legacy],
+    activePreset: legacy.id,
+  })[key as 'workspace'] as never);
+  root = createRoot(container);
+  await act(async () => root.render(<DialogProvider><App onResetAll={() => {}} /></DialogProvider>));
+  await click(button('編集'));
+  expect(container.textContent).not.toContain('変更あり');
+
+  const dialog = await dropImport();
+  await click(button('適用', dialog));
+  const confirm = chooseDialog();
+  expect(confirm?.textContent).toContain('プリセット「旧」に変更が反映されていません');
+  expect(confirm?.textContent).toContain('全体ネガティブ');
+  await click(button('キャンセル', confirm!));
+  await openNegative();
+  expect(container.textContent).toContain('custom neg');
+});
+
 it('saves the current preset before applying the image prompt', async () => {
   const dialog = await dropImport();
   await click(button('適用', dialog));

@@ -12,7 +12,8 @@ const EDIT_MERGE_MS = 3000;
 /** PNG 読み込みなど、ワークスペースと同時に変えた値。指定した項目だけをそのステップで戻す。 */
 export interface UndoExtras {
   characterNegativePrompt?: string;
-  generation?: GenerationSettings;
+  /** 適用で値が変わった生成項目だけ。 */
+  generation?: Partial<GenerationSettings>;
 }
 
 interface ExtrasChange {
@@ -70,8 +71,18 @@ function freezeExtras(
     frozen.characterNegativePrompt = after.characterNegativePrompt;
   }
   if (after.generation !== undefined) {
-    before.generation = { ...current.generation };
-    frozen.generation = { ...after.generation };
+    const beforeGeneration: Partial<GenerationSettings> = {};
+    const afterGeneration: Partial<GenerationSettings> = {};
+    for (const key of Object.keys(after.generation) as (keyof GenerationSettings)[]) {
+      const value = after.generation[key];
+      if (value === undefined) continue;
+      beforeGeneration[key] = current.generation[key] as never;
+      afterGeneration[key] = value as never;
+    }
+    if (Object.keys(afterGeneration).length > 0) {
+      before.generation = beforeGeneration;
+      frozen.generation = afterGeneration;
+    }
   }
   if (frozen.characterNegativePrompt === undefined && frozen.generation === undefined) return undefined;
   return { before, after: frozen };

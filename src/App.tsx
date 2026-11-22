@@ -23,14 +23,15 @@ import { useLatestImageNotice } from './hooks/useLatestImageNotice';
 import { useFirstRun } from './hooks/useFirstRun';
 import { confirmUnsavedChanges } from './components/confirmUnsaved';
 import { useDialogs } from './components/Dialogs';
-import { isEmptyWorkspace, overwritePreset, sameWorkspace } from './lib/presets';
+import { isEmptyWorkspace, overwritePreset, sameWorkspace, sameWorkTags } from './lib/presets';
 import { isDefaultSettings } from './lib/settings';
-import { isDefaultGeneration, normalizeGeneration, sameGeneration, sizeOf, type SizeKey } from './lib/generation';
+import { isDefaultGeneration, normalizeGeneration, sizeOf, type GenerationSettings, type SizeKey } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
 import { importedBaseForMode, type PromptImport } from './lib/promptImport';
+import { defaultNegativeTags } from './lib/workspace';
 import type { WeightSyntax } from './types';
 
 type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
@@ -175,13 +176,26 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   );
   const applyPrompt = async (result: PromptImport, applyGeneration: boolean) => {
     const active = presets.presets.find((preset) => preset.id === presets.activeId) ?? null;
-    const dirty = active ? !sameWorkspace(active.workspace, workspace) : !isEmptyWorkspace(workspace);
     const nextGeneration = applyGeneration ? normalizeGeneration({ ...generation, ...result.generation.values }) : null;
-    const generationChanges = nextGeneration !== null && !sameGeneration(nextGeneration, generation);
+    const generationPatch: Partial<GenerationSettings> = {};
+    if (nextGeneration) {
+      for (const key of Object.keys(result.generation.values) as (keyof GenerationSettings)[]) {
+        const value = nextGeneration[key];
+        if (value !== undefined && !Object.is(value, generation[key])) generationPatch[key] = value as never;
+      }
+    }
+    const generationChanges = Object.keys(generationPatch).length > 0;
+    const negativeChanges = result.negative !== undefined && !sameWorkTags(result.negative, workspace.negative);
+    // 古いプリセットはネガティブを持たず、空の作業状態もネガティブを見ない。PNG が編集済みの全体ネガティブを置き換えるときだけ、ここで確認する。
+    const negativeUnsaved = negativeChanges
+      && !sameWorkTags(workspace.negative, defaultNegativeTags())
+      && (active === null || active.workspace.negative === undefined);
+    const dirty = (active ? !sameWorkspace(active.workspace, workspace) : !isEmptyWorkspace(workspace)) || negativeUnsaved;
     const nextCharacterNegative = result.characterNegative !== undefined && result.characterNegative !== settings.characterNegativePrompt
       ? result.characterNegative
       : null;
     const also = [
+      negativeChanges ? '全体ネガティブ' : '',
       nextCharacterNegative !== null ? '共通のキャラ用ネガティブ' : '',
       generationChanges ? '生成設定' : '',
     ].filter(Boolean);
@@ -199,7 +213,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     const nextMode = nextGeneration?.mode ?? generation.mode;
     const extras: UndoExtras = {};
     if (nextCharacterNegative !== null) extras.characterNegativePrompt = nextCharacterNegative;
-    if (nextGeneration && generationChanges) extras.generation = nextGeneration;
+    if (generationChanges) extras.generation = generationPatch;
     dispatch({
       type: 'replace',
       workspace: {
