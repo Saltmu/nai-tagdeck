@@ -17,7 +17,11 @@
     min-height: 44px;
   }
 
-  .viewer-seed-copy,
+  .viewer-seed-apply {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
   .latest-close {
     width: 44px;
     height: 44px;

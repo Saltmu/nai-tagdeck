@@ -265,4 +265,73 @@ describe('useGenerator', () => {
     expect(generator.generating).toBe(false);
     expect(generator.error).toBeNull();
   });
+
+  it('送信した正規化済みのプロンプトとパラメータを画像に記録する', async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response(png, { status: 200 }))));
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    await act(async () => {
+      await generator.generate({
+        token: 'pst-valid',
+        prompt: '1girl',
+        negative: 'lowres',
+        characters: [
+          { prompt: 'wolf', negative: 'alias', center: { x: 0.2, y: 0.8 } },
+          { prompt: 'cat', negative: '' },
+        ],
+        settings: {
+          ...DEFAULT_GENERATION,
+          mode: 'furry',
+          steps: 50,
+          scale: 5.55,
+          sampler: 'k_euler',
+          noiseSchedule: 'exponential',
+          seed: 42,
+          cfgRescale: 0.234,
+          dynamicThresholding: true,
+        },
+      });
+    });
+
+    expect(onImages).toHaveBeenCalledTimes(1);
+    expect(onImages.mock.calls[0]![0][0]).toMatchObject({
+      seed: 42,
+      width: 832,
+      height: 1216,
+      prompt: 'fur dataset, 1girl',
+      characterPrompts: ['wolf', 'cat'],
+      negativePrompt: 'lowres',
+      characterDetails: [
+        { prompt: 'wolf', negative: 'alias', center: { x: 0.2, y: 0.8 } },
+        { prompt: 'cat', negative: '', center: { x: 0.5, y: 0.5 } },
+      ],
+      params: {
+        mode: 'furry',
+        steps: 28,
+        scale: 5.6,
+        sampler: 'k_euler',
+        noiseSchedule: 'exponential',
+        cfgRescale: 0.23,
+        dynamicThresholding: true,
+      },
+    });
+
+    await act(async () => {
+      await generator.generate({
+        token: 'pst-valid',
+        prompt: 'solo',
+        negative: '',
+        characters: [{ prompt: 'girl', negative: 'lowres' }],
+        settings: DEFAULT_GENERATION,
+      });
+    });
+    const second = onImages.mock.calls[1]![0][0]!;
+    expect(second.prompt).toBe('solo');
+    expect(second.negativePrompt).toBe('');
+    expect(second.characterDetails).toEqual([{ prompt: 'girl', negative: 'lowres' }]);
+    expect(second.params).toMatchObject({ mode: 'anime', dynamicThresholding: false });
+  });
 });

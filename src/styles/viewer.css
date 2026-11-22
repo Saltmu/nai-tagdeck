@@ -84,29 +84,19 @@
   cursor: pointer;
 }
 
-.viewer-prompt p {
-  margin: 0.4rem 0 0;
-  font-family: ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
-  font-size: 0.8rem;
-  overflow-wrap: anywhere;
-}
-
 .viewer-seed {
   display: flex;
   align-items: center;
   gap: 0.3rem;
 }
 
-.viewer-seed-copy {
-  width: 28px;
-  height: 28px;
-  padding: 4px;
+.viewer-seed-apply {
+  gap: 0.25rem;
 }
 
-.viewer-seed-copy .icon {
-  margin: auto;
-  width: 18px;
-  height: 18px;
+.viewer-seed-apply .icon {
+  width: 16px;
+  height: 16px;
 }
 
 .viewer-toolbar {

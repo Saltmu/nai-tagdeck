@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { buildGenerateRequest, describeError, randomSeed, requestImages } from '../lib/novelai';
+import { buildGenerateRequest, describeError, randomSeed, requestImages, type GenerateRequest } from '../lib/novelai';
 import { toParams, type GenerationSettings } from '../lib/generation';
-import type { NewImage } from './useImages';
+import type { GeneratedCharacterDetail, GeneratedImageParams, NewImage } from './useImages';
 
 export interface GenerateArgs {
   token: string;
@@ -18,6 +18,27 @@ export interface Generator {
   generate: (args: GenerateArgs) => Promise<void>;
   cancel: () => void;
   dismissError: () => void;
+}
+
+function recordedCharacters(body: GenerateRequest): GeneratedCharacterDetail[] {
+  const useCoords = body.parameters.use_coords === true;
+  return body.parameters.characterPrompts.map((c) => ({
+    prompt: c.prompt,
+    negative: c.uc,
+    ...(useCoords ? { center: { x: c.center.x, y: c.center.y } } : {}),
+  }));
+}
+
+function recordedParams(settings: GenerationSettings, params: ReturnType<typeof toParams>): GeneratedImageParams {
+  return {
+    mode: settings.mode,
+    steps: params.steps,
+    scale: params.scale,
+    sampler: params.sampler,
+    noiseSchedule: params.noiseSchedule,
+    cfgRescale: params.cfgRescale,
+    dynamicThresholding: params.dynamicThresholding,
+  };
 }
 
 export function useGenerator(onImages: (images: NewImage[]) => void): Generator {
@@ -39,6 +60,9 @@ export function useGenerator(onImages: (images: NewImage[]) => void): Generator 
         const body = buildGenerateRequest({ prompt, negative, characters, params, mode: settings.mode });
         const results = await requestImages(token, body, ctrl.signal);
         if (ctrl.signal.aborted) return;
+        const negativePrompt = typeof body.parameters.negative_prompt === 'string' ? body.parameters.negative_prompt : negative;
+        const characterDetails = recordedCharacters(body);
+        const imageParams = recordedParams(settings, params);
         onImages(
           results.map((r) => ({
             blob: r.blob,
@@ -46,7 +70,10 @@ export function useGenerator(onImages: (images: NewImage[]) => void): Generator 
             width: params.width,
             height: params.height,
             prompt: body.input,
-            characterPrompts: characters.map((c) => c.prompt),
+            characterPrompts: characterDetails.map((c) => c.prompt),
+            negativePrompt,
+            characterDetails,
+            params: imageParams,
             createdAt: Date.now(),
           })),
         );

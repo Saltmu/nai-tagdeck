@@ -181,6 +181,10 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     (size: SizeKey) => updateGeneration({ size }),
     [updateGeneration],
   );
+  const handleClearSeed = useCallback(() => {
+    updateGeneration({ seed: null });
+    show('シードをランダムに戻しました');
+  }, [updateGeneration, show]);
   useEffect(() => {
     if (!firstRunReady && promptSource !== null) setPromptSource(null);
     return () => { confirmAbortRef.current?.abort(); };
@@ -335,7 +339,9 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         </nav>
         <QuickGenerate
           size={generation.size}
+          seed={generation.seed}
           onSizeChange={handleSizeChange}
+          onClearSeed={handleClearSeed}
           generating={generator.generating}
           blocker={blocker}
           onGenerate={startGenerate}

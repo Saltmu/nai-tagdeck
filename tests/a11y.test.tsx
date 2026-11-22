@@ -158,45 +158,92 @@ describe('GenerateDock tablist', () => {
 });
 
 describe('QuickGenerate radiogroup', () => {
-  it('supports roving tabIndex (including non-quick size fallback) and arrow navigation', async () => {
-    function Harness() {
-      const [size, setSize] = useState<SizeKey>('tall');
+  it('shows tall or wide as a fourth radio and keeps arrow navigation', async () => {
+    function Harness({ initial }: { initial: SizeKey }) {
+      const [size, setSize] = useState(initial);
       return (
         <QuickGenerate
           size={size}
+          seed={null}
           onSizeChange={(next) => setSize(next)}
+          onClearSeed={() => {}}
           generating={false}
           blocker={null}
           onGenerate={() => {}}
         />
       );
     }
-    await act(async () => root.render(<Harness />));
-    const radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    await act(async () => root.render(<Harness key="tall" initial="tall" />));
+    let radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(radios.map((r) => r.getAttribute('aria-label'))).toEqual([
+      '縦 832×1216',
+      '横 1216×832',
+      '正方形 1024×1024',
+      '縦長 768×1344',
+    ]);
+    expect(radios.map((r) => r.tabIndex)).toEqual([-1, -1, -1, 0]);
+    expect(radios[3]!.getAttribute('aria-checked')).toBe('true');
+
+    await act(async () => {
+      radios[3]!.focus();
+      radios[3]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
     expect(radios).toHaveLength(3);
-    const [r0, r1, r2] = radios as [HTMLButtonElement, HTMLButtonElement, HTMLButtonElement];
-    // 非標準サイズ選択時は先頭ラジオが tabIndex=0 になる
+    expect(document.activeElement).toBe(radios[0]);
+    expect(radios[0]!.getAttribute('aria-checked')).toBe('true');
     expect(radios.map((r) => r.tabIndex)).toEqual([0, -1, -1]);
 
     await act(async () => {
-      r0.focus();
-      r0.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      radios[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
     });
-    expect(document.activeElement).toBe(r1);
-    expect(r1.getAttribute('aria-checked')).toBe('true');
-    expect(radios.map((r) => r.tabIndex)).toEqual([-1, 0, -1]);
+    radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(document.activeElement).toBe(radios[2]);
+    expect(radios[2]!.getAttribute('aria-checked')).toBe('true');
 
     await act(async () => {
-      r1.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+      radios[2]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
     });
-    expect(document.activeElement).toBe(r0);
-    expect(r0.getAttribute('aria-checked')).toBe('true');
+    radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(document.activeElement).toBe(radios[0]);
+    expect(radios[0]!.getAttribute('aria-checked')).toBe('true');
 
-    await act(async () => {
-      r0.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
-    });
-    expect(document.activeElement).toBe(r2);
-    expect(r2.getAttribute('aria-checked')).toBe('true');
+    await act(async () => root.render(<Harness key="wide" initial="wide" />));
+    radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(radios.map((r) => r.getAttribute('aria-label'))).toEqual([
+      '縦 832×1216',
+      '横 1216×832',
+      '正方形 1024×1024',
+      '横長 1344×768',
+    ]);
+    expect(radios[3]!.getAttribute('aria-checked')).toBe('true');
+    expect(radios[3]!.tabIndex).toBe(0);
+  });
+
+  it('shows a seed lock button only while a seed is fixed', async () => {
+    const onClearSeed = vi.fn();
+    function Harness({ seed }: { seed: number | null }) {
+      return (
+        <QuickGenerate
+          size="portrait"
+          seed={seed}
+          onSizeChange={() => {}}
+          onClearSeed={onClearSeed}
+          generating={false}
+          blocker={null}
+          onGenerate={() => {}}
+        />
+      );
+    }
+    await act(async () => root.render(<Harness seed={42} />));
+    const button = container.querySelector<HTMLButtonElement>('.seed-lock')!;
+    expect(button.getAttribute('aria-label')).toBe('シード 42 を解除してランダムに戻す');
+    expect(button.querySelector('.seed-lock-value')?.textContent).toBe('42');
+    await act(async () => button.click());
+    expect(onClearSeed).toHaveBeenCalledTimes(1);
+
+    await act(async () => root.render(<Harness seed={null} />));
+    expect(container.querySelector('.seed-lock')).toBeNull();
   });
 });
 
