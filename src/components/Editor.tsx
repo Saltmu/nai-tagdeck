@@ -163,6 +163,13 @@ export function Editor({
   );
 
   const { selected, select } = useEditorSelection(characters.map((c) => c.id), loaded);
+  const focusCopiedTab = useRef(false);
+  const copiedTabId = useRef<string | null>(null);
+  const knownCharacterIds = useRef(characters.map((c) => c.id));
+  const dispatchForCard = useCallback((action: WorkspaceAction) => {
+    if (action.type === 'duplicateCharacter') focusCopiedTab.current = true;
+    dispatch(action);
+  }, [dispatch]);
   const negativeSelected = selected === NEGATIVE;
   const activeIndex = characters.findIndex((c) => c.id === selected);
   const active = activeIndex >= 0 ? characters[activeIndex] : undefined;
@@ -232,6 +239,20 @@ export function Editor({
 
   const id = useId();
   const tabRefs = useRef(new Map<string, HTMLButtonElement | null>());
+  useLayoutEffect(() => {
+    const ids = characters.map((c) => c.id);
+    const prev = knownCharacterIds.current;
+    const added = ids.filter((characterId) => !prev.includes(characterId));
+    knownCharacterIds.current = ids;
+    if (focusCopiedTab.current) {
+      focusCopiedTab.current = false;
+      copiedTabId.current = added.at(-1) ?? null;
+    }
+    const target = copiedTabId.current;
+    if (!target || selected !== target) return;
+    copiedTabId.current = null;
+    tabRefs.current.get(target)?.focus();
+  }, [characters, selected]);
   const tabKeys = useMemo(() => [BASE, NEGATIVE, ...characters.map((c) => c.id)], [characters]);
   const panelId = `${id}-panel`;
   const onTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -379,7 +400,7 @@ export function Editor({
             character={active}
             index={activeIndex}
             count={characters.length}
-            dispatch={dispatch}
+            dispatch={dispatchForCard}
             entries={dictionary.entries}
             syntax={syntax}
             isKnown={isKnown}
