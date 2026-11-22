@@ -1,8 +1,10 @@
-import { type CSSProperties, useState } from 'react';
+import { type CSSProperties, useRef, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
 import { usePngDrop } from '../hooks/usePngDrop';
-import { downloadUrl } from '../lib/browser';
+import { downloadBlob, downloadUrl, timeStamp } from '../lib/browser';
+import { imageZipBlob } from '../lib/imageZip';
 import { ImageViewer, imageFileName } from './ImageViewer';
+import { PinIcon } from './icons';
 import { useDialogs } from './Dialogs';
 import type { PromptSource } from './PromptImportDialog';
 
@@ -17,6 +19,7 @@ interface Props {
   onClear: () => void;
   onUseSeed: (seed: number) => void;
   onDownloaded: (id: string) => void;
+  onTogglePin: (id: string) => void;
   onPickPng?: () => void;
   onReadPng: (source: PromptSource) => void;
 }
@@ -36,16 +39,45 @@ export function Gallery({
   onClear,
   onUseSeed,
   onDownloaded,
+  onTogglePin,
   onPickPng,
   onReadPng,
 }: Props) {
   const dialogs = useDialogs();
   const [openId, setOpenId] = useState<string | null>(null);
   const [fileError, setFileError] = useState('');
+  const [zipError, setZipError] = useState('');
+  const [zipping, setZipping] = useState<'all' | 'new' | null>(null);
+  const zippingRef = useRef(false);
   const openIndex = images.findIndex((img) => img.id === openId);
+  const undownloadedCount = images.filter((img) => !img.downloaded).length;
   const downloadImage = (image: GeneratedImage) => {
     downloadUrl(imageFileName(image), image.url);
     onDownloaded(image.id);
+  };
+  const downloadZip = async (onlyUndownloaded: boolean) => {
+    const targets = images.filter((img) => !onlyUndownloaded || !img.downloaded);
+    if (targets.length === 0 || zippingRef.current) return;
+    zippingRef.current = true;
+    setZipping(onlyUndownloaded ? 'new' : 'all');
+    setZipError('');
+    try {
+      const files = [];
+      for (const image of [...targets].reverse()) {
+        files.push({
+          name: imageFileName(image),
+          data: new Uint8Array(await image.blob.arrayBuffer()),
+        });
+      }
+      const prefix = onlyUndownloaded ? 'nai-tagdeck-undownloaded' : 'nai-tagdeck';
+      downloadBlob(`${prefix}-${timeStamp()}.zip`, imageZipBlob(files));
+      for (const image of targets) onDownloaded(image.id);
+    } catch {
+      setZipError('ZIP の作成に失敗しました');
+    } finally {
+      zippingRef.current = false;
+      setZipping(null);
+    }
   };
   const openImport = (blob: Blob, name: string) => {
     setFileError('');
@@ -64,22 +96,42 @@ export function Gallery({
         <h2 className="card-title">
           画像<span className="count">{images.length}枚</span>
         </h2>
-        <button
-          type="button"
-          className="btn btn-small btn-danger"
-          disabled={images.length === 0}
-          onClick={async () => {
-            const ok = await dialogs.confirm(`画像 ${images.length}枚をすべて削除しますか？（ダウンロードしていない画像は戻せません）`, {
-              okLabel: 'すべて削除',
-              danger: true,
-            });
-            if (ok) onClear();
-          }}
-        >
-          すべて削除
-        </button>
+        <div className="gallery-actions">
+          <button
+            type="button"
+            className="btn btn-small"
+            disabled={images.length === 0 || zipping !== null}
+            aria-busy={zipping === 'all'}
+            onClick={() => void downloadZip(false)}
+          >
+            {zipping === 'all' ? 'ZIPを作成中' : 'すべて ZIP で保存'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-small"
+            disabled={undownloadedCount === 0 || zipping !== null}
+            aria-busy={zipping === 'new'}
+            onClick={() => void downloadZip(true)}
+          >
+            {zipping === 'new' ? 'ZIPを作成中' : '未ダウンロードを ZIP で保存'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-small btn-danger"
+            disabled={images.length === 0}
+            onClick={async () => {
+              const ok = await dialogs.confirm(`画像 ${images.length}枚をすべて削除しますか？（ダウンロードしていない画像は戻せません）`, {
+                okLabel: 'すべて削除',
+                danger: true,
+              });
+              if (ok) onClear();
+            }}
+          >
+            すべて削除
+          </button>
+        </div>
       </div>
-      <p className="hint">画像はこのタブのメモリにだけあり、タブを閉じると消えます。残したい画像はダウンロードしてください。</p>
+      <p className="hint">画像はこのタブのメモリにだけあり、タブを閉じると消えます。残したい画像はピン留めするか、ZIP または PNG でダウンロードしてください。上限を超えるとピン留めしていない画像から削除され、すべてピン留めしているときは古い画像から削除されます。</p>
       <div
         className={`png-drop-zone${dragging ? ' is-dragging' : ''}`}
         {...dropProps}
@@ -93,9 +145,10 @@ export function Gallery({
         <span className="hint">または NovelAI の PNG をここにドロップ</span>
       </div>
       {fileError && <p className="error-banner" role="alert">{fileError}</p>}
+      {zipError && <p className="error-banner" role="alert">{zipError}</p>}
       {evictedCount > 0 && (
         <div className="notice" role="status">
-          <span>履歴上限のため、古い画像 {evictedCount}枚を削除しました。残したい画像はダウンロードしてください。</span>
+          <span>履歴上限のため、古い画像 {evictedCount}枚を削除しました。残したい画像はピン留めするかダウンロードしてください。</span>
           {onDismissEviction && (
             <button type="button" className="btn btn-small" onClick={onDismissEviction}>
               閉じる
@@ -113,9 +166,19 @@ export function Gallery({
             </li>
           )}
           {images.map((img, i) => (
-            <li key={img.id} className="thumb" style={thumbStyle(img.width, img.height)}>
+            <li key={img.id} className={`thumb${img.pinned ? ' is-pinned' : ''}`} style={thumbStyle(img.width, img.height)}>
               <button type="button" className="thumb-btn" onClick={() => setOpenId(img.id)}>
                 <img src={i === 0 ? img.url : (img.thumbUrl ?? img.url)} alt={`生成画像 ${images.length - i}（シード ${img.seed}）`} loading="lazy" />
+              </button>
+              <button
+                type="button"
+                className={`btn thumb-pin${img.pinned ? ' is-pinned' : ''}`}
+                aria-pressed={img.pinned}
+                aria-label={img.pinned ? `生成画像 ${images.length - i}のピン留めを外す` : `生成画像 ${images.length - i}をピン留め`}
+                title={img.pinned ? 'ピン留めを外す' : '履歴の自動削除から保護する'}
+                onClick={() => onTogglePin(img.id)}
+              >
+                <PinIcon filled={img.pinned} />
               </button>
               <button
                 type="button"
@@ -148,6 +211,7 @@ export function Gallery({
           }}
           onUseSeed={onUseSeed}
           onDownload={() => downloadImage(images[openIndex]!)}
+          onTogglePin={() => onTogglePin(images[openIndex]!.id)}
           onImportPrompt={onPickPng ? () => {
             const image = images[openIndex]!;
             openImport(image.blob, imageFileName(image));

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
 import { timeStamp } from '../lib/browser';
-import { CheckIcon, CloseIcon, CopyIcon, DownloadIcon, NextIcon, PrevIcon, TrashIcon } from './icons';
+import { CheckIcon, CloseIcon, CopyIcon, DownloadIcon, NextIcon, PinIcon, PrevIcon, TrashIcon } from './icons';
 
 interface Props {
   image: GeneratedImage;
@@ -13,6 +13,7 @@ interface Props {
   onRemove: () => void;
   onUseSeed: (seed: number) => void;
   onDownload: () => void;
+  onTogglePin: () => void;
   onImportPrompt?: () => void;
 }
 
@@ -219,7 +220,7 @@ function ZoomStage({ src, alt, hasPrev, hasNext, onPrev, onNext, onClose }: Stag
   );
 }
 
-export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload, onImportPrompt }: Props) {
+export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload, onTogglePin, onImportPrompt }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [seedCopied, setSeedCopied] = useState(false);
   // 削除は1回目で確認状態にし、2回目で実行する。連打で消えないよう、確認状態になってから
@@ -311,6 +312,16 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
               <NextIcon />
             </button>
             <span className="viewer-toolbar-gap" />
+            <button
+              type="button"
+              className="icon-btn"
+              aria-pressed={image.pinned}
+              aria-label={image.pinned ? 'ピン留めを外す' : 'ピン留め'}
+              title={image.pinned ? 'ピン留めを外す' : '履歴の自動削除から保護する'}
+              onClick={onTogglePin}
+            >
+              <PinIcon filled={image.pinned} />
+            </button>
             <button type="button" className="icon-btn" onClick={onDownload} aria-label="PNGをダウンロード" title="PNGをダウンロード">
               <DownloadIcon />
             </button>

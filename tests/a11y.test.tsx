@@ -449,6 +449,7 @@ describe('ImageViewer keyboard and live region', () => {
       characterPrompts: [],
       createdAt: 1000,
       downloaded: false,
+      pinned: false,
     };
     try {
       await act(async () =>
@@ -463,6 +464,7 @@ describe('ImageViewer keyboard and live region', () => {
             onRemove={() => {}}
             onUseSeed={() => {}}
             onDownload={() => {}}
+            onTogglePin={() => {}}
           />,
         ),
       );

@@ -169,6 +169,7 @@ it('reuses existing image.url on Gallery download, renders thumbUrl for older th
       url: 'blob:full-2',
       thumbUrl: 'blob:thumb-2',
       downloaded: false,
+      pinned: false,
     },
     {
       ...makeNewImage(1, 128, 1024, 1024),
@@ -176,6 +177,7 @@ it('reuses existing image.url on Gallery download, renders thumbUrl for older th
       url: 'blob:full-1',
       thumbUrl: 'blob:thumb-1',
       downloaded: false,
+      pinned: false,
     },
   ];
 
@@ -194,6 +196,7 @@ it('reuses existing image.url on Gallery download, renders thumbUrl for older th
           onClear={vi.fn()}
           onUseSeed={vi.fn()}
           onDownloaded={onDownloaded}
+          onTogglePin={vi.fn()}
           onReadPng={vi.fn()}
         />
       </DialogProvider>,
@@ -218,4 +221,24 @@ it('reuses existing image.url on Gallery download, renders thumbUrl for older th
   expect(createdUrls).toEqual([]);
   expect(anchorClick).toHaveBeenCalledOnce();
   expect(onDownloaded).toHaveBeenCalledWith('new-2');
+});
+
+it('keeps a pinned image when a newer unpinned image would otherwise be the one retained', async () => {
+  await renderHook({ limits: { maxCount: 2, maxBytes: 1000 } });
+  await act(async () => {
+    store.add([makeNewImage(1)]);
+  });
+  const pinnedId = store.images[0]!.id;
+  await act(async () => {
+    store.togglePinned(pinnedId);
+  });
+  expect(store.images[0]!.pinned).toBe(true);
+  await act(async () => {
+    store.add([makeNewImage(2)]);
+  });
+  await act(async () => {
+    store.add([makeNewImage(3)]);
+  });
+  expect(store.images.map((img) => img.seed)).toEqual([3, 1]);
+  expect(store.images.find((img) => img.seed === 1)!.pinned).toBe(true);
 });

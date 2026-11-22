@@ -20,9 +20,10 @@ export interface GeneratedImage {
   characterPrompts: string[];
   createdAt: number;
   downloaded: boolean;
+  pinned: boolean;
 }
 
-export type NewImage = Omit<GeneratedImage, 'id' | 'url' | 'thumbUrl' | 'downloaded'>;
+export type NewImage = Omit<GeneratedImage, 'id' | 'url' | 'thumbUrl' | 'downloaded' | 'pinned'>;
 
 export interface ImageStore {
   images: GeneratedImage[];
@@ -31,6 +32,7 @@ export interface ImageStore {
   remove: (id: string) => void;
   clear: () => void;
   markDownloaded: (id: string) => void;
+  togglePinned: (id: string) => void;
   dismissEviction: () => void;
 }
 
@@ -69,6 +71,7 @@ export function useImages(options?: UseImagesOptions): ImageStore {
       id: newId(),
       url: URL.createObjectURL(img.blob),
       downloaded: false,
+      pinned: false,
     }));
     const { retained, evicted } = applyImageRetention(
       [...created, ...imagesRef.current],
@@ -141,7 +144,14 @@ export function useImages(options?: UseImagesOptions): ImageStore {
     setImages(next);
   }, []);
 
+  const togglePinned = useCallback((id: string) => {
+    if (!imagesRef.current.some((img) => img.id === id)) return;
+    const next = imagesRef.current.map((img) => (img.id === id ? { ...img, pinned: !img.pinned } : img));
+    imagesRef.current = next;
+    setImages(next);
+  }, []);
+
   const dismissEviction = useCallback(() => setEvictedCount(0), []);
 
-  return { images, evictedCount, add, remove, clear, markDownloaded, dismissEviction };
+  return { images, evictedCount, add, remove, clear, markDownloaded, togglePinned, dismissEviction };
 }
