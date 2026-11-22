@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import type { CharacterCenter } from '../types';
 import { normalizeCenter } from '../lib/workspace';
 
 export interface PeerCharacterCenter {
   id: string;
   name: string;
-  /** 未指定の場合は中央 (0.5, 0.5) に自動配置されるものとして表示する。 */
+  /** 生成時に送信される座標。誰もが位置未指定（use_coords: false）のときは undefined。 */
   center?: CharacterCenter;
+  /** 位置未指定のため他の座標指定キャラに合わせて中央 (0.5, 0.5) に自動配置されるか。 */
+  autoCenter?: boolean;
 }
 
 interface Props {
@@ -31,8 +33,11 @@ function formatCoord(value: number): string {
   return value.toFixed(2);
 }
 
-function coordKey(c: CharacterCenter): string {
-  return `${formatCoord(c.x)},${formatCoord(c.y)}`;
+/** 端に近いマーカーのラベルがステージ外へはみ出さないよう、水平方向のアンカー位置を切り替える。 */
+function horizontalAlignClass(x: number): string {
+  if (x < 0.25) return ' is-left';
+  if (x > 0.75) return ' is-right';
+  return '';
 }
 
 /**
@@ -40,7 +45,7 @@ function coordKey(c: CharacterCenter): string {
  * - キャンバス上のクリック／ドラッグで自由な座標（0〜1、小数第2位丸め）を指定できる。
  * - 矢印キー（0.05 刻み、Shift 併用で 0.01 刻み）や Home（中央 0.5, 0.5）でも操作できる。
  * - NovelAI 公式 UI の 5×5 グリッド（A1〜E5）ボタンで定番位置へ素早くスナップできる。
- * - 他の ON キャラクターの位置もラベル付きで同時表示し、配置バランスや重なりを確認できる。
+ * - 他の ON キャラクターの位置もマーカーおよび一覧で同時表示し、配置バランスや重なりを確認できる。
  */
 export function CharacterCenterPicker({
   characterName,
@@ -151,54 +156,11 @@ export function CharacterCenterPicker({
   const stageWidthPx = Math.round(validSize.width * scale);
   const aspect = `${validSize.width} / ${validSize.height}`;
 
-  // 同じ座標に複数キャラクターがいる場合はラベルを 1 つのピルにまとめ、下に並んだプリセット欄に重ならないようにする
-  const { activeGroupNames, activeHasAutoPeer, visiblePeers } = useMemo(() => {
-    const activeKey = coordKey(center);
-    const sameAsActive: string[] = [characterName];
-    let hasAutoAtActive = false;
-
-    const peerGroups = new Map<
-      string,
-      { id: string; pos: CharacterCenter; names: string[]; allAuto: boolean; anyAuto: boolean }
-    >();
-
-    for (const peer of peers) {
-      const pos = peer.center ?? DEFAULT_CENTER;
-      const isAuto = peer.center === undefined;
-      const key = coordKey(pos);
-      if (key === activeKey) {
-        sameAsActive.push(peer.name);
-        if (isAuto) hasAutoAtActive = true;
-        continue;
-      }
-      const existing = peerGroups.get(key);
-      if (existing) {
-        existing.names.push(peer.name);
-        existing.allAuto = existing.allAuto && isAuto;
-        existing.anyAuto = existing.anyAuto || isAuto;
-      } else {
-        peerGroups.set(key, {
-          id: peer.id,
-          pos,
-          names: [peer.name],
-          allAuto: isAuto,
-          anyAuto: isAuto,
-        });
-      }
-    }
-
-    return {
-      activeGroupNames: sameAsActive,
-      activeHasAutoPeer: hasAutoAtActive,
-      visiblePeers: [...peerGroups.values()],
-    };
-  }, [center, characterName, peers]);
-
+  const positionedPeers = peers.filter(
+    (peer): peer is PeerCharacterCenter & { center: CharacterCenter } => peer.center !== undefined,
+  );
   const activeNearBottom = center.y > 0.78;
-  const activeLabelText = activeGroupNames.join(' / ');
-  const activeTitle = `${activeLabelText}: (${formatCoord(center.x)}, ${formatCoord(center.y)})${
-    activeHasAutoPeer ? '（未指定・中央の他キャラを含む）' : ''
-  }`;
+  const activeHorizontal = horizontalAlignClass(center.x);
 
   return (
     <div className="center-picker">
@@ -216,32 +178,30 @@ export function CharacterCenterPicker({
             onKeyDown={handleKeyDown}
           >
             <div className="center-stage-grid" aria-hidden="true" />
-            {visiblePeers.map((group) => {
-              const nearBottom = group.pos.y > 0.78;
-              const labelText = group.names.join(' / ');
+            {positionedPeers.map((peer) => {
+              const pos = peer.center;
+              const isAuto = peer.autoCenter === true;
+              const nearBottom = pos.y > 0.78;
+              const horizontal = horizontalAlignClass(pos.x);
               return (
                 <div
-                  key={group.id}
-                  className={`center-marker center-marker-peer${group.allAuto ? ' is-auto' : ''}${nearBottom ? ' is-above' : ''}`}
-                  style={{ left: `${group.pos.x * 100}%`, top: `${group.pos.y * 100}%` }}
-                  title={`${labelText}: (${formatCoord(group.pos.x)}, ${formatCoord(group.pos.y)})${
-                    group.anyAuto ? '（未指定・中央）' : ''
-                  }`}
+                  key={peer.id}
+                  className={`center-marker center-marker-peer${isAuto ? ' is-auto' : ''}${nearBottom ? ' is-above' : ''}${horizontal}`}
+                  style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%` }}
+                  title={`${peer.name}: (${formatCoord(pos.x)}, ${formatCoord(pos.y)})${isAuto ? '（未指定・中央）' : ''}`}
                 >
                   <span className="center-marker-dot" aria-hidden="true" />
-                  <span className="center-marker-label">{labelText}</span>
+                  <span className="center-marker-label">{peer.name}</span>
                 </div>
               );
             })}
             <div
-              className={`center-marker center-marker-active${activeNearBottom ? ' is-above' : ''}${
-                activeGroupNames.length > 1 ? ' is-shared' : ''
-              }`}
+              className={`center-marker center-marker-active${activeNearBottom ? ' is-above' : ''}${activeHorizontal}`}
               style={{ left: `${center.x * 100}%`, top: `${center.y * 100}%` }}
-              title={activeTitle}
+              title={`${characterName}: (${formatCoord(center.x)}, ${formatCoord(center.y)})`}
             >
               <span className="center-marker-dot" aria-hidden="true" />
-              <span className="center-marker-label">{activeLabelText}</span>
+              <span className="center-marker-label">{characterName}</span>
             </div>
           </div>
           <span className="center-stage-caption">
@@ -274,6 +234,34 @@ export function CharacterCenterPicker({
           </div>
         </div>
       </div>
+
+      <ul className="center-legend" aria-label="キャラクター位置一覧">
+        <li className="center-legend-item is-active">
+          <span className="center-legend-dot" aria-hidden="true" />
+          <span className="center-legend-name">{characterName}</span>
+          <span className="center-legend-coord">
+            ({formatCoord(center.x)}, {formatCoord(center.y)})
+          </span>
+        </li>
+        {peers.map((peer) => {
+          const isAuto = peer.autoCenter === true;
+          const isUnpositioned = peer.center === undefined;
+          return (
+            <li
+              key={peer.id}
+              className={`center-legend-item${isAuto ? ' is-auto' : ''}${isUnpositioned ? ' is-unpositioned' : ''}`}
+            >
+              <span className="center-legend-dot" aria-hidden="true" />
+              <span className="center-legend-name">{peer.name}</span>
+              <span className="center-legend-coord">
+                {peer.center
+                  ? `(${formatCoord(peer.center.x)}, ${formatCoord(peer.center.y)})${isAuto ? ' 中央自動' : ''}`
+                  : '位置指定なし'}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

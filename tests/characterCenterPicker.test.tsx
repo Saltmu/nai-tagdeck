@@ -76,7 +76,9 @@ function createMultiCharWorkspace(): Workspace {
   let ws = emptyWorkspace();
   for (const name of ['アリス', 'ボブ', 'キャロル']) {
     ws = workspaceReducer(ws, { type: 'addCharacter' });
-    ws = workspaceReducer(ws, { type: 'renameCharacter', id: ws.characters.at(-1)!.id, name });
+    const id = ws.characters.at(-1)!.id;
+    ws = workspaceReducer(ws, { type: 'renameCharacter', id, name });
+    ws = workspaceReducer(ws, { type: 'add', target: id, category: 'subject', tag: 'girl' });
   }
   // アリスは位置指定 ON (0.5, 0.5)
   ws = workspaceReducer(ws, {
@@ -90,16 +92,18 @@ function createMultiCharWorkspace(): Workspace {
     id: ws.characters[1]!.id,
     center: { x: 0.8, y: 0.2 },
   });
-  // キャロルは ON だが位置未指定（中央 0.5, 0.5 として自動表示される）
+  // キャロルは ON かつタグありだが位置未指定（座標モード有効の間は中央 0.5, 0.5 として自動表示される）
   // 4人目（デイブ）は OFF（ピッカーには表示しない）
   ws = workspaceReducer(ws, { type: 'addCharacter' });
-  ws = workspaceReducer(ws, { type: 'renameCharacter', id: ws.characters.at(-1)!.id, name: 'デイブ' });
-  ws = workspaceReducer(ws, { type: 'toggleCharacter', id: ws.characters.at(-1)!.id });
+  const daveId = ws.characters.at(-1)!.id;
+  ws = workspaceReducer(ws, { type: 'renameCharacter', id: daveId, name: 'デイブ' });
+  ws = workspaceReducer(ws, { type: 'add', target: daveId, category: 'subject', tag: 'boy' });
+  ws = workspaceReducer(ws, { type: 'toggleCharacter', id: daveId });
   return ws;
 }
 
 describe('CharacterCenterPicker', () => {
-  it('renders canvas aspect ratio, combines overlapping character labels, filters pointerId, stops on unpressed mousemove, and separates drag undo steps', async () => {
+  it('renders canvas aspect ratio, peer markers, legend, edge alignment, pointerId filtering, and separate undo steps per drag', async () => {
     const initial = createMultiCharWorkspace();
     let latestWs = initial;
     const dictionary = mockDictionary();
@@ -145,21 +149,32 @@ describe('CharacterCenterPicker', () => {
     expect(stage.style.maxWidth).toBe('114px');
     expect(container.querySelector('.center-stage-caption')?.textContent).toContain('768×1344');
 
-    // アリス (0.5, 0.5) とキャロル（未指定 -> 0.5, 0.5）は同じ座標なので 1 つのラベル「アリス / キャロル」にまとめて表示される
+    // アリス (0.5, 0.5) と他の生成対象キャラ（ボブ、キャロル）がマーカーおよび一覧に表示され、OFF のデイブは表示されない
     const activeMarker = stage.querySelector<HTMLElement>('.center-marker-active')!;
-    expect(activeMarker.textContent).toBe('アリス / キャロル');
-    expect(activeMarker.classList.contains('is-shared')).toBe(true);
+    expect(activeMarker.textContent).toBe('アリス');
     expect(activeMarker.style.left).toBe('50%');
     expect(activeMarker.style.top).toBe('50%');
 
-    // 別座標のボブ (0.8, 0.2) は独立した peer マーカーとして表示され、OFF のデイブは表示されない
     const peerMarkers = [...stage.querySelectorAll<HTMLElement>('.center-marker-peer')];
-    expect(peerMarkers.map((m) => m.textContent)).toEqual(['ボブ']);
+    expect(peerMarkers.map((m) => m.textContent)).toEqual(['ボブ', 'キャロル']);
     expect(peerMarkers[0]!.style.left).toBe('80%');
     expect(peerMarkers[0]!.style.top).toBe('20%');
     expect(peerMarkers[0]!.classList.contains('is-auto')).toBe(false);
+    // x = 0.8 (> 0.75) は右端寄せクラス is-right が付く
+    expect(peerMarkers[0]!.classList.contains('is-right')).toBe(true);
+    expect(peerMarkers[1]!.style.left).toBe('50%');
+    expect(peerMarkers[1]!.style.top).toBe('50%');
+    expect(peerMarkers[1]!.classList.contains('is-auto')).toBe(true);
 
-    // 5×5 グリッドのセル B4 (x=0.3, y=0.7) をクリックすると、アリスが移動してキャロルが独立した自動中央マーカーとして現れる
+    // 凡例（一覧）には近接・重複座標でも全キャラの名前と座標が明示される
+    const legendItems = [...container.querySelectorAll<HTMLElement>('.center-legend-item')];
+    expect(legendItems.map((li) => li.textContent)).toEqual([
+      'アリス(0.50, 0.50)',
+      'ボブ(0.80, 0.20)',
+      'キャロル(0.50, 0.50) 中央自動',
+    ]);
+
+    // 5×5 グリッドのセル B4 (x=0.3, y=0.7) をクリック
     const cellB4 = [...container.querySelectorAll<HTMLButtonElement>('.center-preset-cell')].find(
       (btn) => btn.textContent === 'B4',
     )!;
@@ -167,16 +182,8 @@ describe('CharacterCenterPicker', () => {
     await act(async () => cellB4.click());
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.3, y: 0.7 });
     expect(cellB4.getAttribute('aria-pressed')).toBe('true');
-    expect(activeMarker.textContent).toBe('アリス');
-    expect(activeMarker.classList.contains('is-shared')).toBe(false);
     expect(activeMarker.style.left).toBe('30%');
     expect(activeMarker.style.top).toBe('70%');
-
-    const separatedPeers = [...stage.querySelectorAll<HTMLElement>('.center-marker-peer')];
-    expect(separatedPeers.map((m) => m.textContent)).toEqual(['ボブ', 'キャロル']);
-    expect(separatedPeers[1]!.style.left).toBe('50%');
-    expect(separatedPeers[1]!.style.top).toBe('50%');
-    expect(separatedPeers[1]!.classList.contains('is-auto')).toBe(true);
 
     // 数値入力欄とも同期していることを確認
     const numberInputs = [...container.querySelectorAll<HTMLInputElement>('.center-grid input[type="number"]')];
@@ -313,6 +320,7 @@ describe('CharacterCenterPicker', () => {
       window.dispatchEvent(pointerEvent('pointerup', { bubbles: true, pointerId: 11 }));
     });
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.2, y: 0.3 });
+    expect(activeMarker.classList.contains('is-left')).toBe(true);
 
     // 1回目の Undo で2回目のドラッグ前の (0.67, 1) に戻る
     const undoBtn = container.querySelector<HTMLButtonElement>('button[aria-label="元に戻す"]')!;
@@ -322,5 +330,56 @@ describe('CharacterCenterPicker', () => {
     // 2回目の Undo で1回目のドラッグ前の (0.5, 0.5) に戻る
     await act(async () => undoBtn.click());
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it('does not show unpositioned peers at center (0.5, 0.5) when the only character with a center is OFF', async () => {
+    let ws = emptyWorkspace();
+    for (const name of ['アリス', 'キャロル']) {
+      ws = workspaceReducer(ws, { type: 'addCharacter' });
+      const id = ws.characters.at(-1)!.id;
+      ws = workspaceReducer(ws, { type: 'renameCharacter', id, name });
+      ws = workspaceReducer(ws, { type: 'add', target: id, category: 'subject', tag: 'girl' });
+    }
+    // アリスのみ位置指定を持つが、アリス自身を OFF にする（生成時は use_coords: false になる）
+    const aliceId = ws.characters[0]!.id;
+    ws = workspaceReducer(ws, { type: 'setCharacterCenter', id: aliceId, center: { x: 0.2, y: 0.3 } });
+    ws = workspaceReducer(ws, { type: 'toggleCharacter', id: aliceId });
+
+    const dictionary = mockDictionary();
+    const presets = mockPresets();
+
+    await act(async () =>
+      root.render(
+        <DialogProvider>
+          <Editor
+            workspace={ws}
+            dispatch={() => {}}
+            loaded
+            dictionary={dictionary}
+            syntax="brace"
+            onCopy={() => {}}
+            notify={() => {}}
+            presets={presets}
+            characterNegative=""
+            onCharacterNegativeChange={() => {}}
+            shown
+          />
+        </DialogProvider>,
+      ),
+    );
+
+    const aliceTab = [...container.querySelectorAll<HTMLButtonElement>('.editor-tab-character')].find(
+      (btn) => btn.textContent === 'アリス',
+    )!;
+    await act(async () => aliceTab.click());
+
+    // 生成対象の ON キャラ（キャロル）は位置未指定かつ use_coords: false なのでステージ上に (0.5, 0.5) マーカーを出さない
+    expect(container.querySelectorAll('.center-marker-peer')).toHaveLength(0);
+    // 一覧では「位置指定なし」として明示される
+    const legendItems = [...container.querySelectorAll<HTMLElement>('.center-legend-item')];
+    expect(legendItems.map((li) => li.textContent)).toEqual([
+      'アリス(0.20, 0.30)',
+      'キャロル位置指定なし',
+    ]);
   });
 });

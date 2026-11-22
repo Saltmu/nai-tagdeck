@@ -11,6 +11,7 @@ import {
 } from '../lib/workspace';
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { saveCategoriesOpen } from '../lib/categoryOpen';
+import { buildPrompt } from '../lib/prompt';
 import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import { classifyEditorTag, createTagVectorIndex, type PromptTagCategory } from '../lib/tagClassification';
 import { DEFAULT_CHARACTER_NEGATIVE } from '../lib/novelai';
@@ -211,16 +212,24 @@ export function Editor({
   const activeIndex = characters.findIndex((c) => c.id === selected);
   const active = activeIndex >= 0 ? characters[activeIndex] : undefined;
   const activeId = active?.id;
-  const peerCenters = useMemo<PeerCharacterCenter[]>(
-    () =>
-      activeId
-        ? characters
-            .map((c, i) => ({ c, name: c.name.trim() || `キャラ${i + 1}` }))
-            .filter(({ c }) => c.id !== activeId && c.enabled)
-            .map(({ c, name }) => ({ id: c.id, name, ...(c.center ? { center: c.center } : {}) }))
-        : [],
-    [characters, activeId],
-  );
+  const peerCenters = useMemo<PeerCharacterCenter[]>(() => {
+    if (!activeId) return [];
+    const activeCharacters = characters
+      .map((c, i) => ({
+        c,
+        name: c.name.trim() || `キャラ${i + 1}`,
+        hasPrompt: buildPrompt(c.tags, syntax, CHARACTER_CATEGORY_KEYS).length > 0,
+      }))
+      .filter(({ c, hasPrompt }) => c.enabled && hasPrompt);
+    const useCoords = activeCharacters.some(({ c }) => c.center !== undefined);
+    return activeCharacters
+      .filter(({ c }) => c.id !== activeId)
+      .map(({ c, name }) => ({
+        id: c.id,
+        name,
+        ...(c.center ? { center: c.center } : useCoords ? { center: { x: 0.5, y: 0.5 }, autoCenter: true } : {}),
+      }));
+  }, [characters, activeId, syntax]);
   const handlePoseAdded = useCallback(
     (tag: string) => {
       if (activeId) void offerPair(activeId, tag);
