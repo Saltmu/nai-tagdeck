@@ -33,6 +33,7 @@ export type WorkspaceAction =
   | (TagAction & { target: TargetId; category: WorkspaceCategoryKey })
   | { type: 'moveFromUnclassified'; target: TargetId; id: string; to: PromptCategoryKey }
   | { type: 'addCharacter' }
+  | { type: 'duplicateCharacter'; id: string }
   | { type: 'removeCharacter'; id: string }
   | { type: 'renameCharacter'; id: string; name: string }
   /** null は個別指定を消し、共通のネガティブに戻す。 */
@@ -239,6 +240,19 @@ function updateGroups(groups: TagGroups, category: PromptCategoryKey, action: Ta
   return after === before ? groups : { ...groups, [category]: after };
 }
 
+/** 画面に出している呼び名。未入力のときは並び順の既定名。 */
+function displayedCharacterName(character: Character, index: number): string {
+  return character.name.trim() || `キャラ${index + 1}`;
+}
+
+function cloneGroups(groups: TagGroups): TagGroups {
+  const next = emptyGroups();
+  for (const key of PROMPT_CATEGORY_KEYS) {
+    next[key] = groups[key].map((tag) => ({ ...tag, id: newId() }));
+  }
+  return next;
+}
+
 function updateCharacter(state: Workspace, id: string, fn: (c: Character) => Character): Workspace {
   const index = state.characters.findIndex((c) => c.id === id);
   if (index < 0) return state;
@@ -256,6 +270,24 @@ export function workspaceReducer(state: Workspace, action: WorkspaceAction): Wor
       if (state.characters.length >= MAX_CHARACTERS) return state;
       const enabled = state.characters.filter((c) => c.enabled).length < MAX_ENABLED_CHARACTERS;
       return { ...state, characters: [...state.characters, { ...newCharacter(state.characters.length), enabled }] };
+    }
+    case 'duplicateCharacter': {
+      if (state.characters.length >= MAX_CHARACTERS) return state;
+      const index = state.characters.findIndex((c) => c.id === action.id);
+      if (index < 0) return state;
+      const source = state.characters[index]!;
+      const enabled = source.enabled && state.characters.filter((c) => c.enabled).length < MAX_ENABLED_CHARACTERS;
+      const copy: Character = {
+        id: newId(),
+        name: `${displayedCharacterName(source, index)}（コピー）`,
+        enabled,
+        tags: cloneGroups(source.tags),
+        ...(source.negative !== undefined ? { negative: source.negative } : {}),
+        ...(source.center ? { center: { ...source.center } } : {}),
+      };
+      const characters = [...state.characters];
+      characters.splice(index + 1, 0, copy);
+      return { ...state, characters };
     }
     case 'removeCharacter':
       return { ...state, characters: state.characters.filter((c) => c.id !== action.id) };

@@ -389,6 +389,7 @@ export function Editor({
             sharedNegative={characterNegative}
             onPoseAdded={handlePoseAdded}
             filter={tagFilter}
+            enabledCount={enabledCount}
           />
         ) : (
           <div className="category-grid editor-pane">

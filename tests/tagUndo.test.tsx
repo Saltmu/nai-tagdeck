@@ -56,6 +56,30 @@ afterEach(async () => {
   document.body.textContent = '';
 });
 
+it('undoes an edit on a duplicated character without changing the source', async () => {
+  await run(() => api.dispatch({ type: 'addCharacter' }));
+  const sourceId = ws.characters[0]!.id;
+  await run(() => api.dispatch({ type: 'add', target: sourceId, category: 'appearance', tag: 'long hair', weight: 1.4 }));
+  await run(() => api.dispatch({ type: 'duplicateCharacter', id: sourceId }));
+  const copy = ws.characters[1]!;
+  expect(copy.name).toBe('キャラ1（コピー）');
+  expect(copy.tags.appearance[0]!.id).not.toBe(ws.characters[0]!.tags.appearance[0]!.id);
+  await run(() => api.dispatch({
+    type: 'setTag',
+    target: copy.id,
+    category: 'appearance',
+    id: copy.tags.appearance[0]!.id,
+    tag: 'short hair',
+  }));
+  expect(ws.characters[0]!.tags.appearance[0]!.tag).toBe('long hair');
+  expect(ws.characters[1]!.tags.appearance[0]!.tag).toBe('short hair');
+  await run(() => historyButton('元に戻す').click());
+  expect(ws.characters[1]!.tags.appearance[0]!.tag).toBe('long hair');
+  expect(ws.characters[0]!.tags.appearance[0]!.id).not.toBe(ws.characters[1]!.tags.appearance[0]!.id);
+  await run(() => historyButton('元に戻す').click());
+  expect(ws.characters.map((c) => c.id)).toEqual([sourceId]);
+});
+
 it('keeps both icon buttons visible and restores a removed tag with its weight, state and position', async () => {
   const undo = historyButton('元に戻す');
   const redo = historyButton('やり直す');
