@@ -34,6 +34,12 @@ import { useScrollMemory } from '../hooks/useScrollMemory';
 /** ベースの品質でよく使うタグ（公式の Quality Tags と定番）。ボタンで付け外しする。 */
 const QUALITY_PICKS = ['masterpiece', 'best quality', 'amazing quality', 'very aesthetic', 'absurdres', 'no text'] as const;
 
+/** 消えたキャラのタブやカードにフォーカスがあったか。操作履歴ボタンなど、残っている要素は対象外。 */
+function focusWasInRemovedCharacter(element: HTMLElement | null): boolean {
+  if (!element || element.isConnected) return false;
+  return element.classList.contains('editor-tab-character') || element.closest('.character') !== null;
+}
+
 interface Props {
   workspace: Workspace;
   dispatch: Dispatch<WorkspaceAction>;
@@ -166,6 +172,8 @@ export function Editor({
   const focusCopiedTab = useRef(false);
   const copiedTabId = useRef<string | null>(null);
   const knownCharacterIds = useRef(characters.map((c) => c.id));
+  const lastFocused = useRef<HTMLElement | null>(null);
+  const pendingRemovedTabFocus = useRef(false);
   const dispatchForCard = useCallback((action: WorkspaceAction) => {
     if (action.type === 'duplicateCharacter') focusCopiedTab.current = true;
     dispatch(action);
@@ -244,14 +252,25 @@ export function Editor({
     const prev = knownCharacterIds.current;
     const added = ids.filter((characterId) => !prev.includes(characterId));
     knownCharacterIds.current = ids;
+    if (focusWasInRemovedCharacter(lastFocused.current)) pendingRemovedTabFocus.current = true;
     if (focusCopiedTab.current) {
       focusCopiedTab.current = false;
       copiedTabId.current = added.at(-1) ?? null;
     }
-    const target = copiedTabId.current;
-    if (!target || selected !== target) return;
-    copiedTabId.current = null;
-    tabRefs.current.get(target)?.focus();
+    const copied = copiedTabId.current;
+    const focusFree = document.activeElement == null || document.activeElement === document.body;
+    if (copied && selected === copied) {
+      copiedTabId.current = null;
+      pendingRemovedTabFocus.current = false;
+      tabRefs.current.get(copied)?.focus();
+    } else if (pendingRemovedTabFocus.current) {
+      const ready = selected === BASE || selected === NEGATIVE || ids.includes(selected);
+      if (ready) {
+        pendingRemovedTabFocus.current = false;
+        if (focusFree) tabRefs.current.get(selected)?.focus();
+      }
+    }
+    lastFocused.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }, [characters, selected]);
   const tabKeys = useMemo(() => [BASE, NEGATIVE, ...characters.map((c) => c.id)], [characters]);
   const panelId = `${id}-panel`;

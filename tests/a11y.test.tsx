@@ -7,6 +7,7 @@ import { GenerateDock } from '../src/components/GenerateDock';
 import { QuickGenerate } from '../src/components/QuickGenerate';
 import { ImageViewer } from '../src/components/ImageViewer';
 import { Editor } from '../src/components/Editor';
+import { useTagUndo } from '../src/hooks/useTagUndo';
 import { TagInput } from '../src/components/TagInput';
 import { PresetBar } from '../src/components/PresetBar';
 import { emptyWorkspace, workspaceReducer } from '../src/lib/workspace';
@@ -260,12 +261,14 @@ describe('Editor tablist', () => {
       initial = workspaceReducer(initial, { type: 'renameCharacter', id: initial.characters.at(-1)!.id, name });
     }
     function Harness() {
-      const [workspace, dispatch] = useReducer(workspaceReducer, initial);
+      const [workspace, rawDispatch] = useReducer(workspaceReducer, initial);
+      const history = useTagUndo(workspace, rawDispatch);
       return (
         <DialogProvider>
           <Editor
             workspace={workspace}
-            dispatch={dispatch}
+            dispatch={history.dispatch}
+            history={history}
             loaded
             dictionary={dictionary}
             syntax="brace"
@@ -297,6 +300,24 @@ describe('Editor tablist', () => {
     expect(names()).toEqual(['A', 'B', 'B（コピー）', 'C', 'キャラ4']);
     expect(document.activeElement).toBe(tabByName('B（コピー）'));
     expect(document.activeElement?.getAttribute('aria-selected')).toBe('true');
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    expect(names()).toEqual(['A', 'B', 'C', 'キャラ4']);
+    expect(document.activeElement).toBe(tabByName('B'));
+    expect(tabByName('B').getAttribute('aria-selected')).toBe('true');
+
+    await act(async () => tabByName('B').click());
+    const duplicateAgain = container.querySelector<HTMLButtonElement>('button[aria-label="B を複製"]')!;
+    duplicateAgain.focus();
+    await act(async () => duplicateAgain.click());
+    const undo = container.querySelector<HTMLButtonElement>('button[aria-label="元に戻す"]')!;
+    undo.focus();
+    await act(async () => undo.click());
+    expect(document.activeElement).toBe(undo);
+    expect(tabByName('B').getAttribute('aria-selected')).toBe('true');
+    expect(names()).toEqual(['A', 'B', 'C', 'キャラ4']);
   });
 });
 
