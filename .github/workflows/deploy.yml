@@ -101,11 +101,11 @@ jobs:
 
           if [[ -n "$DEPLOY_SSH_KEY" ]]; then
             key_file="$ssh_dir/id_deploy"
-            printf '%s\n' "$DEPLOY_SSH_KEY" > "$key_file"
+            printf '%s\n' "${DEPLOY_SSH_KEY//$'\r'/}" > "$key_file"
             chmod 600 "$key_file"
             unset DEPLOY_SSH_KEY
             ssh_connect_opts="-o PubkeyAuthentication=yes -o IdentitiesOnly=yes -o IdentityFile=$key_file -o BatchMode=yes -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no"
-            open_cmd="open -u \"$DEPLOY_USER\" \"sftp://$DEPLOY_HOST:$DEPLOY_PORT\""
+            open_cmd="open -u \"$DEPLOY_USER,\" \"sftp://$DEPLOY_HOST:$DEPLOY_PORT\""
           elif [[ -n "$LFTP_PASSWORD" ]]; then
             ssh_connect_opts="-o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1"
             open_cmd="open --env-password -u \"$DEPLOY_USER\" \"sftp://$DEPLOY_HOST:$DEPLOY_PORT\""
