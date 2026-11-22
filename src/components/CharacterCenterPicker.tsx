@@ -95,7 +95,7 @@ export function CharacterCenterPicker({
     // すでにドラッグ中の指がある間は、2本目の指の pointerdown を無視して最初のポインターの操作を維持する
     if (activePointerIdRef.current !== null) return;
     e.preventDefault();
-    stageRef.current?.focus();
+    stageRef.current?.focus({ preventScroll: true });
     const pointerId = e.pointerId;
     activePointerIdRef.current = pointerId;
     dragSeqRef.current += 1;
@@ -107,8 +107,8 @@ export function CharacterCenterPicker({
       dragCleanupRef.current = null;
       activePointerIdRef.current = null;
       window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onEnd);
-      window.removeEventListener('pointercancel', onEnd);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
       window.removeEventListener('blur', onBlur);
     };
     const stopDrag = () => {
@@ -124,7 +124,12 @@ export function CharacterCenterPicker({
       }
       updateFromClientPoint(ev.clientX, ev.clientY, mergeKey);
     };
-    const onEnd = (ev: PointerEvent) => {
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      updateFromClientPoint(ev.clientX, ev.clientY, mergeKey);
+      stopDrag();
+    };
+    const onCancel = (ev: PointerEvent) => {
       if (ev.pointerId !== pointerId) return;
       stopDrag();
     };
@@ -133,8 +138,8 @@ export function CharacterCenterPicker({
     };
     dragCleanupRef.current = cleanup;
     window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onEnd);
-    window.addEventListener('pointercancel', onEnd);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
     window.addEventListener('blur', onBlur);
   };
 

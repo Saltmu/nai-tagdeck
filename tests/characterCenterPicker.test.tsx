@@ -329,7 +329,8 @@ describe('CharacterCenterPicker', () => {
     });
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.67, y: 1 });
 
-    // 2回目のドラッグ (pointerId: 11): (0.67, 1) -> (0.1, 0.1) -> (0.2, 0.3)
+    // 2回目のドラッグ (pointerId: 11): (0.67, 1) -> (0.1, 0.1) -> (0.15, 0.2) -> pointerup 時の最終座標 (0.2, 0.3)
+    const focusSpy = vi.spyOn(stage, 'focus');
     await act(async () => {
       stage.dispatchEvent(
         pointerEvent('pointerdown', {
@@ -345,12 +346,20 @@ describe('CharacterCenterPicker', () => {
         pointerEvent('pointermove', {
           bubbles: true,
           pointerId: 11,
+          clientX: 130,
+          clientY: 220,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointerup', {
+          bubbles: true,
+          pointerId: 11,
           clientX: 140,
           clientY: 230,
         }),
       );
-      window.dispatchEvent(pointerEvent('pointerup', { bubbles: true, pointerId: 11 }));
     });
+    expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.2, y: 0.3 });
 
     // 1回目の Undo で2回目のドラッグ前の (0.67, 1) に戻る
