@@ -121,13 +121,23 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
     const d = dialog.current;
     if (d && !d.open) d.showModal();
     // autoFocus は showModal より先に効いてしまい、先頭の「キャンセル」にフォーカスが移るので、開いた後で当て直す。
-    // preventScroll は、長い確認文の先頭を画面外へ押し出さないため。
-    const focusWithoutScroll = (element: HTMLElement | null) => element?.focus({ preventScroll: true });
-    if (request.kind === 'prompt') {
-      focusWithoutScroll(input.current);
-      input.current?.select();
-    } else if (request.kind === 'confirm' && request.danger) focusWithoutScroll(cancel.current);
-    else focusWithoutScroll(primary.current);
+    const resetScroll = () => {
+      if (dialog.current) dialog.current.scrollTop = 0;
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    };
+    if (request.kind === 'prompt') input.current?.select();
+    else if (request.kind === 'confirm') {
+      // showModal がキャンセルへスクロールした後でも、警告の先頭を見せる。開いた後の寸法でタブ可否を決める。
+      resetScroll();
+      const element = scrollRef.current;
+      if (element) {
+        setScrollable(element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth);
+      }
+      (request.danger ? cancel.current : primary.current)?.focus({ preventScroll: true });
+      resetScroll();
+      const frame = requestAnimationFrame(resetScroll);
+      return () => cancelAnimationFrame(frame);
+    } else primary.current?.focus();
   }, [request]);
 
   // choice: choose で押されたボタンの値（Enter で主ボタンを押したときは省略）
