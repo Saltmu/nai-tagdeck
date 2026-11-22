@@ -11,10 +11,9 @@
   right: 0;
   z-index: var(--z-header);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  gap: 0.4rem 0.75rem;
   padding: 0.5rem max(0.75rem, env(safe-area-inset-right)) 0.5rem max(0.75rem, env(safe-area-inset-left));
   background: var(--surface);
   border-bottom: 1px solid var(--border);

@@ -9,6 +9,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 0.4rem;
+  margin-inline-start: auto;
 }
 
 .size-toggle {
