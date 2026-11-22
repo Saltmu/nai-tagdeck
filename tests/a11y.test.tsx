@@ -308,6 +308,41 @@ describe('Editor tablist', () => {
     expect(document.activeElement).toBe(tabByName('B'));
     expect(tabByName('B').getAttribute('aria-selected')).toBe('true');
 
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: true, bubbles: true }));
+    });
+    expect(names()).toEqual(['A', 'B', 'B（コピー）', 'C', 'キャラ4']);
+    expect(document.activeElement).toBe(tabByName('B（コピー）'));
+    expect(tabByName('B（コピー）').getAttribute('aria-selected')).toBe('true');
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    const redo = container.querySelector<HTMLButtonElement>('button[aria-label="やり直す"]')!;
+    redo.focus();
+    await act(async () => redo.click());
+    expect(document.activeElement).toBe(redo);
+    expect(tabByName('B（コピー）').getAttribute('aria-selected')).toBe('true');
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    expect(document.activeElement).toBe(redo);
+    expect(names()).toEqual(['A', 'B', 'C', 'キャラ4']);
+
+    await act(async () => tabByName('B').click());
+    const duplicateForCheck = container.querySelector<HTMLButtonElement>('button[aria-label="B を複製"]')!;
+    duplicateForCheck.focus();
+    await act(async () => duplicateForCheck.click());
+    await act(async () => tabByName('B').click());
+    const checkbox = container.querySelector<HTMLInputElement>('input[aria-label="B（コピー） を生成に含める"]')!;
+    checkbox.focus();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    expect(names()).toEqual(['A', 'B', 'C', 'キャラ4']);
+    expect(document.activeElement).toBe(tabByName('B'));
+    expect(tabByName('B').getAttribute('aria-selected')).toBe('true');
+
     await act(async () => tabByName('B').click());
     const duplicateAgain = container.querySelector<HTMLButtonElement>('button[aria-label="B を複製"]')!;
     duplicateAgain.focus();

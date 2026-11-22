@@ -34,10 +34,14 @@ import { useScrollMemory } from '../hooks/useScrollMemory';
 /** ベースの品質でよく使うタグ（公式の Quality Tags と定番）。ボタンで付け外しする。 */
 const QUALITY_PICKS = ['masterpiece', 'best quality', 'amazing quality', 'very aesthetic', 'absurdres', 'no text'] as const;
 
-/** 消えたキャラのタブやカードにフォーカスがあったか。操作履歴ボタンなど、残っている要素は対象外。 */
+/** 消えたキャラのタブ、生成チェック、カードにフォーカスがあったか。履歴ボタンなど残っている要素は対象外。 */
 function focusWasInRemovedCharacter(element: HTMLElement | null): boolean {
   if (!element || element.isConnected) return false;
-  return element.classList.contains('editor-tab-character') || element.closest('.character') !== null;
+  return element.closest('.editor-tab-wrap, .character') !== null;
+}
+
+function focusInsideTablist(element: EventTarget | null): element is HTMLElement {
+  return element instanceof HTMLElement && element.closest('.editor-tablist') !== null;
 }
 
 interface Props {
@@ -174,10 +178,18 @@ export function Editor({
   const knownCharacterIds = useRef(characters.map((c) => c.id));
   const lastFocused = useRef<HTMLElement | null>(null);
   const pendingRemovedTabFocus = useRef(false);
+  const pendingAddedTabFocus = useRef<string | null>(null);
   const dispatchForCard = useCallback((action: WorkspaceAction) => {
     if (action.type === 'duplicateCharacter') focusCopiedTab.current = true;
     dispatch(action);
   }, [dispatch]);
+  useEffect(() => {
+    const onFocusIn = (event: FocusEvent) => {
+      if (event.target instanceof HTMLElement) lastFocused.current = event.target;
+    };
+    document.addEventListener('focusin', onFocusIn);
+    return () => document.removeEventListener('focusin', onFocusIn);
+  }, []);
   const negativeSelected = selected === NEGATIVE;
   const activeIndex = characters.findIndex((c) => c.id === selected);
   const active = activeIndex >= 0 ? characters[activeIndex] : undefined;
@@ -252,17 +264,25 @@ export function Editor({
     const prev = knownCharacterIds.current;
     const added = ids.filter((characterId) => !prev.includes(characterId));
     knownCharacterIds.current = ids;
+    const addedId = added.at(-1) ?? null;
     if (focusWasInRemovedCharacter(lastFocused.current)) pendingRemovedTabFocus.current = true;
     if (focusCopiedTab.current) {
       focusCopiedTab.current = false;
-      copiedTabId.current = added.at(-1) ?? null;
+      copiedTabId.current = addedId;
+    } else if (addedId && focusInsideTablist(lastFocused.current)) {
+      pendingAddedTabFocus.current = addedId;
     }
     const copied = copiedTabId.current;
+    const restored = pendingAddedTabFocus.current;
     const focusFree = document.activeElement == null || document.activeElement === document.body;
     if (copied && selected === copied) {
       copiedTabId.current = null;
+      pendingAddedTabFocus.current = null;
       pendingRemovedTabFocus.current = false;
       tabRefs.current.get(copied)?.focus();
+    } else if (restored && selected === restored) {
+      pendingAddedTabFocus.current = null;
+      if (focusInsideTablist(document.activeElement)) tabRefs.current.get(restored)?.focus();
     } else if (pendingRemovedTabFocus.current) {
       const ready = selected === BASE || selected === NEGATIVE || ids.includes(selected);
       if (ready) {
