@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent } from 'react';
-import { parseBackup, toBackupJSON, type Backup } from '../lib/backup';
+import { backupImportMessage, parseBackup, toBackupJSON, type Backup } from '../lib/backup';
 import { dateStamp, downloadText } from '../lib/browser';
 import { useDialogs } from './Dialogs';
 
@@ -23,20 +23,10 @@ export function BackupCard({ getData, onImport, notify }: Props) {
       return;
     }
     setError(null);
-    const { data, warnings } = parsed;
-    const ok = await dialogs.confirm(
-      [
-        `${file.name} を読み込みます。`,
-        `・辞書 ${data.dictionary.length}件、プリセット ${data.presets.length}件を追加・上書きします`,
-        '・作業中のタグと設定（ネガティブ・生成の設定）は置き換わります',
-        warnings.length ? `・辞書のうち ${warnings.length}件は読めなかったためスキップします` : '',
-        '',
-        'よろしいですか？',
-      ]
-        .filter(Boolean)
-        .join('\n'),
-      { okLabel: '読み込む' },
-    );
+    const { data, warnings, dictionaryErrors } = parsed;
+    const ok = await dialogs.confirm(backupImportMessage(file.name, data, warnings, dictionaryErrors), {
+      okLabel: '読み込む',
+    });
     if (!ok) return;
     try {
       await onImport(data);
