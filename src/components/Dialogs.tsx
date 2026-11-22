@@ -7,6 +7,8 @@ export interface DialogApi {
   alert: (message: string) => Promise<void>;
   /** ボタンを複数並べて選ばせる。キャンセル（Esc を含む）なら null。 */
   choose: <V extends string>(message: string, choices: readonly Choice<V>[], options?: ChooseOptions) => Promise<V | null>;
+  /** いま開いているダイアログをキャンセルとして閉じる。待ちがなければ何もしない。 */
+  dismiss: () => void;
 }
 
 export interface DialogLink {
@@ -79,6 +81,17 @@ export function DialogProvider({ children }: { children: ReactNode }) {
         new Promise<V | null>((resolve) =>
           push({ kind: 'choose', message, choices, ...options, resolve: resolve as (v: string | null) => void }),
         ),
+      dismiss: () => {
+        setQueue((q) => {
+          const current = q[0];
+          if (!current) return q;
+          if (current.kind === 'confirm') current.resolve(false);
+          else if (current.kind === 'prompt') current.resolve(null);
+          else if (current.kind === 'choose') current.resolve(null);
+          else current.resolve();
+          return q.slice(1);
+        });
+      },
     }),
     [push],
   );

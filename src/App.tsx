@@ -99,6 +99,16 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const forgetExternalRef = useRef(tagUndo.forgetExternal);
   forgetExternalRef.current = tagUndo.forgetExternal;
   const editGeneration = useCallback((patch: Partial<GenerationSettings>) => {
+    const current = generationRef.current;
+    const next = normalizeGeneration({ ...current, ...patch });
+    const changed: Partial<GenerationSettings> = {};
+    for (const key of Object.keys(patch) as (keyof GenerationSettings)[]) {
+      if (!Object.is(next[key], current[key])) changed[key] = next[key] as never;
+    }
+    if (Object.keys(changed).length > 0) forgetExternalRef.current({ generation: changed });
+    updateGeneration(patch);
+  }, [updateGeneration]);
+  const replaceExternalGeneration = useCallback((patch: Partial<GenerationSettings>) => {
     forgetExternalRef.current({ generation: patch });
     updateGeneration(patch);
   }, [updateGeneration]);
@@ -164,7 +174,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   );
 
   const { getBackup, importBackup } = useBackupTransfer({
-    dictionary, presets, workspace, dispatch, settings, updateSettings: replaceExternalSettings, generation, updateGeneration: editGeneration,
+    dictionary, presets, workspace, dispatch, settings, updateSettings: replaceExternalSettings, generation, updateGeneration: replaceExternalGeneration,
   });
   const openSettings = useCallback(() => setTab('settings'), []);
   const { blocker, startGenerate } = useGenerationControls({
@@ -192,9 +202,14 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     (size: SizeKey) => editGeneration({ size }),
     [editGeneration],
   );
+  const importWasLive = useRef(false);
   useEffect(() => {
-    if (!firstRunReady || !promptSource) importEpoch.current += 1;
-  }, [firstRunReady, promptSource]);
+    const live = firstRunReady && promptSource !== null;
+    if (!live) importEpoch.current += 1;
+    // 開いていた取り込みが無効になったときだけ、残っている未保存の確認を閉じる。
+    if (importWasLive.current && !live) dialogs.dismiss();
+    importWasLive.current = live;
+  }, [firstRunReady, promptSource, dialogs]);
   const applyPrompt = async (result: PromptImport, applyGeneration: boolean) => {
     for (;;) {
       const epoch = importEpoch.current;
@@ -246,10 +261,14 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       if (choice === 'save' && active) {
         const nextPresets = overwritePreset(store.presets, active.id, currentWorkspace);
         const saved = await store.commitPresets(nextPresets);
-        if (epoch !== importEpoch.current) return false;
         if (moved()) continue;
-        if (!saved) return false;
-        presetsRef.current.setPresets(nextPresets);
+        // 適用をやめても、保存できた一覧は画面に残す。遅れた自動保存が古い一覧で上書きしないため。
+        if (saved) presetsRef.current.setPresets(nextPresets);
+        if (!saved) {
+          show('プリセットに変更を保存できませんでした');
+          return false;
+        }
+        if (epoch !== importEpoch.current) return false;
       }
       const nextMode = nextGeneration?.mode ?? currentGeneration.mode;
       const extras: UndoExtras = {};

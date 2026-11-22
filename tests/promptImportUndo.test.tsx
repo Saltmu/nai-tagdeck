@@ -221,9 +221,84 @@ it('does not apply a PNG after saving fails while the confirmation is open', asy
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 400)); });
   expect(container.textContent).toContain('保存できません');
   expect(container.querySelector('.prompt-import-dialog')).toBeNull();
-  await click(button('反映せずに適用'));
+  expect(chooseDialog()).toBeUndefined();
   expect(preview()).toBe('ONのタグがありません');
   expect(field('steps')?.value).toBe('19');
+});
+
+function setInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+it('keeps a normalized step entry on the PNG undo history', async () => {
+  const dialog = await dropImport();
+  await click(button('適用', dialog));
+  await click(button('反映せずに適用', chooseDialog()!));
+  const steps = field('steps');
+  if (!(steps instanceof HTMLInputElement)) throw new Error('ステップがありません');
+  expect(steps.value).toBe('28');
+  await act(async () => {
+    steps.focus();
+    steps.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+  });
+  await act(async () => { setInputValue(steps, '29'); });
+  await act(async () => {
+    steps.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+  });
+  expect(field('steps')?.value).toBe('28');
+  await click(button('元に戻す'));
+  expect(preview()).toBe('existing');
+  expect(field('steps')?.value).toBe('19');
+});
+
+it('keeps the saved preset on screen when applying the PNG is cancelled', async () => {
+  let releasePreset: (() => void) | undefined;
+  let rejectWorkspace: ((error: Error) => void) | undefined;
+  vi.mocked(setKV).mockImplementation((key: string) => {
+    if (key === 'presets') {
+      return new Promise((resolve) => { releasePreset = () => resolve(); });
+    }
+    if (key === 'workspace') return new Promise((_, reject) => { rejectWorkspace = reject; });
+    return Promise.resolve();
+  });
+  await click(button('existing を削除'));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 400)); });
+  if (!rejectWorkspace) throw new Error('作業状態の保存が始まっていません');
+  const dialog = await dropImport();
+  await click(button('適用', dialog));
+  await act(async () => {
+    button('変更を反映してから適用', chooseDialog()!).click();
+    for (let i = 0; i < 50 && !releasePreset; i += 1) await Promise.resolve();
+    rejectWorkspace?.(new Error('disk'));
+    await act(async () => {});
+    releasePreset?.();
+  });
+  expect(preview()).toBe('ONのタグがありません');
+  expect(container.textContent).not.toContain('変更あり');
+  expect(container.textContent).toContain('保存できません');
+  expect(container.textContent).not.toContain('standing');
+});
+
+it('reports a failed preset overwrite when the earlier preset edit is still saved', async () => {
+  await click(button('名前変更'));
+  const name = container.querySelector<HTMLInputElement>('input.app-dialog-input');
+  if (!name) throw new Error('名前の入力がありません');
+  await act(async () => { setInputValue(name, '別名'); });
+  await click(button('変更', name.closest('dialog')!));
+  let presetWrites = 0;
+  vi.mocked(setKV).mockImplementation(async (key: string) => {
+    if (key !== 'presets') return;
+    presetWrites += 1;
+    if (presetWrites === 1) throw new Error('preset-disk');
+  });
+  const dialog = await dropImport();
+  await click(button('適用', dialog));
+  await click(button('変更を反映してから適用', chooseDialog()!));
+  expect(container.querySelector('.toast')?.textContent).toContain('プリセットに変更を保存できませんでした');
+  expect(preview()).toBe('existing');
+  expect((container.querySelector('.preset-search input') as HTMLInputElement).value).toBe('別名');
 });
 
 it('does not replace the workspace when the preset save fails', async () => {
