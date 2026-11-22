@@ -318,3 +318,13 @@ it('saves the current preset before applying the image prompt', async () => {
   await click(button('読み込む', confirm));
   expect(preview()).toBe('existing');
 });
+
+it('closes the preview dialog natively before unmounting when no confirmation is needed', async () => {
+  await click(button('変更を上書き'));
+  const dialog = await dropImport();
+  const closeSpy = vi.spyOn(dialog as HTMLDialogElement, 'close');
+  await click(button('適用', dialog));
+  expect(closeSpy).toHaveBeenCalledOnce();
+  expect(container.querySelector('.prompt-import-dialog')).toBeNull();
+  expect(preview()).toBe('standing');
+});

@@ -264,7 +264,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       },
     }, extras);
     store.setActiveId(null);
-    setPromptSource(null);
     openEditor();
     show(choice === 'save' && active
       ? `プリセット「${active.name}」に変更を上書きし、画像のプロンプトを読み込みました`

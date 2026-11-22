@@ -77,8 +77,10 @@ export function PromptImportDialog({ source, entries, onCancel, onApply }: Props
     void (async () => {
       try {
         const applied = await onApply(result, settingsAvailable && applyGeneration);
-        if (applied) dialog.current?.close();
-        else {
+        if (applied) {
+          dialog.current?.close();
+          onCancel();
+        } else {
           returnFocus.current = true;
           setBusy(false);
         }
