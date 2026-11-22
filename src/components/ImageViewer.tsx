@@ -316,7 +316,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
               type="button"
               className="icon-btn"
               aria-pressed={image.pinned}
-              aria-label={image.pinned ? 'ピン留めを外す' : 'ピン留め'}
+              aria-label="ピン留め"
               title={image.pinned ? 'ピン留めを外す' : '履歴の自動削除から保護する'}
               onClick={onTogglePin}
             >

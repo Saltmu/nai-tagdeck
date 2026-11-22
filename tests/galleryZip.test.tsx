@@ -56,7 +56,25 @@ async function renderGallery(images: GeneratedImage[], props?: { onDownloaded?: 
   });
 }
 
+const stubDialog = () => {
+  const prototype = HTMLDialogElement.prototype;
+  const originals = ['showModal', 'close'].map((name) => [name, Object.getOwnPropertyDescriptor(prototype, name)] as const);
+  Object.defineProperties(prototype, {
+    showModal: { configurable: true, value: function (this: HTMLDialogElement) { this.open = true; } },
+    close: { configurable: true, value: function (this: HTMLDialogElement) { this.open = false; } },
+  });
+  return () => {
+    for (const [name, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(prototype, name, descriptor);
+      else Reflect.deleteProperty(prototype, name);
+    }
+  };
+};
+
+let restoreDialog: (() => void) | undefined;
+
 beforeEach(() => {
+  restoreDialog = stubDialog();
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -65,8 +83,15 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  restoreDialog?.();
   vi.restoreAllMocks();
 });
+
+async function confirmZipSaved() {
+  await act(async () => {
+    buttonByText('保存できた').click();
+  });
+}
 
 function captureDownloads(): { name: string; blob: Blob }[] {
   const saved: { name: string; blob: Blob }[] = [];
@@ -93,6 +118,9 @@ it('downloads every image in a zip using the individual file names and marks the
   });
 
   expect(saved).toHaveLength(1);
+  expect(onDownloaded).not.toHaveBeenCalled();
+  await confirmZipSaved();
+
   expect(saved[0]!.name).toMatch(/^nai-tagdeck-\d{8}-\d{6}\.zip$/);
   const files = unzipSync(new Uint8Array(await saved[0]!.blob.arrayBuffer()));
   const ordered = [...images].reverse();
@@ -100,8 +128,7 @@ it('downloads every image in a zip using the individual file names and marks the
   for (const item of ordered) {
     expect(files[imageFileName(item)]).toEqual(new Uint8Array(await item.blob.arrayBuffer()));
   }
-  expect(onDownloaded).not.toHaveBeenCalled();
-  expect(container.querySelector('.notice')?.textContent).toContain('もう一度保存できます');
+  expect(onDownloaded.mock.calls.map((call) => call[0])).toEqual(['img-2', 'img-1']);
 });
 
 it('zips only images that are not downloaded yet', async () => {
@@ -114,12 +141,22 @@ it('zips only images that are not downloaded yet', async () => {
   await act(async () => {
     buttonByText('未ダウンロードを ZIP で保存').click();
   });
+  await act(async () => {
+    buttonByText('キャンセル').click();
+  });
+  expect(onDownloaded).not.toHaveBeenCalled();
+  expect(buttonByText('未ダウンロードを ZIP で保存').disabled).toBe(false);
+  expect(container.querySelector('.notice')?.textContent).toContain('もう一度 ZIP で保存できます');
+
+  await act(async () => {
+    buttonByText('未ダウンロードを ZIP で保存').click();
+  });
+  await confirmZipSaved();
 
   expect(saved[0]!.name).toMatch(/^nai-tagdeck-undownloaded-\d{8}-\d{6}\.zip$/);
   const files = unzipSync(new Uint8Array(await saved[0]!.blob.arrayBuffer()));
   expect(Object.keys(files)).toEqual([imageFileName(images[0]!)]);
-  expect(onDownloaded).not.toHaveBeenCalled();
-  expect(buttonByText('未ダウンロードを ZIP で保存').disabled).toBe(false);
+  expect(onDownloaded.mock.calls.map((call) => call[0])).toEqual(['img-2']);
 });
 
 it('disables zip actions when there is nothing to save and toggles pin from the thumbnail', async () => {
@@ -132,6 +169,7 @@ it('disables zip actions when there is nothing to save and toggles pin from the 
   await renderGallery([only], { onTogglePin });
   expect(buttonByText('未ダウンロードを ZIP で保存').disabled).toBe(true);
   const pin = container.querySelector('.thumb-pin') as HTMLButtonElement;
+  expect(pin.getAttribute('aria-label')).toBe('生成画像 1をピン留め');
   expect(pin.getAttribute('aria-pressed')).toBe('false');
   await act(async () => {
     pin.click();

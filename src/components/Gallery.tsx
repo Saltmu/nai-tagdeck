@@ -25,8 +25,12 @@ interface Props {
 }
 
 /** 先頭（最新）の1枚は全幅で大きく見せる。その幅の上限を縦横比から決めるため --ar を渡す。 */
+function ratioVar(width: number, height: number): CSSProperties {
+  return { '--ar': width / height } as CSSProperties;
+}
+
 function thumbStyle(width: number, height: number): CSSProperties {
-  return { aspectRatio: `${width} / ${height}`, '--ar': width / height } as CSSProperties;
+  return { ...ratioVar(width, height), aspectRatio: `${width} / ${height}` };
 }
 
 export function Gallery({
@@ -73,8 +77,16 @@ export function Gallery({
       }
       const prefix = onlyUndownloaded ? 'nai-tagdeck-undownloaded' : 'nai-tagdeck';
       downloadBlob(`${prefix}-${timeStamp()}.zip`, imageZipBlob(files));
-      // <a download> では保存完了やキャンセルを確認できない。downloaded にすると未ダウンロード ZIP から外れ、取り消した保存をやり直せない。
-      setZipMessage(`${targets.length}枚を ZIP にしました。保存をキャンセルしたときは、もう一度保存できます。`);
+      // <a download> では保存完了を検知できない。ユーザーが保存できたと答えたときだけ downloaded にする。
+      const saved = await dialogs.confirm(
+        `${targets.length}枚の ZIP を保存できましたか？保存できていれば、次の「未ダウンロードを ZIP で保存」からは外れます。`,
+        { okLabel: '保存できた' },
+      );
+      if (saved) {
+        for (const image of targets) onDownloaded(image.id);
+      } else {
+        setZipMessage('保存していないときは、もう一度 ZIP で保存できます。');
+      }
     } catch {
       setZipError('ZIP の作成に失敗しました');
     } finally {
@@ -170,31 +182,35 @@ export function Gallery({
             </li>
           )}
           {images.map((img, i) => (
-            <li key={img.id} className={`thumb${img.pinned ? ' is-pinned' : ''}`} style={thumbStyle(img.width, img.height)}>
-              <button type="button" className="thumb-btn" onClick={() => setOpenId(img.id)}>
-                <img src={i === 0 ? img.url : (img.thumbUrl ?? img.url)} alt={`生成画像 ${images.length - i}（シード ${img.seed}）`} loading="lazy" />
-              </button>
-              <button
-                type="button"
-                className={`btn thumb-pin${img.pinned ? ' is-pinned' : ''}`}
-                aria-pressed={img.pinned}
-                aria-label={img.pinned ? `生成画像 ${images.length - i}のピン留めを外す` : `生成画像 ${images.length - i}をピン留め`}
-                title={img.pinned ? 'ピン留めを外す' : '履歴の自動削除から保護する'}
-                onClick={() => onTogglePin(img.id)}
-              >
-                <PinIcon filled={img.pinned} />
-              </button>
-              <button
-                type="button"
-                className={`btn thumb-download${img.downloaded ? ' is-downloaded' : ''}`}
-                aria-label={`生成画像 ${images.length - i}のPNGを${img.downloaded ? '再ダウンロード（ダウンロード済み）' : 'ダウンロード'}`}
-                title={img.downloaded ? 'PNGを再ダウンロード（ダウンロード済み）' : 'PNGをダウンロード'}
-                onClick={() => downloadImage(img)}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5" />
-                </svg>
-              </button>
+            <li key={img.id} className="thumb-frame" style={ratioVar(img.width, img.height)}>
+              <div className={`thumb${img.pinned ? ' is-pinned' : ''}`}>
+                <button type="button" className="thumb-btn" onClick={() => setOpenId(img.id)}>
+                  <img src={i === 0 ? img.url : (img.thumbUrl ?? img.url)} alt={`生成画像 ${images.length - i}（シード ${img.seed}）`} loading="lazy" />
+                </button>
+              </div>
+              <div className="thumb-actions">
+                <button
+                  type="button"
+                  className={`btn thumb-pin${img.pinned ? ' is-pinned' : ''}`}
+                  aria-pressed={img.pinned}
+                  aria-label={`生成画像 ${images.length - i}をピン留め`}
+                  title={img.pinned ? 'ピン留めを外す' : '履歴の自動削除から保護する'}
+                  onClick={() => onTogglePin(img.id)}
+                >
+                  <PinIcon filled={img.pinned} />
+                </button>
+                <button
+                  type="button"
+                  className={`btn thumb-download${img.downloaded ? ' is-downloaded' : ''}`}
+                  aria-label={`生成画像 ${images.length - i}のPNGを${img.downloaded ? '再ダウンロード（ダウンロード済み）' : 'ダウンロード'}`}
+                  title={img.downloaded ? 'PNGを再ダウンロード（ダウンロード済み）' : 'PNGをダウンロード'}
+                  onClick={() => downloadImage(img)}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5" />
+                  </svg>
+                </button>
+              </div>
             </li>
           ))}
         </ul>
