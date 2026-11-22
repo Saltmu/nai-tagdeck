@@ -285,9 +285,9 @@
   position: absolute;
   left: 0;
   top: 0.55rem;
-  transform: translateX(-50%);
+  transform: translateX(calc(var(--marker-x, 0.5) * -100%));
   padding: 0.05rem 0.3rem;
-  max-width: 6.2rem;
+  max-width: var(--label-max-width, 6.2rem);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -295,14 +295,6 @@
   font-size: 0.7rem;
   font-weight: 700;
   line-height: 1.25;
-}
-
-.center-marker.is-left .center-marker-label {
-  transform: translateX(-0.35rem);
-}
-
-.center-marker.is-right .center-marker-label {
-  transform: translateX(calc(-100% + 0.35rem));
 }
 
 .center-marker.is-above .center-marker-label {

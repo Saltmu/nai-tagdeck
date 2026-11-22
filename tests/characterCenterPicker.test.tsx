@@ -103,7 +103,7 @@ function createMultiCharWorkspace(): Workspace {
 }
 
 describe('CharacterCenterPicker', () => {
-  it('renders canvas aspect ratio, peer markers, legend, edge alignment, pointerId filtering, and separate undo steps per drag', async () => {
+  it('renders canvas aspect ratio, peer markers, legend, roving tabIndex grid, pointerId isolation, and separate undo steps per drag', async () => {
     const initial = createMultiCharWorkspace();
     let latestWs = initial;
     const dictionary = mockDictionary();
@@ -160,8 +160,10 @@ describe('CharacterCenterPicker', () => {
     expect(peerMarkers[0]!.style.left).toBe('80%');
     expect(peerMarkers[0]!.style.top).toBe('20%');
     expect(peerMarkers[0]!.classList.contains('is-auto')).toBe(false);
-    // x = 0.8 (> 0.75) は右端寄せクラス is-right が付く
-    expect(peerMarkers[0]!.classList.contains('is-right')).toBe(true);
+    // ラベルは x に比例した --marker-x とステージ幅に応じた --label-max-width を持つ
+    const bobLabel = peerMarkers[0]!.querySelector<HTMLElement>('.center-marker-label')!;
+    expect(bobLabel.style.getPropertyValue('--marker-x')).toBe('0.8');
+    expect(bobLabel.style.getPropertyValue('--label-max-width')).toBe('104px');
     expect(peerMarkers[1]!.style.left).toBe('50%');
     expect(peerMarkers[1]!.style.top).toBe('50%');
     expect(peerMarkers[1]!.classList.contains('is-auto')).toBe(true);
@@ -174,11 +176,30 @@ describe('CharacterCenterPicker', () => {
       'キャロル(0.50, 0.50) 中央自動',
     ]);
 
-    // 5×5 グリッドのセル B4 (x=0.3, y=0.7) をクリック
-    const cellB4 = [...container.querySelectorAll<HTMLButtonElement>('.center-preset-cell')].find(
-      (btn) => btn.textContent === 'B4',
-    )!;
+    // 5×5 グリッドは単一の Tab ストップ（roving tabIndex）になっており、初期状態 (0.5, 0.5) では C3 のみが tabIndex=0
+    const allCells = [...container.querySelectorAll<HTMLButtonElement>('.center-preset-cell')];
+    expect(allCells).toHaveLength(25);
+    const tabStops = allCells.filter((btn) => btn.tabIndex === 0);
+    expect(tabStops.map((btn) => btn.textContent)).toEqual(['C3']);
+
+    // 矢印キーでグリッド内のフォーカスを移動できる（C3 -> ArrowLeft -> B3 -> ArrowDown -> B4）
+    const cellC3 = tabStops[0]!;
+    await act(async () => {
+      cellC3.focus();
+      cellC3.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    });
+    expect(document.activeElement?.textContent).toBe('B3');
+    expect((document.activeElement as HTMLButtonElement).tabIndex).toBe(0);
+    expect(cellC3.tabIndex).toBe(-1);
+
+    await act(async () => {
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    });
+    const cellB4 = document.activeElement as HTMLButtonElement;
+    expect(cellB4.textContent).toBe('B4');
     expect(cellB4.getAttribute('aria-pressed')).toBe('false');
+
+    // B4 (x=0.3, y=0.7) をクリックして選択
     await act(async () => cellB4.click());
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.3, y: 0.7 });
     expect(cellB4.getAttribute('aria-pressed')).toBe('true');
@@ -189,7 +210,7 @@ describe('CharacterCenterPicker', () => {
     const numberInputs = [...container.querySelectorAll<HTMLInputElement>('.center-grid input[type="number"]')];
     expect(numberInputs.map((i) => i.value)).toEqual(['0.3', '0.7']);
 
-    // 数値入力欄からの変更がピッカーに反映されることを確認
+    // 数値入力欄からの変更がピッカーに反映されることを確認（グリッド外の座標では C3 がフォールバックの Tab ストップになる）
     const setNativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
     await act(async () => {
       numberInputs[0]!.focus();
@@ -200,6 +221,7 @@ describe('CharacterCenterPicker', () => {
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.42, y: 0.7 });
     expect(activeMarker.style.left).toBe('42%');
     expect(cellB4.getAttribute('aria-pressed')).toBe('false');
+    expect(allCells.filter((btn) => btn.tabIndex === 0).map((btn) => btn.textContent)).toEqual(['C3']);
 
     // キーボード操作（矢印キーで 0.05、Shift+矢印で 0.01、Home で 0.5, 0.5）
     await act(async () => {
@@ -246,8 +268,18 @@ describe('CharacterCenterPicker', () => {
     });
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.25, y: 0.25 });
 
-    // 別の指（pointerId: 99）の移動や終了は無視されること
+    // ドラッグ中に2本目の指（pointerId: 99）で pointerdown / pointermove / pointerup しても無視され、1本目のドラッグが継続すること
     await act(async () => {
+      stage.dispatchEvent(
+        pointerEvent('pointerdown', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          pointerId: 99,
+          clientX: 280,
+          clientY: 290,
+        }),
+      );
       window.dispatchEvent(
         pointerEvent('pointermove', {
           bubbles: true,
@@ -320,7 +352,6 @@ describe('CharacterCenterPicker', () => {
       window.dispatchEvent(pointerEvent('pointerup', { bubbles: true, pointerId: 11 }));
     });
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.2, y: 0.3 });
-    expect(activeMarker.classList.contains('is-left')).toBe(true);
 
     // 1回目の Undo で2回目のドラッグ前の (0.67, 1) に戻る
     const undoBtn = container.querySelector<HTMLButtonElement>('button[aria-label="元に戻す"]')!;
