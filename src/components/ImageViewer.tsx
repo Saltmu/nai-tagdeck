@@ -276,6 +276,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
   const [seedApplied, setSeedApplied] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState('');
+  const [copyFailed, setCopyFailed] = useState(false);
   const imageIdRef = useRef(image.id);
   imageIdRef.current = image.id;
   // 削除は1回目で確認状態にし、2回目で実行する。連打で消えないよう、確認状態になってから
@@ -287,6 +288,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
     setSeedApplied(false);
     setCopiedKey(null);
     setCopyStatus('');
+    setCopyFailed(false);
     setRemoveArmed(false);
   }, [image]);
   useEffect(() => {
@@ -338,6 +340,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
     const ok = await copyText(text, dialog.current ?? document.body);
     if (imageIdRef.current !== sourceId) return;
     setCopyStatus(ok ? `${label}をコピーしました` : 'コピーできませんでした');
+    setCopyFailed(!ok);
     setCopiedKey(ok ? key : null);
   };
   const rows = characterRows(image);
@@ -374,7 +377,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
           onNext={onNext}
           onClose={() => dialog.current?.close()}
         />
-        <div className="viewer-side">
+        <div className="viewer-side" tabIndex={0} aria-label="生成画像の詳細">
           <div className="viewer-toolbar">
             <button type="button" className="icon-btn" disabled={!hasPrev} onClick={onPrev} aria-label="新しい画像へ" title="新しい画像へ">
               <PrevIcon />
@@ -549,7 +552,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
               )}
             </dl>
           </details>
-          <span className="visually-hidden" role="status" aria-live="polite">{copyStatus}</span>
+          <p className={`viewer-copy-status${copyFailed ? '' : ' visually-hidden'}`} role="status" aria-live="polite">{copyStatus}</p>
         </div>
       </div>
     </dialog>

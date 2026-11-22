@@ -130,7 +130,9 @@ describe('ImageViewer prompts and parameters', () => {
     expect(writeText).toHaveBeenCalledWith('1girl');
     expect(copyButtons[0]!.textContent).toContain('コピー済み');
     expect(copyButtons[0]!.getAttribute('aria-label')).toBe('ベースをコピー済み');
-    expect(container.querySelector('.viewer-prompt ~ [role="status"]')?.textContent).toBe('ベースをコピーしました');
+    const status = container.querySelector<HTMLElement>('.viewer-prompt ~ [role="status"]');
+    expect(status?.textContent).toBe('ベースをコピーしました');
+    expect(status?.classList.contains('visually-hidden')).toBe(true);
 
     await act(async () => {
       vi.advanceTimersByTime(1500);
@@ -167,7 +169,10 @@ describe('ImageViewer prompts and parameters', () => {
       copyButtons[0]!.click();
     });
     expect(copyButtons[0]!.textContent).not.toContain('コピー済み');
-    expect(container.querySelector('.viewer-prompt ~ [role="status"]')?.textContent).toBe('コピーできませんでした');
+    const status = container.querySelector<HTMLElement>('.viewer-prompt ~ [role="status"]');
+    expect(status?.textContent).toBe('コピーできませんでした');
+    expect(status?.classList.contains('visually-hidden')).toBe(false);
+    expect(container.querySelector('.viewer-side')?.getAttribute('tabindex')).toBe('0');
   });
 
   it('copies with a textarea inside the dialog and ignores a result for the previous image', async () => {

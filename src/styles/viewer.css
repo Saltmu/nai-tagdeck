@@ -60,6 +60,18 @@
   overflow: auto;
 }
 
+/* プロンプト本文はここで折り返し、スクロールはフォーカスできる .viewer-side に任せる */
+.viewer-prompt .preview-text {
+  max-height: none;
+  overflow: visible;
+}
+
+.viewer-copy-status {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
 /* 縦積みのとき、プロンプトを開いても画像が潰れないよう下段をスクロールに収める */
 @media (max-width: 899px) {
   .viewer-side {
