@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildGenerateRequest, describeError, randomSeed, requestImages, type GenerateRequest } from '../lib/novelai';
 import { toParams, type GenerationSettings } from '../lib/generation';
+import { promptSelectsFurry } from '../lib/prompt';
 import type { GeneratedCharacterDetail, GeneratedImageParams, NewImage } from './useImages';
 
 export interface GenerateArgs {
@@ -29,9 +30,9 @@ function recordedCharacters(body: GenerateRequest): GeneratedCharacterDetail[] {
   }));
 }
 
-function recordedParams(settings: GenerationSettings, params: ReturnType<typeof toParams>): GeneratedImageParams {
+function recordedParams(input: string, params: ReturnType<typeof toParams>): GeneratedImageParams {
   return {
-    mode: settings.mode,
+    mode: promptSelectsFurry(input) ? 'furry' : 'anime',
     steps: params.steps,
     scale: params.scale,
     sampler: params.sampler,
@@ -62,7 +63,7 @@ export function useGenerator(onImages: (images: NewImage[]) => void): Generator 
         if (ctrl.signal.aborted) return;
         const negativePrompt = typeof body.parameters.negative_prompt === 'string' ? body.parameters.negative_prompt : negative;
         const characterDetails = recordedCharacters(body);
-        const imageParams = recordedParams(settings, params);
+        const imageParams = recordedParams(body.input, params);
         onImages(
           results.map((r) => ({
             blob: r.blob,

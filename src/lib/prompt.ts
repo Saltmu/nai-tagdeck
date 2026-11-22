@@ -45,8 +45,13 @@ const FURRY_DATASET_LEADING = /^\s*fur[\s_]+dataset\s*(?:,|$)/i;
  * ケモノモードで送るベースプロンプト。先頭に `fur dataset` が無ければ付ける。
  * 空のときは `fur dataset` だけになる。
  */
+/** 送ったベースの先頭タグが、NovelAI のケモノ指定かどうか。 */
+export function promptSelectsFurry(prompt: string): boolean {
+  return FURRY_DATASET_LEADING.test(prompt);
+}
+
 export function prefixFurryDataset(prompt: string): string {
-  if (FURRY_DATASET_LEADING.test(prompt)) return prompt;
+  if (promptSelectsFurry(prompt)) return prompt;
   const trimmed = prompt.trim();
   return trimmed ? `fur dataset, ${trimmed}` : 'fur dataset';
 }

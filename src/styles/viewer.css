@@ -60,6 +60,15 @@
   overflow: auto;
 }
 
+/* 縦積みのとき、プロンプトを開いても画像が潰れないよう下段をスクロールに収める */
+@media (max-width: 899px) {
+  .viewer-side {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 45%;
+  }
+}
+
 .viewer-meta {
   display: flex;
   flex-wrap: wrap;

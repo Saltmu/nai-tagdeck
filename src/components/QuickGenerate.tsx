@@ -24,6 +24,7 @@ interface Props {
 /** どのタブからでも、サイズを選んですぐ生成できるようにする。 */
 export function QuickGenerate({ size, seed, onSizeChange, onClearSeed, generating, blocker, onGenerate }: Props) {
   const radioRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const generateRef = useRef<HTMLButtonElement>(null);
   const sizes = headerSizes(size);
   const activeIndex = sizes.indexOf(size);
 
@@ -72,7 +73,10 @@ export function QuickGenerate({ size, seed, onSizeChange, onClearSeed, generatin
           className="btn seed-lock"
           aria-label={seedLabel}
           title={seedLabel}
-          onClick={onClearSeed}
+          onClick={() => {
+            generateRef.current?.focus();
+            onClearSeed();
+          }}
         >
           <LockIcon />
           <span className="seed-lock-extra">
@@ -82,6 +86,7 @@ export function QuickGenerate({ size, seed, onSizeChange, onClearSeed, generatin
         </button>
       )}
       <button
+        ref={generateRef}
         type="button"
         className={`btn btn-primary generate-btn${blocker ? ' is-blocked' : ''}`}
         aria-busy={generating}

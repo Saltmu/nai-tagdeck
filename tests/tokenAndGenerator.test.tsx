@@ -333,5 +333,18 @@ describe('useGenerator', () => {
     expect(second.negativePrompt).toBe('');
     expect(second.characterDetails).toEqual([{ prompt: 'girl', negative: 'lowres' }]);
     expect(second.params).toMatchObject({ mode: 'anime', dynamicThresholding: false });
+
+    await act(async () => {
+      await generator.generate({
+        token: 'pst-valid',
+        prompt: 'fur dataset, wolf',
+        negative: '',
+        characters: [],
+        settings: { ...DEFAULT_GENERATION, mode: 'anime', seed: 1 },
+      });
+    });
+    const third = onImages.mock.calls[2]![0][0]!;
+    expect(third.prompt).toBe('fur dataset, wolf');
+    expect(third.params?.mode).toBe('furry');
   });
 });

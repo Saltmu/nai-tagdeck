@@ -1,14 +1,15 @@
-export async function copyText(text: string): Promise<boolean> {
+export async function copyText(text: string, parent: ParentNode = document.body): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    // 権限がない環境向けの予備手段
+    // 権限がない環境向けの予備手段。dialog の中で呼ぶときは、その dialog を渡す。
+    // 背面は inert になり、body に足した textarea は選択できない。
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.setAttribute('readonly', '');
     ta.className = 'visually-hidden';
-    document.body.appendChild(ta);
+    parent.appendChild(ta);
     ta.select();
     const ok = document.execCommand('copy');
     ta.remove();

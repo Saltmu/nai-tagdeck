@@ -275,6 +275,8 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
   const [seedApplied, setSeedApplied] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState('');
+  const imageIdRef = useRef(image.id);
+  imageIdRef.current = image.id;
   // 削除は1回目で確認状態にし、2回目で実行する。連打で消えないよう、確認状態になってから
   // REMOVE_ARM_MS の間は押せない。押せるようになってからしばらく押さなければ元に戻す
   const [removeArmed, setRemoveArmed] = useState(false);
@@ -331,7 +333,9 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
   }, []);
 
   const copyPrompt = async (key: string, text: string, label: string) => {
-    const ok = await copyText(text);
+    const sourceId = image.id;
+    const ok = await copyText(text, dialog.current ?? document.body);
+    if (imageIdRef.current !== sourceId) return;
     setCopyStatus(ok ? `${label}をコピーしました` : 'コピーできませんでした');
     setCopiedKey(ok ? key : null);
   };

@@ -245,6 +245,29 @@ describe('QuickGenerate radiogroup', () => {
     await act(async () => root.render(<Harness seed={null} />));
     expect(container.querySelector('.seed-lock')).toBeNull();
   });
+
+  it('moves focus to generate when the seed lock is cleared', async () => {
+    function Harness() {
+      const [seed, setSeed] = useState<number | null>(7);
+      return (
+        <QuickGenerate
+          size="portrait"
+          seed={seed}
+          onSizeChange={() => {}}
+          onClearSeed={() => setSeed(null)}
+          generating={false}
+          blocker={null}
+          onGenerate={() => {}}
+        />
+      );
+    }
+    await act(async () => root.render(<Harness />));
+    const lock = container.querySelector<HTMLButtonElement>('.seed-lock')!;
+    lock.focus();
+    await act(async () => lock.click());
+    expect(container.querySelector('.seed-lock')).toBeNull();
+    expect(document.activeElement).toBe(container.querySelector('.generate-btn'));
+  });
 });
 
 describe('Editor tablist', () => {

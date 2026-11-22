@@ -160,4 +160,31 @@ describe('ImageViewer prompts and parameters', () => {
     expect(copyButtons[0]!.textContent).not.toContain('コピー済み');
     expect(container.querySelector('.viewer-prompt ~ [role="status"]')?.textContent).toBe('コピーできませんでした');
   });
+
+  it('copies with a textarea inside the dialog and ignores a result for the previous image', async () => {
+    let parent: HTMLElement | null = null;
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+    vi.stubGlobal('navigator', Object.assign(Object.create(navigator), { clipboard: { writeText } }));
+    document.execCommand = () => {
+      parent = document.querySelector('textarea')?.parentElement ?? null;
+      return true;
+    };
+    await renderViewer(image({ id: 'img-a', prompt: 'first' }));
+    const firstCopy = container.querySelector<HTMLButtonElement>('.viewer-prompt button')!;
+    await act(async () => firstCopy.click());
+    expect(parent).toBe(container.querySelector('dialog'));
+    expect(firstCopy.textContent).toContain('コピー済み');
+
+    let release: (() => void) | undefined;
+    writeText.mockImplementation(() => new Promise<void>((resolve) => { release = resolve; }));
+    await renderViewer(image({ id: 'img-b', prompt: 'second' }));
+    const secondCopy = container.querySelector<HTMLButtonElement>('.viewer-prompt button')!;
+    await act(async () => secondCopy.click());
+    expect(secondCopy.textContent).not.toContain('コピー済み');
+    await renderViewer(image({ id: 'img-c', prompt: 'third' }));
+    await act(async () => release?.());
+    const thirdCopy = container.querySelector<HTMLButtonElement>('.viewer-prompt button')!;
+    expect(thirdCopy.textContent).not.toContain('コピー済み');
+    expect(container.querySelector('.viewer-prompt ~ [role="status"]')?.textContent).toBe('');
+  });
 });
