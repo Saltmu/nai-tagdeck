@@ -108,6 +108,7 @@ it('turns per-character negative and center on from the character card', async (
         notify={() => {}}
         onRegister={() => {}}
         sharedNegative="lowres, aliasing, "
+        enabledCount={1}
       />
     </DialogProvider>,
   );
@@ -145,4 +146,60 @@ it('turns per-character negative and center on from the character card', async (
     id: character.id,
     center: { x: 0.2, y: 0.5 },
   });
+});
+
+it('asks to duplicate a character and explains an OFF copy at the generation limit', async () => {
+  const character = newCharacter(0);
+  character.name = 'アリス';
+  const dispatch = vi.fn();
+  const notify = vi.fn();
+  const renderCard = (enabledCount: number, count = 2, current = character) => root.render(
+    <DialogProvider>
+      <CharacterCard
+        character={current}
+        index={0}
+        count={count}
+        dispatch={dispatch}
+        entries={[]}
+        syntax="numeric"
+        isKnown={() => false}
+        onCopy={() => {}}
+        notify={notify}
+        onRegister={() => {}}
+        sharedNegative=""
+        enabledCount={enabledCount}
+      />
+    </DialogProvider>,
+  );
+  const clickDuplicate = async () => {
+    const button = container.querySelector<HTMLButtonElement>('button[aria-label="アリス を複製"]');
+    expect(button).not.toBeNull();
+    await act(async () => button!.click());
+    return button!;
+  };
+
+  await act(async () => renderCard(6));
+  await clickDuplicate();
+  expect(dispatch).toHaveBeenCalledWith({ type: 'duplicateCharacter', id: character.id });
+  expect(notify).toHaveBeenCalledWith('生成対象は最大6人のため、「アリス（コピー）」はOFFで追加しました');
+
+  dispatch.mockClear();
+  notify.mockClear();
+  await act(async () => renderCard(5));
+  await clickDuplicate();
+  expect(dispatch).toHaveBeenCalledWith({ type: 'duplicateCharacter', id: character.id });
+  expect(notify).not.toHaveBeenCalled();
+
+  dispatch.mockClear();
+  notify.mockClear();
+  await act(async () => renderCard(6, 2, { ...character, enabled: false }));
+  await clickDuplicate();
+  expect(notify).not.toHaveBeenCalled();
+
+  dispatch.mockClear();
+  await act(async () => renderCard(6, 15));
+  const disabled = await clickDuplicate();
+  expect(disabled.disabled).toBe(true);
+  expect(disabled.title).toBe('アリス を複製');
+  expect(dispatch).not.toHaveBeenCalled();
 });

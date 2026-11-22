@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, useState } from 'react';
+import { act, useReducer, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DialogProvider, useDialogs, type DialogApi } from '../src/components/Dialogs';
@@ -7,9 +7,10 @@ import { GenerateDock } from '../src/components/GenerateDock';
 import { QuickGenerate } from '../src/components/QuickGenerate';
 import { ImageViewer } from '../src/components/ImageViewer';
 import { Editor } from '../src/components/Editor';
+import { useTagUndo } from '../src/hooks/useTagUndo';
 import { TagInput } from '../src/components/TagInput';
 import { PresetBar } from '../src/components/PresetBar';
-import { emptyWorkspace } from '../src/lib/workspace';
+import { emptyWorkspace, workspaceReducer } from '../src/lib/workspace';
 import type { SizeKey } from '../src/lib/generation';
 import type { GeneratedImage } from '../src/hooks/useImages';
 import type { PresetStore } from '../src/hooks/usePresets';
@@ -241,6 +242,193 @@ describe('Editor tablist', () => {
     expect(document.activeElement).toBe(t1);
     expect(t1.getAttribute('aria-selected')).toBe('true');
     expect(t1.getAttribute('aria-controls')).toBe(container.querySelector('[role="tabpanel"]')?.id);
+  });
+
+  it('moves focus to the duplicated character tab and leaves the add button focused', async () => {
+    const dictionary: Dictionary = {
+      entries: [],
+      loaded: true,
+      error: null,
+      save: async () => {},
+      saveMany: async () => {},
+      remove: async () => {},
+      importEntries: async () => 0,
+      restoreInitial: async () => 0,
+    };
+    let initial = emptyWorkspace();
+    for (const name of ['A', 'B', 'C']) {
+      initial = workspaceReducer(initial, { type: 'addCharacter' });
+      initial = workspaceReducer(initial, { type: 'renameCharacter', id: initial.characters.at(-1)!.id, name });
+    }
+    function Harness() {
+      const [workspace, rawDispatch] = useReducer(workspaceReducer, initial);
+      const history = useTagUndo(workspace, rawDispatch);
+      return (
+        <DialogProvider>
+          <Editor
+            workspace={workspace}
+            dispatch={history.dispatch}
+            history={history}
+            loaded
+            dictionary={dictionary}
+            syntax="brace"
+            onCopy={() => {}}
+            notify={() => {}}
+            presets={mockPresets()}
+            characterNegative=""
+            onCharacterNegativeChange={() => {}}
+            shown
+          />
+        </DialogProvider>
+      );
+    }
+    await act(async () => root.render(<Harness />));
+    const tabByName = (name: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>('.editor-tab-character')].find((tab) => tab.textContent === name)!;
+    const names = () => [...container.querySelectorAll('.editor-tab-character')].map((tab) => tab.textContent);
+
+    const add = container.querySelector<HTMLButtonElement>('button[aria-label="キャラクターを追加"]')!;
+    add.focus();
+    await act(async () => add.click());
+    expect(document.activeElement).toBe(add);
+    expect(names()).toEqual(['A', 'B', 'C', 'キャラ4']);
+
+    await act(async () => tabByName('B').click());
+    const duplicate = container.querySelector<HTMLButtonElement>('button[aria-label="B を複製"]')!;
+    duplicate.focus();
+    await act(async () => duplicate.click());
+    expect(names()).toEqual(['A', 'B', 'B（コピー）', 'C', 'キャラ4']);
+    expect(document.activeElement).toBe(tabByName('B（コピー）'));
+    expect(document.activeElement?.getAttribute('aria-selected')).toBe('true');
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    expect(names()).toEqual(['A', 'B', 'C', 'キャラ4']);
+    expect(document.activeElement).toBe(tabByName('B'));
+    expect(tabByName('B').getAttribute('aria-selected')).toBe('true');
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: true, bubbles: true }));
+    });
+    expect(names()).toEqual(['A', 'B', 'B（コピー）', 'C', 'キャラ4']);
+    expect(document.activeElement).toBe(tabByName('B（コピー）'));
+    expect(tabByName('B（コピー）').getAttribute('aria-selected')).toBe('true');
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    const redo = container.querySelector<HTMLButtonElement>('button[aria-label="やり直す"]')!;
+    redo.focus();
+    await act(async () => redo.click());
+    expect(document.activeElement).toBe(redo);
+    expect(tabByName('B（コピー）').getAttribute('aria-selected')).toBe('true');
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    expect(document.activeElement).toBe(redo);
+    expect(names()).toEqual(['A', 'B', 'C', 'キャラ4']);
+
+    await act(async () => tabByName('B').click());
+    const duplicateForCheck = container.querySelector<HTMLButtonElement>('button[aria-label="B を複製"]')!;
+    duplicateForCheck.focus();
+    await act(async () => duplicateForCheck.click());
+    await act(async () => tabByName('B').click());
+    const checkbox = container.querySelector<HTMLInputElement>('input[aria-label="B（コピー） を生成に含める"]')!;
+    checkbox.focus();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    expect(names()).toEqual(['A', 'B', 'C', 'キャラ4']);
+    expect(document.activeElement).toBe(tabByName('B'));
+    expect(tabByName('B').getAttribute('aria-selected')).toBe('true');
+
+    await act(async () => tabByName('B').click());
+    const duplicateAgain = container.querySelector<HTMLButtonElement>('button[aria-label="B を複製"]')!;
+    duplicateAgain.focus();
+    await act(async () => duplicateAgain.click());
+    const undo = container.querySelector<HTMLButtonElement>('button[aria-label="元に戻す"]')!;
+    undo.focus();
+    await act(async () => undo.click());
+    expect(document.activeElement).toBe(undo);
+    expect(tabByName('B').getAttribute('aria-selected')).toBe('true');
+    expect(names()).toEqual(['A', 'B', 'C', 'キャラ4']);
+
+    await act(async () => tabByName('B').click());
+    const remove = container.querySelector<HTMLButtonElement>('button[aria-label="B を削除"]')!;
+    await act(async () => remove.click());
+    expect(names()).toEqual(['A', 'C', 'キャラ4']);
+    const check = container.querySelector<HTMLInputElement>('input[aria-label="A を生成に含める"]')!;
+    check.focus();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    expect(names()).toEqual(['A', 'B', 'C', 'キャラ4']);
+    expect(document.activeElement).toBe(check);
+    expect(tabByName('B').getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('moves focus to the restored tab when redo disables the focused generation checkbox', async () => {
+    const dictionary: Dictionary = {
+      entries: [],
+      loaded: true,
+      error: null,
+      save: async () => {},
+      saveMany: async () => {},
+      remove: async () => {},
+      importEntries: async () => 0,
+      restoreInitial: async () => 0,
+    };
+    let initial = emptyWorkspace();
+    for (let i = 0; i < 6; i++) {
+      initial = workspaceReducer(initial, { type: 'addCharacter' });
+      initial = workspaceReducer(initial, {
+        type: 'renameCharacter',
+        id: initial.characters.at(-1)!.id,
+        name: `C${i + 1}`,
+      });
+    }
+    initial = workspaceReducer(initial, { type: 'toggleCharacter', id: initial.characters[5]!.id });
+    function Harness() {
+      const [workspace, rawDispatch] = useReducer(workspaceReducer, initial);
+      const history = useTagUndo(workspace, rawDispatch);
+      return (
+        <DialogProvider>
+          <Editor
+            workspace={workspace}
+            dispatch={history.dispatch}
+            history={history}
+            loaded
+            dictionary={dictionary}
+            syntax="brace"
+            onCopy={() => {}}
+            notify={() => {}}
+            presets={mockPresets()}
+            characterNegative=""
+            onCharacterNegativeChange={() => {}}
+            shown
+          />
+        </DialogProvider>
+      );
+    }
+    await act(async () => root.render(<Harness />));
+    const tabByName = (name: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>('.editor-tab-character')].find((tab) => tab.textContent === name)!;
+    await act(async () => tabByName('C1').click());
+    const duplicate = container.querySelector<HTMLButtonElement>('button[aria-label="C1 を複製"]')!;
+    await act(async () => duplicate.click());
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    const check = container.querySelector<HTMLInputElement>('input[aria-label="C6 を生成に含める"]')!;
+    expect(check.disabled).toBe(false);
+    check.focus();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: true, bubbles: true }));
+    });
+    expect(check.disabled).toBe(true);
+    expect(document.activeElement).toBe(tabByName('C1（コピー）'));
+    expect(tabByName('C1（コピー）').getAttribute('aria-selected')).toBe('true');
   });
 });
 

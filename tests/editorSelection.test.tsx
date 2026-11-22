@@ -29,6 +29,13 @@ it('selects a newly added character and persists it', async () => {
   expect(selection.selected).toBe('b');
   expect(localStorage.getItem('nai-tagdeck:editor-tab')).toBe('b');
 });
+it('selects a character inserted between existing ones', async () => {
+  await render(['a', 'b', 'c']);
+  await act(async () => selection.select('a'));
+  await render(['a', 'b', 'new', 'c']);
+  expect(selection.selected).toBe('new');
+  expect(localStorage.getItem('nai-tagdeck:editor-tab')).toBe('new');
+});
 it('returns to the nearest surviving left tab after multiple deletions', async () => {
   await render(['a', 'b', 'c']);
   await act(async () => selection.select('c'));

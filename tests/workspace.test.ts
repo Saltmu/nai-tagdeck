@@ -175,6 +175,105 @@ describe('workspaceReducer: キャラクター', () => {
     const ws = emptyWorkspace();
     expect(run(ws, { type: 'add', target: 'nope', category: 'subject', tag: 'x' })).toBe(ws);
     expect(run(ws, { type: 'renameCharacter', id: 'nope', name: 'x' })).toBe(ws);
+    expect(run(ws, { type: 'duplicateCharacter', id: 'nope' })).toBe(ws);
+  });
+
+  it('複製は元の直後に入り、タグ・並び・重み・ON/OFF と個別設定を新しい ID で引き継ぐ', () => {
+    let ws = run(emptyWorkspace(), { type: 'addCharacter' }, { type: 'addCharacter' }, { type: 'addCharacter' });
+    const [first, middle, last] = ws.characters;
+    ws = run(
+      ws,
+      { type: 'renameCharacter', id: middle!.id, name: '  アリス  ' },
+      { type: 'add', target: middle!.id, category: 'subject', tag: 'girl' },
+      { type: 'add', target: middle!.id, category: 'appearance', tag: 'long hair', weight: 1.4 },
+      { type: 'add', target: middle!.id, category: 'appearance', tag: 'blue eyes' },
+      { type: 'add', target: middle!.id, category: 'outfit', tag: 'dress' },
+      { type: 'add', target: middle!.id, category: 'pose', tag: 'source#hug' },
+      { type: 'add', target: middle!.id, category: 'unclassified', tag: 'extra' },
+      { type: 'add', target: middle!.id, category: 'quality', tag: 'masterpiece' },
+      { type: 'setCharacterNegative', id: middle!.id, negative: 'lowres' },
+      { type: 'setCharacterCenter', id: middle!.id, center: { x: 0.2, y: 0.8 } },
+    );
+    ws = run(ws, {
+      type: 'toggle',
+      target: middle!.id,
+      category: 'appearance',
+      id: ws.characters[1]!.tags.appearance[1]!.id,
+    });
+    const source = ws.characters[1]!;
+    const beforeIds = ws.characters.map((c) => c.id);
+    const duplicated = run(ws, { type: 'duplicateCharacter', id: source.id });
+    expect(duplicated.base).toBe(ws.base);
+    expect(duplicated.negative).toBe(ws.negative);
+    expect(duplicated.characters.map((c) => c.id).filter((id) => beforeIds.includes(id))).toEqual(beforeIds);
+    const copy = duplicated.characters[2]!;
+    expect(duplicated.characters.map((c) => c.name)).toEqual(['キャラ1', '  アリス  ', 'アリス（コピー）', 'キャラ3']);
+    expect(copy.id).not.toBe(source.id);
+    expect(copy.enabled).toBe(true);
+    expect(copy.negative).toBe('lowres');
+    expect(copy.center).toEqual({ x: 0.2, y: 0.8 });
+    expect(copy.center).not.toBe(source.center);
+    for (const key of ['subject', 'appearance', 'outfit', 'pose', 'unclassified', 'quality'] as const) {
+      expect(copy.tags[key].map(({ tag, enabled, weight }) => ({ tag, enabled, weight }))).toEqual(
+        source.tags[key].map(({ tag, enabled, weight }) => ({ tag, enabled, weight })),
+      );
+      expect(copy.tags[key].map((tag) => tag.id)).not.toEqual(source.tags[key].map((tag) => tag.id));
+    }
+    expect(copy.tags.appearance[1]!.enabled).toBe(false);
+    expect(copy.tags.pose[0]!.tag).toBe('source#hug');
+
+    const edited = run(duplicated, {
+      type: 'setTag',
+      target: copy.id,
+      category: 'appearance',
+      id: copy.tags.appearance[0]!.id,
+      tag: 'short hair',
+    });
+    expect(edited.characters[1]!.tags.appearance[0]!.tag).toBe('long hair');
+    expect(edited.characters[2]!.tags.appearance[0]!.tag).toBe('short hair');
+    const removed = run(edited, { type: 'removeCharacter', id: copy.id });
+    expect(removed.characters.map((c) => c.id)).toEqual([first!.id, source.id, last!.id]);
+    expect(normalizeWorkspace(JSON.parse(JSON.stringify(duplicated)))).toEqual(duplicated);
+
+    const fromFirst = run(ws, { type: 'duplicateCharacter', id: first!.id });
+    expect(fromFirst.characters.map((c) => c.name)).toEqual(['キャラ1', 'キャラ1（コピー）', '  アリス  ', 'キャラ3']);
+    const fromLast = run(ws, { type: 'duplicateCharacter', id: last!.id });
+    expect(fromLast.characters.map((c) => c.name)).toEqual(['キャラ1', '  アリス  ', 'キャラ3', 'キャラ3（コピー）']);
+  });
+
+  it('未入力の呼び名は表示中の既定名に（コピー）を付ける', () => {
+    let ws = run(emptyWorkspace(), { type: 'addCharacter' });
+    ws = run(ws, { type: 'renameCharacter', id: ws.characters[0]!.id, name: '   ' });
+    const copy = run(ws, { type: 'duplicateCharacter', id: ws.characters[0]!.id }).characters[1]!;
+    expect(copy.name).toBe('キャラ1（コピー）');
+    expect(copy).not.toHaveProperty('negative');
+    expect(copy).not.toHaveProperty('center');
+  });
+
+  it('生成対象と保存の上限を超えて複製しない', () => {
+    let ws = run(emptyWorkspace(), ...Array.from({ length: 6 }, () => ({ type: 'addCharacter' }) as const));
+    ws = run(ws, { type: 'toggleCharacter', id: ws.characters[5]!.id });
+    const offSource = ws.characters[5]!;
+    const offCopy = run(ws, { type: 'duplicateCharacter', id: offSource.id });
+    expect(offCopy.characters[6]).toMatchObject({ name: 'キャラ6（コピー）', enabled: false });
+    expect(offCopy.characters.slice(0, 6).map((c) => c.enabled)).toEqual(ws.characters.map((c) => c.enabled));
+
+    const full = run(emptyWorkspace(), ...Array.from({ length: 6 }, () => ({ type: 'addCharacter' }) as const));
+    const forcedOff = run(full, { type: 'duplicateCharacter', id: full.characters[2]!.id });
+    expect(forcedOff.characters[3]).toMatchObject({ name: 'キャラ3（コピー）', enabled: false });
+    expect(forcedOff.characters.filter((c) => c.enabled)).toHaveLength(MAX_ENABLED_CHARACTERS);
+    expect(forcedOff.characters.filter((_, i) => i !== 3).map((c) => c.enabled)).toEqual(full.characters.map((c) => c.enabled));
+
+    let growing = run(emptyWorkspace(), ...Array.from({ length: 5 }, () => ({ type: 'addCharacter' }) as const));
+    growing = run(growing, { type: 'duplicateCharacter', id: growing.characters[0]!.id });
+    expect(growing.characters[1]!.enabled).toBe(true);
+    growing = run(growing, { type: 'duplicateCharacter', id: growing.characters[1]!.id });
+    expect(growing.characters[2]).toMatchObject({ name: 'キャラ1（コピー）（コピー）', enabled: false });
+    expect(growing.characters.filter((c) => c.enabled)).toHaveLength(MAX_ENABLED_CHARACTERS);
+
+    const capped = run(emptyWorkspace(), ...Array.from({ length: MAX_CHARACTERS }, () => ({ type: 'addCharacter' }) as const));
+    expect(run(capped, { type: 'duplicateCharacter', id: capped.characters[0]!.id })).toBe(capped);
+    expect(run(capped, { type: 'duplicateCharacter', id: capped.characters[14]!.id })).toBe(capped);
   });
 });
 

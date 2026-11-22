@@ -3,6 +3,7 @@ import type { Character, CategoryKey, DictEntry, WeightSyntax, WorkTag } from '.
 import type { TagFilter } from '../lib/tagSearch';
 import type { WorkspaceAction } from '../lib/workspace';
 import { CHARACTER_CATEGORY_KEYS } from '../lib/categories';
+import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from '../lib/characterLimits';
 import { buildPrompt } from '../lib/prompt';
 import { CategorySection } from './CategorySection';
 import { NumberField } from './NumberField';
@@ -28,6 +29,8 @@ interface Props {
   onPoseAdded?: (tag: string) => void;
   /** 表示中のタグ検索と ON 絞り込み。 */
   filter?: TagFilter;
+  /** 生成対象が ON のキャラクター数。複製を OFF で足すときの案内に使う。 */
+  enabledCount: number;
 }
 
 export function CharacterCard({
@@ -44,6 +47,7 @@ export function CharacterCard({
   sharedNegative,
   onPoseAdded,
   filter,
+  enabledCount,
 }: Props) {
   const { id, enabled, tags } = character;
   const name = character.name.trim() || `キャラ${index + 1}`;
@@ -61,6 +65,15 @@ export function CharacterCard({
     dispatch({ type: 'removeCharacter', id });
   };
 
+  const atSaveLimit = count >= MAX_CHARACTERS;
+  const duplicate = () => {
+    if (atSaveLimit) return;
+    dispatch({ type: 'duplicateCharacter', id });
+    if (enabled && enabledCount >= MAX_ENABLED_CHARACTERS) {
+      notify(`生成対象は最大${MAX_ENABLED_CHARACTERS}人のため、「${name}（コピー）」はOFFで追加しました`);
+    }
+  };
+
   return (
     <section className={`character${enabled ? '' : ' is-off'}`} aria-label={name}>
       <div className="character-head">
@@ -74,6 +87,16 @@ export function CharacterCard({
         <div className="head-actions">
           <button type="button" className="btn btn-small" disabled={!prompt} onClick={() => onCopy(prompt, name)}>
             コピー
+          </button>
+          <button
+            type="button"
+            className="btn btn-small"
+            aria-label={`${name} を複製`}
+            title={`${name} を複製`}
+            disabled={atSaveLimit}
+            onClick={duplicate}
+          >
+            複製
           </button>
           <button
             type="button"
