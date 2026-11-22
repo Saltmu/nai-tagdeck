@@ -198,10 +198,15 @@ it('adds tags across the selected pane using dictionary categories and keeps unc
   await type(characterInput, '1.4::BLUE_JACKET::, sunny park, ambiguous, custom tag');
   await act(async () => characterInput.parentElement!.querySelector<HTMLButtonElement>('button')!.click());
   expect(dispatch.mock.calls.slice(1)).toEqual([
-    [{ type: 'add', target: 'c1', category: 'outfit', tag: 'BLUE_JACKET', weight: 1.4 }],
-    [{ type: 'add', target: 'c1', category: 'unclassified', tag: 'sunny park', weight: 1 }],
-    [{ type: 'add', target: 'c1', category: 'unclassified', tag: 'ambiguous', weight: 1 }],
-    [{ type: 'add', target: 'c1', category: 'unclassified', tag: 'custom tag', weight: 1 }],
+    [{
+      type: 'addMany',
+      items: [
+        { target: 'c1', category: 'outfit', tag: 'BLUE_JACKET', weight: 1.4 },
+        { target: 'c1', category: 'unclassified', tag: 'sunny park', weight: 1 },
+        { target: 'c1', category: 'unclassified', tag: 'ambiguous', weight: 1 },
+        { target: 'c1', category: 'unclassified', tag: 'custom tag', weight: 1 },
+      ],
+    }],
   ]);
 });
 

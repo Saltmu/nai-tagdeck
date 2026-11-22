@@ -220,20 +220,38 @@ export function Editor({
     () => dictionary.entries.filter((entry) => entry.category !== 'negative' && promptCategories.includes(entry.category)),
     [dictionary.entries, promptCategories],
   );
-  const addPromptTag = (tag: string, weight: number, pickedCategory?: CategoryKey) => {
-    let category: typeof promptCategories[number];
+  const resolvePromptCategory = (tag: string, pickedCategory?: CategoryKey): typeof promptCategories[number] => {
     if (pickedCategory && pickedCategory !== 'negative' && promptCategories.includes(pickedCategory)) {
-      category = pickedCategory;
-    } else {
-      const routed = classifyEditorTag(tag, vectorIndex, promptCategories, active ? 'auto' : 'suggest');
-      category = routed.category;
-      if (!active) {
-        pendingBaseSuggestions.current.set(normalize(tag), routed.suggestedCategory);
-        setPendingSuggestionVersion((v) => v + 1);
-      }
+      return pickedCategory;
     }
+    const routed = classifyEditorTag(tag, vectorIndex, promptCategories, active ? 'auto' : 'suggest');
+    if (!active) {
+      pendingBaseSuggestions.current.set(normalize(tag), routed.suggestedCategory);
+      setPendingSuggestionVersion((v) => v + 1);
+    }
+    return routed.category;
+  };
+  const addPromptTag = (tag: string, weight: number, pickedCategory?: CategoryKey) => {
+    const category = resolvePromptCategory(tag, pickedCategory);
     dispatch({ type: 'add', target: paneTarget, category, tag, weight });
     if (category === 'pose') handlePoseAdded(tag);
+  };
+  const addPromptTags = (items: ReadonlyArray<{ tag: string; weight: number }>) => {
+    if (items.length === 0) return;
+    if (items.length === 1) {
+      addPromptTag(items[0]!.tag, items[0]!.weight);
+      return;
+    }
+    const resolved = items.map(({ tag, weight }) => ({
+      target: paneTarget,
+      category: resolvePromptCategory(tag),
+      tag,
+      weight,
+    }));
+    dispatch({ type: 'addMany', items: resolved });
+    for (const item of resolved) {
+      if (item.category === 'pose') handlePoseAdded(item.tag);
+    }
   };
   const paneTagLists: WorkTag[][] = negativeSelected
     ? [workspace.negative]
@@ -426,6 +444,7 @@ export function Editor({
             placeholder="タグを追加（英語・日本語名・よみ）"
             entries={addTagEntries}
             onAdd={addPromptTag}
+            onAddMany={addPromptTags}
             onPick={addPromptTag}
           />
         )}
@@ -543,7 +562,11 @@ function NegativePane({
   const hasAllDefaults = defaults.every((d) => tags.some((t) => t.enabled && normalize(t.tag) === normalize(d.tag)));
 
   const addDefaults = () => {
-    for (const d of defaults) dispatch({ type: 'add', target: NEGATIVE, category: 'negative', tag: d.tag, weight: d.weight });
+    if (defaults.length === 0) return;
+    dispatch({
+      type: 'addMany',
+      items: defaults.map((d) => ({ target: NEGATIVE, category: 'negative', tag: d.tag, weight: d.weight })),
+    });
   };
 
   return (
