@@ -570,6 +570,9 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
             onBackgroundAdded={() => {
               notify('背景タグを追加しました。カテゴリとプロンプトの変化を確認してください');
             }}
+            onBackgroundDuplicate={(tag) => {
+              notify(`「${tag}」はすでに入っています。別の背景タグ（例: sunset）を選んでください`);
+            }}
             onHatToggledOff={() => {
               notify('帽子タグを OFF にしました（編集欄に残ったままプロンプトから外れます）');
             }}

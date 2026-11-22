@@ -17,6 +17,7 @@ interface Props {
   onLoadSample: () => void;
   onDispatch: (action: WorkspaceAction) => void;
   onBackgroundAdded: () => void;
+  onBackgroundDuplicate: (tag: string) => void;
   onHatToggledOff: () => void;
   onNextStep: () => void;
   onCopy: (text: string, label: string) => void;
@@ -32,6 +33,7 @@ export function TutorialTagEditor({
   onLoadSample,
   onDispatch,
   onBackgroundAdded,
+  onBackgroundDuplicate,
   onHatToggledOff,
   onNextStep,
   onCopy,
@@ -66,7 +68,20 @@ export function TutorialTagEditor({
     (stepId === 'editor-add-background' && backgroundDone) ||
     (stepId === 'editor-toggle-hat' && hatDone);
 
+  const backgroundEntries = useMemo(
+    () => entries.filter((e) => e.category === 'background'),
+    [entries],
+  );
+
   const handleBaseAdd = (tag: string, weight: number) => {
+    const normalized = tag.trim().toLowerCase();
+    const alreadyEnabled = workspace.base.background.some(
+      (t) => t.enabled && t.tag.toLowerCase() === normalized,
+    );
+    if (alreadyEnabled) {
+      onBackgroundDuplicate(tag);
+      return;
+    }
     onDispatch({ type: 'add', target: BASE, category: 'background', tag, weight });
     onBackgroundAdded();
   };
@@ -128,7 +143,7 @@ export function TutorialTagEditor({
                     category="background"
                     label="ベースに背景タグを追加（日本語で検索）"
                     placeholder="例: 夕焼け / 街並み"
-                    entries={entries}
+                    entries={backgroundEntries}
                     onAdd={(tag, weight) => handleBaseAdd(tag, weight)}
                     onPick={(tag, weight) => handleBaseAdd(tag, weight)}
                   />
