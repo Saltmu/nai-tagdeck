@@ -299,6 +299,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
                   onSyntaxChange={handleSyntaxChange}
                   onCopy={copy}
                   negativePrompt={negativePrompt}
+                  mode={generation.mode}
+                  characterNegative={settings.characterNegativePrompt}
                 />
               }
               generatePanel={

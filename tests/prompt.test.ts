@@ -6,6 +6,7 @@ import {
   clampWeight,
   formatTag,
   parseTagList,
+  prefixFurryDataset,
 } from '../src/lib/prompt';
 import { emptyGroups, newCharacter } from '../src/lib/workspace';
 import type { WorkTag } from '../src/types';
@@ -49,6 +50,19 @@ describe('clampWeight', () => {
     expect(clampWeight(10)).toBe(3);
     expect(clampWeight(Number.NaN)).toBe(1);
     expect(clampWeight(1.234)).toBe(1.23);
+  });
+});
+
+describe('prefixFurryDataset', () => {
+  it('空や通常のプロンプトの先頭に fur dataset を付け、既にある場合は重ねない', () => {
+    expect(prefixFurryDataset('')).toBe('fur dataset');
+    expect(prefixFurryDataset('   ')).toBe('fur dataset');
+    expect(prefixFurryDataset('solo, forest')).toBe('fur dataset, solo, forest');
+    expect(prefixFurryDataset('  solo  ')).toBe('fur dataset, solo');
+    for (const prompt of ['fur dataset', 'fur dataset, solo', 'FUR_DATASET, wolf', '  fur_dataset, wolf']) {
+      expect(prefixFurryDataset(prompt)).toBe(prompt);
+    }
+    expect(prefixFurryDataset('wolf, fur dataset')).toBe('fur dataset, wolf, fur dataset');
   });
 });
 

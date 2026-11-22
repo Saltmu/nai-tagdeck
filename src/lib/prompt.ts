@@ -38,6 +38,19 @@ export function formatTag(tag: string, weight: number, syntax: WeightSyntax): st
   return open.repeat(Math.abs(n)) + t + close.repeat(Math.abs(n));
 }
 
+/** ケモノモードの生成リクエストと同じ条件。先頭にあれば重ねない。 */
+const FURRY_DATASET_LEADING = /^\s*fur[\s_]+dataset\s*(?:,|$)/i;
+
+/**
+ * ケモノモードで送るベースプロンプト。先頭に `fur dataset` が無ければ付ける。
+ * 空のときは `fur dataset` だけになる。
+ */
+export function prefixFurryDataset(prompt: string): string {
+  if (FURRY_DATASET_LEADING.test(prompt)) return prompt;
+  const trimmed = prompt.trim();
+  return trimmed ? `fur dataset, ${trimmed}` : 'fur dataset';
+}
+
 export function buildCategoryPrompt(tags: readonly WorkTag[], syntax: WeightSyntax): string {
   return tags
     .filter((t) => t.enabled)

@@ -218,7 +218,9 @@ it('preserves fur dataset at the start even with classified tags when generation
   const dialog = container.querySelector('dialog')!;
   await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
   await click(button('適用', dialog));
-  expect(preview()).toBe('blazer, wolf');
+  expect(preview()).toBe('fur dataset, blazer, wolf');
+  await click(container.querySelector<HTMLButtonElement>('.preview-item button')!);
+  expect(writeText).toHaveBeenCalledWith('fur dataset, blazer, wolf');
   await click(button('生成する（Ctrl+Enter）'));
   expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
     input: 'fur dataset, blazer, wolf',
@@ -231,11 +233,14 @@ it('allows generating after importing a fur-dataset-only base with character tag
   const dialog = container.querySelector('dialog')!;
   await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
   await click(button('適用', dialog));
+  expect(preview()).toBe('fur dataset');
+  const characterNegative = [...container.querySelectorAll('.preview-item')].find((node) => node.querySelector('dt')?.textContent?.includes('キャラ1のネガティブ'));
+  expect(characterNegative?.querySelector('output')?.textContent).toBe('lowres, aliasing, ');
   await click(button('生成する（Ctrl+Enter）'));
   expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
     input: 'fur dataset',
     parameters: expect.objectContaining({
-      characterPrompts: [expect.objectContaining({ prompt: 'wolf' })],
+      characterPrompts: [expect.objectContaining({ prompt: 'wolf', uc: 'lowres, aliasing, ' })],
     }),
   }), expect.anything());
 });

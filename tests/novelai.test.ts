@@ -32,6 +32,8 @@ describe('buildGenerateRequest (V5)', () => {
     }
     const prompt = 'fur dataset, wolf';
     expect(buildGenerateRequest({ prompt, negative: '', characters: [], params, mode: 'furry' }).input).toBe(prompt);
+    expect(buildGenerateRequest({ prompt: '', negative: '', characters: [], params, mode: 'furry' }).input).toBe('fur dataset');
+    expect(buildGenerateRequest({ prompt: '  solo  ', negative: '', characters: [], params, mode: 'furry' }).input).toBe('fur dataset, solo');
   });
 
   it('プロンプトを input と v4_prompt に入れる', () => {
