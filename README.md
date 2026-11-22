@@ -85,7 +85,7 @@ npm run dev
 <details>
 <summary>GitHub Actions から SFTP でアップロード</summary>
 
-公開サーバーで SFTP のパスワード認証が利用できる場合に使えます。GitHub の **Settings → Environments** で `production` を作成し、Variables と Secrets を登録します。
+公開サーバーで SFTP の公開鍵認証またはパスワード認証が利用できる場合に使えます。国外 IP からのパスワード認証を制限しているホスティング（さくらのレンタルサーバの国外IPアドレスフィルタ等）では、公開鍵認証（`DEPLOY_SSH_KEY`）を使用してください。GitHub の **Settings → Environments** で `production` を作成し、Variables と Secrets を登録します。
 
 | 種別 | 名前 | 設定値 |
 | --- | --- | --- |
@@ -93,7 +93,8 @@ npm run dev
 | Variable | `DEPLOY_PORT` | SFTP ポート（省略時は 22） |
 | Secret | `DEPLOY_USER` | SFTP ユーザー名 |
 | Variable | `DEPLOY_DIR` | `/home/user/www/nai-tagdeck` のような、SFTP で見える既存の公開ディレクトリの絶対パス |
-| Secret | `DEPLOY_PASSWORD` | SFTP ユーザーのパスワード |
+| Secret | `DEPLOY_SSH_KEY` | SFTP 公開鍵認証用の秘密鍵（パスフレーズなし）。`DEPLOY_PASSWORD` より優先して使用 |
+| Secret | `DEPLOY_PASSWORD` | SFTP ユーザーのパスワード（`DEPLOY_SSH_KEY` 未設定時に使用） |
 | Variable | `DEPLOY_HOST_FINGERPRINT` | WinSCP の「タブ → サーバー／プロトコル情報」またはホスティング事業者で確認済みの SFTP サーバーの SHA-256 指紋（`SHA256:…`） |
 
 実行時に公開サーバーのホスト鍵を取得し、登録済みの指紋に一致する鍵で SFTP 接続を検証します。以前の `DEPLOY_KNOWN_HOSTS` 変数は削除できます。
