@@ -11,6 +11,7 @@ import {
 } from '../lib/workspace';
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { saveCategoriesOpen } from '../lib/categoryOpen';
+import { buildPrompt } from '../lib/prompt';
 import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import { classifyEditorTag, createTagVectorIndex, type PromptTagCategory } from '../lib/tagClassification';
 import { DEFAULT_CHARACTER_NEGATIVE } from '../lib/novelai';
@@ -19,6 +20,7 @@ import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
 import { CategorySection, type BaseCategorySuggestion } from './CategorySection';
 import { CharacterCard } from './CharacterCard';
+import type { PeerCharacterCenter } from './CharacterCenterPicker';
 import { HistoryControls } from './HistoryControls';
 import { PresetBar } from './PresetBar';
 import { TagFilterBar } from './TagFilterBar';
@@ -72,6 +74,8 @@ interface Props {
   /** 個別指定がないキャラクターに付けるネガティブ。 */
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
+  /** 位置ピッカーの縦横比に使う出力画像サイズ。 */
+  canvasSize?: { width: number; height: number };
   /** 編集画面を開いている（false の間は他の画面を表示している）。 */
   shown: boolean;
 }
@@ -90,6 +94,7 @@ export function Editor({
   onReadPng,
   characterNegative,
   onCharacterNegativeChange,
+  canvasSize,
   shown,
 }: Props) {
   const vectorIndex = useMemo(() => createTagVectorIndex(dictionary.entries), [dictionary.entries]);
@@ -207,6 +212,24 @@ export function Editor({
   const activeIndex = characters.findIndex((c) => c.id === selected);
   const active = activeIndex >= 0 ? characters[activeIndex] : undefined;
   const activeId = active?.id;
+  const peerCenters = useMemo<PeerCharacterCenter[]>(() => {
+    if (!activeId) return [];
+    const activeCharacters = characters
+      .map((c, i) => ({
+        c,
+        name: c.name.trim() || `キャラ${i + 1}`,
+        hasPrompt: buildPrompt(c.tags, syntax, CHARACTER_CATEGORY_KEYS).length > 0,
+      }))
+      .filter(({ c, hasPrompt }) => c.enabled && hasPrompt);
+    const useCoords = activeCharacters.some(({ c }) => c.center !== undefined);
+    return activeCharacters
+      .filter(({ c }) => c.id !== activeId)
+      .map(({ c, name }) => ({
+        id: c.id,
+        name,
+        ...(c.center ? { center: c.center } : useCoords ? { center: { x: 0.5, y: 0.5 }, autoCenter: true } : {}),
+      }));
+  }, [characters, activeId, syntax]);
   const handlePoseAdded = useCallback(
     (tag: string) => {
       if (activeId) void offerPair(activeId, tag);
@@ -487,6 +510,8 @@ export function Editor({
             onPoseAdded={handlePoseAdded}
             filter={tagFilter}
             enabledCount={enabledCount}
+            canvasSize={canvasSize}
+            peerCenters={peerCenters}
           />
         ) : (
           <div className="category-grid editor-pane">

@@ -46,8 +46,8 @@ export type WorkspaceAction =
   | { type: 'renameCharacter'; id: string; name: string }
   /** null は個別指定を消し、共通のネガティブに戻す。 */
   | { type: 'setCharacterNegative'; id: string; negative: string | null }
-  /** null は位置指定を消す。 */
-  | { type: 'setCharacterCenter'; id: string; center: { x: number; y: number } | null }
+  /** null は位置指定を消す。mergeKey が同じ連続操作は履歴で 1 ステップにまとめる。 */
+  | { type: 'setCharacterCenter'; id: string; center: { x: number; y: number } | null; mergeKey?: string }
   | { type: 'toggleCharacter'; id: string }
   | { type: 'moveCharacter'; id: string; delta: -1 | 1 }
   | { type: 'replace'; workspace: Workspace }
