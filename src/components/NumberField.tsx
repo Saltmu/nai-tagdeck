@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 interface Props {
   id?: string;
@@ -13,28 +13,34 @@ interface Props {
   className?: string;
 }
 
+function show(value: number | null): string {
+  return value === null ? '' : String(value);
+}
+
 /** 入力途中（空欄や "5." など）を壊さないよう、確定はフォーカスを外したときと Enter で行う。 */
 export function NumberField({ id, value, onChange, min, max, step, allowEmpty, placeholder, className }: Props) {
-  const show = (v: number | null) => (v === null ? '' : String(v));
   const [text, setText] = useState(show(value));
   const focused = useRef(false);
+  // 親が範囲外の値を同じ数値へ丸めると value は変わらない。確定のあとに表示を戻すため、描画を一度起こす。
+  const syncOnCommit = useRef(false);
+  const [commitTick, setCommitTick] = useState(0);
 
-  useEffect(() => {
-    if (!focused.current) setText(show(value));
-  }, [value]);
+  useLayoutEffect(() => {
+    if (focused.current && !syncOnCommit.current) return;
+    syncOnCommit.current = false;
+    setText(show(value));
+  }, [value, commitTick]);
 
   const commit = () => {
     const trimmed = text.trim();
     if (trimmed === '' && allowEmpty) {
       if (value !== null) onChange(null);
-      return;
+    } else {
+      const n = Number(trimmed);
+      if (trimmed !== '' && Number.isFinite(n) && n !== value) onChange(n);
     }
-    const n = Number(trimmed);
-    if (trimmed === '' || !Number.isFinite(n)) {
-      setText(show(value));
-      return;
-    }
-    if (n !== value) onChange(n);
+    syncOnCommit.current = true;
+    setCommitTick((tick) => tick + 1);
   };
 
   return (
