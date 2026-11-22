@@ -93,9 +93,11 @@ npm run dev
 | Variable | `DEPLOY_PORT` | SFTP ポート（省略時は 22） |
 | Secret | `DEPLOY_USER` | SFTP ユーザー名 |
 | Variable | `DEPLOY_DIR` | `/home/user/www/nai-tagdeck` のような、SFTP で見える既存の公開ディレクトリの絶対パス |
-| Secret | `DEPLOY_SSH_KEY` | SFTP 公開鍵認証用の秘密鍵（パスフレーズなし）。`DEPLOY_PASSWORD` より優先して使用 |
+| Secret | `DEPLOY_SSH_KEY` | SFTP 公開鍵認証用の秘密鍵（パスフレーズなし、OpenSSH 形式。WinSCP の `.ppk` 形式は不可）。`DEPLOY_PASSWORD` より優先して使用 |
 | Secret | `DEPLOY_PASSWORD` | SFTP ユーザーのパスワード（`DEPLOY_SSH_KEY` 未設定時に使用） |
 | Variable | `DEPLOY_HOST_FINGERPRINT` | WinSCP の「タブ → サーバー／プロトコル情報」またはホスティング事業者で確認済みの SFTP サーバーの SHA-256 指紋（`SHA256:…`） |
+
+公開鍵認証を使う場合は、事前にデプロイ先のサーバーで `DEPLOY_USER` に対応する公開鍵を許可しておく必要があります（通常は `~/.ssh/authorized_keys` へ追記、さくらのレンタルサーバでは[公開鍵認証の設定手順](https://help.sakura.ad.jp/rs/2804/)を参照して公開鍵を登録します）。
 
 実行時に公開サーバーのホスト鍵を取得し、登録済みの指紋に一致する鍵で SFTP 接続を検証します。以前の `DEPLOY_KNOWN_HOSTS` 変数は削除できます。
 
