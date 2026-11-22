@@ -149,18 +149,26 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
         handleLoadSample();
         break;
       case 'editor-add-background':
-        dispatch({ type: 'add', target: 'base', category: 'background', tag: 'sunset' });
-        notify('ベースに背景タグ「sunset」を追加しました');
-        advance();
+        if (stepCompleted) {
+          advance();
+        } else {
+          dispatch({ type: 'add', target: 'base', category: 'background', tag: 'sunset' });
+          notify('ベースに背景タグ「sunset」を追加しました');
+          setStepCompleted(true);
+        }
         break;
       case 'editor-toggle-hat': {
-        const char = workspace.characters[0];
-        const hat = char?.tags.outfit.find((t) => t.tag.toLowerCase() === 'hat');
-        if (char && hat && hat.enabled) {
-          dispatch({ type: 'toggle', target: char.id, category: 'outfit', id: hat.id });
-          notify('キャラの「hat」を OFF にしました');
+        if (stepCompleted) {
+          advance();
+        } else {
+          const char = workspace.characters[0];
+          const hat = char?.tags.outfit.find((t) => t.tag.toLowerCase() === 'hat');
+          if (char && hat && hat.enabled) {
+            dispatch({ type: 'toggle', target: char.id, category: 'outfit', id: hat.id });
+            notify('キャラの「hat」を OFF にしました');
+          }
+          setStepCompleted(true);
         }
-        advance();
         break;
       }
       case 'generate-run':
@@ -171,7 +179,7 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
       case 'complete':
         break;
     }
-  }, [advance, handleLoadSample, notify, step.id, tokenInput, workspace.characters]);
+  }, [advance, handleLoadSample, notify, step.id, stepCompleted, workspace.characters]);
 
   // 「見るだけ」モード時の自動進行
   useEffect(() => {
@@ -595,13 +603,15 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
               </button>
               <p className="hint">※ 練習画面のため NovelAI API への通信は行わず、事前に用意した生成例を表示します。</p>
             </div>
-            {generated && <SampleIllustration sunset={hasSunset} hat={hasHat} sizeLabel={selectedSize.label} />}
+            {generated && (
+              <SampleIllustration sunset={hasSunset} hat={hasHat} sizeKey={sizeKey} sizeLabel={selectedSize.label} />
+            )}
           </div>
         )}
 
         {step.id === 'complete' && (
           <div className="tutorial-complete-scene">
-            <SampleIllustration sunset={hasSunset} hat={hasHat} sizeLabel={selectedSize.label} />
+            <SampleIllustration sunset={hasSunset} hat={hasHat} sizeKey={sizeKey} sizeLabel={selectedSize.label} />
             <div className="tutorial-complete-body">
               <h3>準備完了です！</h3>
               <p>

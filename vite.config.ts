@@ -77,12 +77,21 @@ export function buildSwAsset({ bundle, publicFiles, template }: SwBuildInput): {
         ? indexEntry.source
         : new TextDecoder().decode(indexEntry.source)
       : '';
+  const tutorialEntry = bundle['tutorial/index.html'];
+  const offlineTutorialHtml =
+    tutorialEntry?.type === 'asset'
+      ? typeof tutorialEntry.source === 'string'
+        ? tutorialEntry.source
+        : new TextDecoder().decode(tutorialEntry.source)
+      : '';
   const precachePublicNames = Object.keys(publicFiles)
     .filter((name) => !PRECACHE_EXCLUDE.has(name))
     .sort();
   // ページ本体は一覧に入れない。インストール時の別リクエストにすると、埋め込みと違う HTML を掴む。
   const precache = [
-    ...bundleNames.filter((name) => name !== 'index.html').map((name) => `./${name}`),
+    ...bundleNames
+      .filter((name) => name !== 'index.html' && name !== 'tutorial/index.html')
+      .map((name) => `./${name}`),
     ...precachePublicNames.map((name) => `./${name}`),
   ];
 
@@ -108,7 +117,8 @@ export function buildSwAsset({ bundle, publicFiles, template }: SwBuildInput): {
   const source = template
     .replace('__VERSION__', version)
     .replace('__PRECACHE__', JSON.stringify(precache))
-    .replace('__OFFLINE_HTML__', () => JSON.stringify(offlineHtml));
+    .replace('__OFFLINE_HTML__', () => JSON.stringify(offlineHtml))
+    .replace('__OFFLINE_TUTORIAL_HTML__', () => JSON.stringify(offlineTutorialHtml));
 
   return { version, precache, source };
 }

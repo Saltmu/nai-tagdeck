@@ -3,19 +3,22 @@ interface Props {
   sunset?: boolean;
   /** 帽子（hat）タグが有効か */
   hat?: boolean;
+  /** 選択サイズに応じた比率 */
+  sizeKey?: 'portrait' | 'landscape' | 'square';
   /** 画像のアスペクト比ラベル */
   sizeLabel?: string;
 }
 
 /** チュートリアル用の「夕暮れの街を歩く人物」生成例（事前用意のインライン SVG）。 */
-export function SampleIllustration({ sunset = true, hat = false, sizeLabel }: Props) {
+export function SampleIllustration({ sunset = true, hat = false, sizeKey = 'portrait', sizeLabel }: Props) {
   return (
     <figure className="tutorial-illustration">
       <svg
         viewBox="0 0 360 440"
+        preserveAspectRatio="xMidYMid slice"
         role="img"
         aria-label={`夕暮れの街を歩く人物の生成例${hat ? '（帽子あり）' : '（帽子なし）'}`}
-        className="tutorial-illustration-svg"
+        className={`tutorial-illustration-svg is-${sizeKey}`}
       >
         <defs>
           <linearGradient id="tut-sky" x1="0" y1="0" x2="0" y2="1">

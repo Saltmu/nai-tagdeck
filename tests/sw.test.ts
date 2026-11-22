@@ -477,7 +477,7 @@ describe('Service Worker runtime under subdirectory deployment', () => {
       method: 'GET',
       mode: 'navigate',
     });
-    expect(await response?.text()).toBe(`body:${baseUrl}tutorial/index.html`);
+    expect(await response?.text()).toBe('<!doctype html><title>tutorial</title>');
   });
 
   it('precaches subdirectory assets, matches ?v=tag-check icons from cache, and serves offline navigation', async () => {

@@ -188,9 +188,19 @@
 .tutorial-illustration-svg {
   width: 100%;
   max-width: 300px;
-  height: auto;
+  aspect-ratio: 832 / 1216;
   border-radius: var(--radius);
   border: 1px solid var(--border);
+}
+
+.tutorial-illustration-svg.is-landscape {
+  max-width: 360px;
+  aspect-ratio: 1216 / 832;
+}
+
+.tutorial-illustration-svg.is-square {
+  max-width: 300px;
+  aspect-ratio: 1 / 1;
 }
 
 .tutorial-illustration-caption {

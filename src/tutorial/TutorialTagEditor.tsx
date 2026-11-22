@@ -63,10 +63,12 @@ export function TutorialTagEditor({
           <span className="tutorial-badge">練習データのみ</span>
         </div>
 
-        {!sampleLoaded ? (
+        {!sampleLoaded || stepId === 'editor-load-sample' ? (
           <div className="tutorial-empty-editor">
             <p className="hint">
-              まだタグと辞書が入っていません。まず「タグの例と辞書を読み込む」を押して見本を読み込みましょう。
+              {sampleLoaded
+                ? '見本のタグと辞書をもう一度読み込み直して、この場面を最初から試せます。'
+                : 'まだタグと辞書が入っていません。まず「タグの例と辞書を読み込む」を押して見本を読み込みましょう。'}
             </p>
             <button
               type="button"
