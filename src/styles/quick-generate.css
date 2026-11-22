@@ -6,6 +6,7 @@
 
 .quick-generate {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 0.4rem;

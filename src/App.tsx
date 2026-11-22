@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type MouseEvent, type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
 import { SettingsView } from './components/SettingsView';
@@ -171,7 +171,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
 
   const headerRef = useRef<HTMLElement>(null);
   // 固定ヘッダーの高さに合わせて .app の上余白を揃える（Android Firefox での sticky ちらつき回避のため fixed 化）
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = headerRef.current;
     if (!el) return;
     const publish = () => {

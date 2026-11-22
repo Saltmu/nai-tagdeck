@@ -85,6 +85,12 @@
     line-height: 1.4;
   }
 
+  .tab-generate .spinner-small {
+    position: absolute;
+    top: -2px;
+    right: -4px;
+  }
+
   .tab-dictionary .tab-count {
     display: none;
   }
