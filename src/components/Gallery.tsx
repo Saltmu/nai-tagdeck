@@ -154,7 +154,7 @@ export function Gallery({
             className="btn btn-small btn-danger"
             disabled={images.length === 0}
             onClick={async () => {
-              const ok = await dialogs.confirm(`画像 ${images.length}枚をすべて削除しますか？（ダウンロードしていない画像は戻せません）`, {
+              const ok = await dialogs.confirm(`画像 ${images.length}枚をすべて削除しますか？（削除した画像は戻せません。DL操作済みの画像も含め、端末に保存されているか確認してから削除してください）`, {
                 okLabel: 'すべて削除',
                 danger: true,
               });
