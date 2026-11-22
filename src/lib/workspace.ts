@@ -305,7 +305,7 @@ function moveTagBetweenGroups(
 
   const tag = sourceList.find((t) => t.id === id);
   if (!tag) return state;
-  if (toTarget === BASE && splitInteraction(tag.tag).interaction !== null) return state;
+  if (fromTarget !== BASE && toTarget === BASE && splitInteraction(tag.tag).interaction !== null) return state;
 
   const key = normalize(tag.tag);
   const exists = destList.some((t) => normalize(t.tag) === key);

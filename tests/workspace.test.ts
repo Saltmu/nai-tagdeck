@@ -516,6 +516,21 @@ describe('normalizeWorkspace', () => {
     });
     expect(movedAction.characters[0]!.tags.pose).toEqual([]);
     expect(movedAction.characters[1]!.tags.pose.map((t) => t.tag)).toEqual(['source#hug']);
+
+    // すでにベース未分類にあるインタラクションタグはベース内移動（unclassified -> pose）はできる
+    const baseAction = run(
+      emptyWorkspace(),
+      { type: 'add', target: BASE, category: 'unclassified', tag: 'source#hug' },
+    );
+    const baseActionId = baseAction.base.unclassified[0]!.id;
+    const movedInBase = workspaceReducer(baseAction, {
+      type: 'moveFromUnclassified',
+      target: BASE,
+      id: baseActionId,
+      to: 'pose',
+    });
+    expect(movedInBase.base.unclassified).toEqual([]);
+    expect(movedInBase.base.pose.map((t) => t.tag)).toEqual(['source#hug']);
   });
 
   it('キャラクター対応前の保存形式はベースとして読む', () => {

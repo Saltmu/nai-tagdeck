@@ -38,17 +38,23 @@ export function aliasMatchesQuery(aliases: string | readonly string[] | undefine
   return list.some((alias) => normalize(alias).includes(q));
 }
 
-/** タグ名に対応する辞書エイリアスを引く。インタラクション接頭辞（source# 等）付きなら本体でも引く。 */
+/** タグ名に対応する辞書エイリアスを引く。インタラクション接頭辞（source# 等）付きなら本体側のエイリアスも合わせる。 */
 export function resolveTagAliases(
   tag: string,
   aliasMap: ReadonlyMap<string, readonly string[]>,
 ): readonly string[] | undefined {
   const exact = aliasMap.get(normalize(tag));
-  if (exact) return exact;
   const { interaction, body } = splitInteraction(tag);
-  if (!interaction) return undefined;
-  const bodyKey = normalize(body);
-  return bodyKey ? aliasMap.get(bodyKey) : undefined;
+  const bodyKey = interaction ? normalize(body) : '';
+  const bodyAliases = bodyKey ? aliasMap.get(bodyKey) : undefined;
+  if (!exact && !bodyAliases) return undefined;
+  if (!bodyAliases) return exact;
+  if (!exact) return bodyAliases;
+  const merged = [...exact];
+  for (const alias of bodyAliases) {
+    if (!merged.includes(alias)) merged.push(alias);
+  }
+  return merged;
 }
 
 /** 正規化（大小文字・全角半角・かな・アンダースコア）後の部分一致。エイリアスも検索対象にする。 */

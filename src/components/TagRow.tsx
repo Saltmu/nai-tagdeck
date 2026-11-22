@@ -127,12 +127,17 @@ export const TagRow = memo(function TagRow({
   };
   const handleWeightChange = useCallback((weight: number) => onWeight(tag.id, weight), [onWeight, tag.id]);
   const step = (delta: number) => onWeight(tag.id, clampWeight(tag.weight + delta));
-  const visibleMoveTargets = moveTargets && splitInteraction(tag.tag).interaction !== null
-    ? moveTargets.filter((group) => group.id !== 'base')
-    : moveTargets;
-  const selectedMove = visibleMoveTargets
-    ?.flatMap((group) => group.options)
-    .find((opt) => moveOptionKey(opt.target, opt.category) === pendingMove);
+  const isEditing = editing && !sorting;
+  const visibleMoveTargets = isEditing && moveTargets
+    ? (moveTargets[0]?.id !== 'base' && splitInteraction(tag.tag).interaction !== null
+        ? moveTargets.filter((group) => group.id !== 'base')
+        : moveTargets)
+    : undefined;
+  const selectedMove = isEditing && pendingMove && visibleMoveTargets
+    ? visibleMoveTargets
+        .flatMap((group) => group.options)
+        .find((opt) => moveOptionKey(opt.target, opt.category) === pendingMove)
+    : undefined;
   const hasUnsavedRename = draft.trim() !== tag.tag.trim();
   const commit = () => {
     const result = onEdit(tag.id, draft);
