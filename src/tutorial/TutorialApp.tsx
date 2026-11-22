@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { TokenStorage } from '../lib/token';
+import type { WeightSyntax } from '../types';
 import { maskToken } from '../lib/token';
 import { emptyWorkspace, workspaceReducer } from '../lib/workspace';
 import { buildCharacterPrompts, buildPrompt } from '../lib/prompt';
@@ -45,7 +46,7 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
   const [tokenStorage, setTokenStorage] = useState<TokenStorage>('session');
   const [savedToken, setSavedToken] = useState<string | null>(null);
   const [sampleLoaded, setSampleLoaded] = useState(false);
-  const [stepCompleted, setStepCompleted] = useState(false);
+  const [syntax, setSyntax] = useState<WeightSyntax>('numeric');
   const [workspace, dispatch] = useReducer(workspaceReducer, undefined, emptyWorkspace);
   const entries = useMemo(() => createTutorialDictionary(), []);
   const [sizeKey, setSizeKey] = useState<(typeof SIZE_OPTIONS)[number]['key']>('portrait');
@@ -82,6 +83,9 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
         return true;
       });
     }
+    if (target.id === 'generate-run') {
+      setGenerated(false);
+    }
     if (target.id === 'complete') {
       setGenerated(true);
     }
@@ -92,7 +96,6 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
       const clamped = Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, nextIndex));
       syncStateForStep(clamped);
       setStepIndex(clamped);
-      setStepCompleted(false);
       setTokenError(null);
       setShowChapters(false);
     },
@@ -148,26 +151,28 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
       case 'editor-load-sample':
         handleLoadSample();
         break;
-      case 'editor-add-background':
-        if (stepCompleted) {
+      case 'editor-add-background': {
+        const added = workspace.base.background.some(
+          (t) => t.enabled && t.tag.toLowerCase() !== 'evening street',
+        );
+        if (added) {
           advance();
         } else {
           dispatch({ type: 'add', target: 'base', category: 'background', tag: 'sunset' });
           notify('ベースに背景タグ「sunset」を追加しました');
-          setStepCompleted(true);
         }
         break;
+      }
       case 'editor-toggle-hat': {
-        if (stepCompleted) {
+        const char = workspace.characters[0];
+        const hat = char?.tags.outfit.find((t) => t.tag.toLowerCase() === 'hat');
+        if (hat && !hat.enabled) {
           advance();
+        } else if (char && hat && hat.enabled) {
+          dispatch({ type: 'toggle', target: char.id, category: 'outfit', id: hat.id });
+          notify('キャラの「hat」を OFF にしました');
         } else {
-          const char = workspace.characters[0];
-          const hat = char?.tags.outfit.find((t) => t.tag.toLowerCase() === 'hat');
-          if (char && hat && hat.enabled) {
-            dispatch({ type: 'toggle', target: char.id, category: 'outfit', id: hat.id });
-            notify('キャラの「hat」を OFF にしました');
-          }
-          setStepCompleted(true);
+          advance();
         }
         break;
       }
@@ -179,7 +184,7 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
       case 'complete':
         break;
     }
-  }, [advance, handleLoadSample, notify, step.id, stepCompleted, workspace.characters]);
+  }, [advance, handleLoadSample, notify, step.id, workspace.base.background, workspace.characters]);
 
   // 「見るだけ」モード時の自動進行
   useEffect(() => {
@@ -202,10 +207,10 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
   const hasSunset = workspace.base.background.some((t) => t.enabled && /sunset/i.test(t.tag));
   const hasHat = workspace.characters[0]?.tags.outfit.some((t) => t.enabled && /^hat$/i.test(t.tag)) ?? true;
   const selectedSize = SIZE_OPTIONS.find((s) => s.key === sizeKey) ?? SIZE_OPTIONS[0];
-  const basePrompt = useMemo(() => buildPrompt(workspace.base, 'numeric'), [workspace.base]);
+  const basePrompt = useMemo(() => buildPrompt(workspace.base, syntax), [workspace.base, syntax]);
   const characterPrompts = useMemo(
-    () => buildCharacterPrompts(workspace.characters, 'numeric'),
-    [workspace.characters],
+    () => buildCharacterPrompts(workspace.characters, syntax),
+    [workspace.characters, syntax],
   );
 
   return (
@@ -558,16 +563,15 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
             workspace={workspace}
             entries={entries}
             sampleLoaded={sampleLoaded}
-            stepCompleted={stepCompleted}
+            syntax={syntax}
+            onSyntaxChange={setSyntax}
             onLoadSample={handleLoadSample}
             onDispatch={dispatch}
             onBackgroundAdded={() => {
               notify('背景タグを追加しました。カテゴリとプロンプトの変化を確認してください');
-              if (step.id === 'editor-add-background') setStepCompleted(true);
             }}
             onHatToggledOff={() => {
               notify('帽子タグを OFF にしました（編集欄に残ったままプロンプトから外れます）');
-              if (step.id === 'editor-toggle-hat') setStepCompleted(true);
             }}
             onNextStep={advance}
             onCopy={handleCopyPrompt}
@@ -623,9 +627,27 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
                 </p>
               )}
               <div className="tutorial-scene-actions">
-                <a href="../" className="btn btn-primary">
-                  nai-tagdeckで実際に生成する
-                </a>
+                {initial.from ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => {
+                        window.close();
+                        notify('ブラウザのタブ切り替えで元の nai-tagdeck タブへ戻ってください');
+                      }}
+                    >
+                      元の nai-tagdeck タブに戻る
+                    </button>
+                    <a href="../" className="btn">
+                      新しく nai-tagdeck を開く
+                    </a>
+                  </>
+                ) : (
+                  <a href="../" className="btn btn-primary">
+                    nai-tagdeckで実際に生成する
+                  </a>
+                )}
                 <button
                   type="button"
                   className="btn"
@@ -643,8 +665,8 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
                   <PromptPreview
                     basePrompt={basePrompt}
                     characterPrompts={characterPrompts}
-                    syntax="numeric"
-                    onSyntaxChange={() => {}}
+                    syntax={syntax}
+                    onSyntaxChange={setSyntax}
                     onCopy={handleCopyPrompt}
                     negativePrompt=""
                   />

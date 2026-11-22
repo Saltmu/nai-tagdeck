@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import type { CategoryKey, DictEntry, WeightSyntax, Workspace } from '../types';
+import { useEffect, useMemo, useState } from 'react';
+import type { DictEntry, WeightSyntax, Workspace } from '../types';
 import { TagInput } from '../components/TagInput';
 import { PromptPreview } from '../components/PromptPreview';
 import { categoryLabel } from '../lib/categories';
@@ -12,7 +12,8 @@ interface Props {
   workspace: Workspace;
   entries: DictEntry[];
   sampleLoaded: boolean;
-  stepCompleted: boolean;
+  syntax: WeightSyntax;
+  onSyntaxChange: (syntax: WeightSyntax) => void;
   onLoadSample: () => void;
   onDispatch: (action: WorkspaceAction) => void;
   onBackgroundAdded: () => void;
@@ -26,7 +27,8 @@ export function TutorialTagEditor({
   workspace,
   entries,
   sampleLoaded,
-  stepCompleted,
+  syntax,
+  onSyntaxChange,
   onLoadSample,
   onDispatch,
   onBackgroundAdded,
@@ -37,9 +39,17 @@ export function TutorialTagEditor({
   const [activePane, setActivePane] = useState<'base' | 'character'>(
     stepId === 'editor-toggle-hat' ? 'character' : 'base',
   );
-  const [syntax, setSyntax] = useState<WeightSyntax>('numeric');
   const character = workspace.characters[0];
-  const pane = stepId === 'editor-toggle-hat' && character ? 'character' : activePane;
+
+  useEffect(() => {
+    if (stepId === 'editor-toggle-hat' && character) {
+      setActivePane('character');
+    } else if (stepId === 'editor-add-background') {
+      setActivePane('base');
+    }
+  }, [stepId, character]);
+
+  const pane = activePane === 'character' && !character ? 'base' : activePane;
 
   const basePrompt = useMemo(() => buildPrompt(workspace.base, syntax), [workspace.base, syntax]);
   const characterPrompts = useMemo(
@@ -47,12 +57,18 @@ export function TutorialTagEditor({
     [workspace.characters, syntax],
   );
 
-  const handleBaseAdd = (tag: string, weight: number, category: CategoryKey = 'background') => {
-    const targetCategory = category === 'negative' ? 'background' : category;
-    onDispatch({ type: 'add', target: BASE, category: targetCategory, tag, weight });
-    if (targetCategory === 'background') {
-      onBackgroundAdded();
-    }
+  const backgroundDone = workspace.base.background.some(
+    (t) => t.enabled && t.tag.toLowerCase() !== 'evening street',
+  );
+  const hatDone =
+    character?.tags.outfit.some((t) => !t.enabled && t.tag.toLowerCase() === 'hat') ?? false;
+  const stepCompleted =
+    (stepId === 'editor-add-background' && backgroundDone) ||
+    (stepId === 'editor-toggle-hat' && hatDone);
+
+  const handleBaseAdd = (tag: string, weight: number) => {
+    onDispatch({ type: 'add', target: BASE, category: 'background', tag, weight });
+    onBackgroundAdded();
   };
 
   return (
@@ -109,11 +125,12 @@ export function TutorialTagEditor({
               <div className="tutorial-pane-body">
                 <div className={stepId === 'editor-add-background' ? 'tutorial-spotlight-box' : undefined}>
                   <TagInput
-                    label="ベースにタグを追加（日本語で検索）"
+                    category="background"
+                    label="ベースに背景タグを追加（日本語で検索）"
                     placeholder="例: 夕焼け / 街並み"
                     entries={entries}
-                    onAdd={(tag, weight) => handleBaseAdd(tag, weight, 'background')}
-                    onPick={(tag, weight, category) => handleBaseAdd(tag, weight, category)}
+                    onAdd={(tag, weight) => handleBaseAdd(tag, weight)}
+                    onPick={(tag, weight) => handleBaseAdd(tag, weight)}
                   />
                 </div>
                 <div className="tutorial-category-block">
@@ -201,7 +218,7 @@ export function TutorialTagEditor({
           basePrompt={basePrompt}
           characterPrompts={characterPrompts}
           syntax={syntax}
-          onSyntaxChange={setSyntax}
+          onSyntaxChange={onSyntaxChange}
           onCopy={onCopy}
           negativePrompt=""
         />

@@ -110,19 +110,23 @@ self.addEventListener('fetch', (event) => {
   // ページ本体は、この版のインストール時に入れたものをオフライン用に保つ。
   // 待っている新しい版の HTML で上書きすると、そのスクリプトがこのキャッシュに無く、オフラインで開けなくなる。
   if (req.mode === 'navigate') {
+    const reqUrl = new URL(req.url);
     const basePath = new URL('./', self.registration?.scope || self.location.href).pathname;
-    const reqPath = new URL(req.url).pathname;
+    const reqPath = reqUrl.pathname;
     const relPath = reqPath.startsWith(basePath) ? reqPath.slice(basePath.length) : '';
-    const isTutorial =
-      relPath === 'tutorial' || relPath === 'tutorial/' || relPath === 'tutorial/index.html';
+    const isSlashlessTutorial = relPath === 'tutorial';
+    const isTutorial = relPath === 'tutorial/' || relPath === 'tutorial/index.html';
     const fallbackKey = isTutorial ? './tutorial/index.html' : './';
     event.respondWith(
-      fetch(req).catch(() =>
-        caches
+      fetch(req).catch(() => {
+        if (isSlashlessTutorial) {
+          return Response.redirect(new URL(`${basePath}tutorial/${reqUrl.search}`, reqUrl.origin).href, 301);
+        }
+        return caches
           .match(fallbackKey, { cacheName: CACHE })
           .then((res) => res || caches.match('./', { cacheName: CACHE }))
-          .then((res) => res || Response.error()),
-      ),
+          .then((res) => res || Response.error());
+      }),
     );
     return;
   }

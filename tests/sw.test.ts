@@ -478,6 +478,15 @@ describe('Service Worker runtime under subdirectory deployment', () => {
       mode: 'navigate',
     });
     expect(await response?.text()).toBe('<!doctype html><title>tutorial</title>');
+
+    sw.fetchMock.mockRejectedValueOnce(new TypeError('offline'));
+    const slashless = await sw.dispatchFetch({
+      url: `${baseUrl}tutorial?scene=issue-token`,
+      method: 'GET',
+      mode: 'navigate',
+    });
+    expect(slashless.response?.status).toBe(301);
+    expect(slashless.response?.headers.get('location')).toBe(`${baseUrl}tutorial/?scene=issue-token`);
   });
 
   it('precaches subdirectory assets, matches ?v=tag-check icons from cache, and serves offline navigation', async () => {
