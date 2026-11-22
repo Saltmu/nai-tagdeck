@@ -160,6 +160,29 @@ it('zips only images that are not downloaded yet', async () => {
   expect(onSaveConfirmed.mock.calls.map((call) => call[0])).toEqual(['img-2']);
 });
 
+it('does not export a zip after its images are removed', async () => {
+  const pending = image(3, false);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const read = pending.blob.arrayBuffer.bind(pending.blob);
+  pending.blob.arrayBuffer = () => gate.then(() => read());
+  const onSaveConfirmed = vi.fn();
+  const saved = captureDownloads();
+  await renderGallery([pending], { onSaveConfirmed });
+  act(() => {
+    buttonByText('すべて ZIP で保存').click();
+  });
+  await renderGallery([], { onSaveConfirmed });
+  release();
+  await act(async () => {
+    await gate;
+  });
+  expect(saved).toHaveLength(0);
+  expect(onSaveConfirmed).not.toHaveBeenCalled();
+});
+
 it('includes a png whose save was not confirmed in the unsaved zip', async () => {
   const attempted = image(7, true);
   attempted.saveConfirmed = false;

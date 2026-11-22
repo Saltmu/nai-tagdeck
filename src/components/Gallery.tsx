@@ -1,4 +1,4 @@
-import { type CSSProperties, useRef, useState } from 'react';
+import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
 import { usePngDrop } from '../hooks/usePngDrop';
 import { downloadBlob, downloadUrl, timeStamp } from '../lib/browser';
@@ -55,6 +55,15 @@ export function Gallery({
   const [zipping, setZipping] = useState<'all' | 'new' | null>(null);
   const zippingRef = useRef(false);
   const zipAllRef = useRef<HTMLButtonElement>(null);
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
+  const zipAlive = useRef(true);
+  useEffect(() => {
+    zipAlive.current = true;
+    return () => {
+      zipAlive.current = false;
+    };
+  }, []);
   const openIndex = images.findIndex((img) => img.id === openId);
   const unsavedCount = images.filter((img) => !img.saveConfirmed).length;
   const downloadImage = async (image: GeneratedImage) => {
@@ -62,9 +71,9 @@ export function Gallery({
     if (image.saveConfirmed) return;
     const saved = await dialogs.confirm(
       'PNG を保存できましたか？保存できていれば、未ダウンロードの ZIP からは外れます。',
-      { okLabel: '保存できた' },
+      { okLabel: '保存できた', initialFocus: 'cancel' },
     );
-    if (saved) onSaveConfirmed(image.id);
+    if (saved && imagesRef.current.some((img) => img.id === image.id)) onSaveConfirmed(image.id);
   };
   const downloadZip = async (onlyUnsaved: boolean) => {
     const targets = images.filter((img) => !onlyUnsaved || !img.saveConfirmed);
@@ -73,21 +82,25 @@ export function Gallery({
     setZipping(onlyUnsaved ? 'new' : 'all');
     setZipError('');
     setZipMessage('');
+    const stillPresent = () => zipAlive.current && targets.every((target) => imagesRef.current.some((img) => img.id === target.id));
     try {
       const files = [];
       for (const image of [...targets].reverse()) {
+        if (!stillPresent()) return;
         files.push({
           name: imageFileName(image),
           data: new Uint8Array(await image.blob.arrayBuffer()),
         });
       }
+      if (!stillPresent()) return;
       const prefix = onlyUnsaved ? 'nai-tagdeck-undownloaded' : 'nai-tagdeck';
       downloadBlob(`${prefix}-${timeStamp()}.zip`, imageZipBlob(files));
       // <a download> では保存完了を検知できない。保存できたと答えた画像だけ、次の未ダウンロード ZIP から外す。
       const saved = await dialogs.confirm(
         `${targets.length}枚の ZIP を保存できましたか？保存できていれば、次の「未ダウンロードを ZIP で保存」からは外れます。`,
-        { okLabel: '保存できた' },
+        { okLabel: '保存できた', initialFocus: 'cancel' },
       );
+      if (!stillPresent()) return;
       if (saved) {
         for (const image of targets) onSaveConfirmed(image.id);
         const unsavedLeft = images.some((img) => !img.saveConfirmed && !targets.some((target) => target.id === img.id));
