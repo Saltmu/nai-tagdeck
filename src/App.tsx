@@ -180,7 +180,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     };
     publish();
     const observer = new ResizeObserver(publish);
-    observer.observe(el);
+    observer.observe(el, { box: 'border-box' });
     return () => {
       observer.disconnect();
       document.documentElement.style.removeProperty('--header-height');

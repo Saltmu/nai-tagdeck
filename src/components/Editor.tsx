@@ -219,7 +219,7 @@ export function Editor({
     window.addEventListener('scroll', update, { passive: true });
     window.addEventListener('resize', update);
     const ro = new ResizeObserver(update);
-    if (header) ro.observe(header);
+    if (header) ro.observe(header, { box: 'border-box' });
     return () => {
       window.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
