@@ -19,6 +19,7 @@ interface Props {
   onClear: () => void;
   onUseSeed: (seed: number) => void;
   onDownloaded: (id: string) => void;
+  onSaveConfirmed: (id: string) => void;
   onTogglePin: (id: string) => void;
   onPickPng?: () => void;
   onReadPng: (source: PromptSource) => void;
@@ -43,6 +44,7 @@ export function Gallery({
   onClear,
   onUseSeed,
   onDownloaded,
+  onSaveConfirmed,
   onTogglePin,
   onPickPng,
   onReadPng,
@@ -55,16 +57,22 @@ export function Gallery({
   const [zipping, setZipping] = useState<'all' | 'new' | null>(null);
   const zippingRef = useRef(false);
   const openIndex = images.findIndex((img) => img.id === openId);
-  const undownloadedCount = images.filter((img) => !img.downloaded).length;
-  const downloadImage = (image: GeneratedImage) => {
+  const unsavedCount = images.filter((img) => !img.saveConfirmed).length;
+  const downloadImage = async (image: GeneratedImage) => {
     downloadUrl(imageFileName(image), image.url);
     onDownloaded(image.id);
+    if (image.saveConfirmed) return;
+    const saved = await dialogs.confirm(
+      'PNG を保存できましたか？保存できていれば、未ダウンロードの ZIP からは外れます。',
+      { okLabel: '保存できた' },
+    );
+    if (saved) onSaveConfirmed(image.id);
   };
-  const downloadZip = async (onlyUndownloaded: boolean) => {
-    const targets = images.filter((img) => !onlyUndownloaded || !img.downloaded);
+  const downloadZip = async (onlyUnsaved: boolean) => {
+    const targets = images.filter((img) => !onlyUnsaved || !img.saveConfirmed);
     if (targets.length === 0 || zippingRef.current) return;
     zippingRef.current = true;
-    setZipping(onlyUndownloaded ? 'new' : 'all');
+    setZipping(onlyUnsaved ? 'new' : 'all');
     setZipError('');
     setZipMessage('');
     try {
@@ -75,15 +83,15 @@ export function Gallery({
           data: new Uint8Array(await image.blob.arrayBuffer()),
         });
       }
-      const prefix = onlyUndownloaded ? 'nai-tagdeck-undownloaded' : 'nai-tagdeck';
+      const prefix = onlyUnsaved ? 'nai-tagdeck-undownloaded' : 'nai-tagdeck';
       downloadBlob(`${prefix}-${timeStamp()}.zip`, imageZipBlob(files));
-      // <a download> では保存完了を検知できない。ユーザーが保存できたと答えたときだけ downloaded にする。
+      // <a download> では保存完了を検知できない。保存できたと答えた画像だけ、次の未ダウンロード ZIP から外す。
       const saved = await dialogs.confirm(
         `${targets.length}枚の ZIP を保存できましたか？保存できていれば、次の「未ダウンロードを ZIP で保存」からは外れます。`,
         { okLabel: '保存できた' },
       );
       if (saved) {
-        for (const image of targets) onDownloaded(image.id);
+        for (const image of targets) onSaveConfirmed(image.id);
       } else {
         setZipMessage('保存していないときは、もう一度 ZIP で保存できます。');
       }
@@ -124,7 +132,8 @@ export function Gallery({
           <button
             type="button"
             className="btn btn-small"
-            disabled={undownloadedCount === 0 || zipping !== null}
+            disabled={unsavedCount === 0 || zipping !== null}
+            title="保存できたか未確認の画像をまとめます"
             aria-busy={zipping === 'new'}
             onClick={() => void downloadZip(true)}
           >

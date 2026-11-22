@@ -26,6 +26,7 @@ function image(seed: number, downloaded: boolean): GeneratedImage {
     characterPrompts: [],
     createdAt: Date.UTC(2026, 10, 22, 3, 4, seed),
     downloaded,
+    saveConfirmed: downloaded,
     pinned: false,
   };
 }
@@ -36,7 +37,7 @@ function buttonByText(text: string): HTMLButtonElement {
   return found as HTMLButtonElement;
 }
 
-async function renderGallery(images: GeneratedImage[], props?: { onDownloaded?: (id: string) => void; onTogglePin?: (id: string) => void }) {
+async function renderGallery(images: GeneratedImage[], props?: { onDownloaded?: (id: string) => void; onSaveConfirmed?: (id: string) => void; onTogglePin?: (id: string) => void }) {
   await act(async () => {
     root.render(
       <DialogProvider>
@@ -48,6 +49,7 @@ async function renderGallery(images: GeneratedImage[], props?: { onDownloaded?: 
           onClear={vi.fn()}
           onUseSeed={vi.fn()}
           onDownloaded={props?.onDownloaded ?? vi.fn()}
+          onSaveConfirmed={props?.onSaveConfirmed ?? vi.fn()}
           onTogglePin={props?.onTogglePin ?? vi.fn()}
           onReadPng={vi.fn()}
         />
@@ -109,16 +111,16 @@ function captureDownloads(): { name: string; blob: Blob }[] {
 
 it('downloads every image in a zip using the individual file names and marks them downloaded', async () => {
   const images = [image(2, false), image(1, true)];
-  const onDownloaded = vi.fn();
+  const onSaveConfirmed = vi.fn();
   const saved = captureDownloads();
-  await renderGallery(images, { onDownloaded });
+  await renderGallery(images, { onSaveConfirmed });
 
   await act(async () => {
     buttonByText('すべて ZIP で保存').click();
   });
 
   expect(saved).toHaveLength(1);
-  expect(onDownloaded).not.toHaveBeenCalled();
+  expect(onSaveConfirmed).not.toHaveBeenCalled();
   await confirmZipSaved();
 
   expect(saved[0]!.name).toMatch(/^nai-tagdeck-\d{8}-\d{6}\.zip$/);
@@ -128,14 +130,14 @@ it('downloads every image in a zip using the individual file names and marks the
   for (const item of ordered) {
     expect(files[imageFileName(item)]).toEqual(new Uint8Array(await item.blob.arrayBuffer()));
   }
-  expect(onDownloaded.mock.calls.map((call) => call[0])).toEqual(['img-2', 'img-1']);
+  expect(onSaveConfirmed.mock.calls.map((call) => call[0])).toEqual(['img-2', 'img-1']);
 });
 
 it('zips only images that are not downloaded yet', async () => {
   const images = [image(2, false), image(1, true)];
-  const onDownloaded = vi.fn();
+  const onSaveConfirmed = vi.fn();
   const saved = captureDownloads();
-  await renderGallery(images, { onDownloaded });
+  await renderGallery(images, { onSaveConfirmed });
 
   expect(buttonByText('未ダウンロードを ZIP で保存').disabled).toBe(false);
   await act(async () => {
@@ -144,7 +146,7 @@ it('zips only images that are not downloaded yet', async () => {
   await act(async () => {
     buttonByText('キャンセル').click();
   });
-  expect(onDownloaded).not.toHaveBeenCalled();
+  expect(onSaveConfirmed).not.toHaveBeenCalled();
   expect(buttonByText('未ダウンロードを ZIP で保存').disabled).toBe(false);
   expect(container.querySelector('.notice')?.textContent).toContain('もう一度 ZIP で保存できます');
 
@@ -156,7 +158,23 @@ it('zips only images that are not downloaded yet', async () => {
   expect(saved[0]!.name).toMatch(/^nai-tagdeck-undownloaded-\d{8}-\d{6}\.zip$/);
   const files = unzipSync(new Uint8Array(await saved[0]!.blob.arrayBuffer()));
   expect(Object.keys(files)).toEqual([imageFileName(images[0]!)]);
-  expect(onDownloaded.mock.calls.map((call) => call[0])).toEqual(['img-2']);
+  expect(onSaveConfirmed.mock.calls.map((call) => call[0])).toEqual(['img-2']);
+});
+
+it('includes a png whose save was not confirmed in the unsaved zip', async () => {
+  const attempted = image(7, true);
+  attempted.saveConfirmed = false;
+  const onSaveConfirmed = vi.fn();
+  const saved = captureDownloads();
+  await renderGallery([attempted], { onSaveConfirmed });
+  expect(buttonByText('未ダウンロードを ZIP で保存').disabled).toBe(false);
+  await act(async () => {
+    buttonByText('未ダウンロードを ZIP で保存').click();
+  });
+  await confirmZipSaved();
+  const files = unzipSync(new Uint8Array(await saved[0]!.blob.arrayBuffer()));
+  expect(Object.keys(files)).toEqual([imageFileName(attempted)]);
+  expect(onSaveConfirmed).toHaveBeenCalledWith('img-7');
 });
 
 it('disables zip actions when there is nothing to save and toggles pin from the thumbnail', async () => {

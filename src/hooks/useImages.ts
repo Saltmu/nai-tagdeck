@@ -20,6 +20,8 @@ export interface GeneratedImage {
   characterPrompts: string[];
   createdAt: number;
   downloaded: boolean;
+  /** 保存できたことをユーザーが確認したときだけ true。ダウンロードの開始とは分ける */
+  saveConfirmed?: boolean;
   pinned: boolean;
 }
 
@@ -32,6 +34,7 @@ export interface ImageStore {
   remove: (id: string) => void;
   clear: () => void;
   markDownloaded: (id: string) => void;
+  markSaved: (id: string) => void;
   togglePinned: (id: string) => void;
   dismissEviction: () => void;
 }
@@ -71,6 +74,7 @@ export function useImages(options?: UseImagesOptions): ImageStore {
       id: newId(),
       url: URL.createObjectURL(img.blob),
       downloaded: false,
+      saveConfirmed: false,
       pinned: false,
     }));
     const { retained, evicted } = applyImageRetention(
@@ -145,6 +149,15 @@ export function useImages(options?: UseImagesOptions): ImageStore {
     setImages(next);
   }, []);
 
+  const markSaved = useCallback((id: string) => {
+    if (!imagesRef.current.some((img) => img.id === id && !img.saveConfirmed)) return;
+    const next = imagesRef.current.map((img) => (
+      img.id === id ? { ...img, downloaded: true, saveConfirmed: true } : img
+    ));
+    imagesRef.current = next;
+    setImages(next);
+  }, []);
+
   const togglePinned = useCallback((id: string) => {
     if (!imagesRef.current.some((img) => img.id === id)) return;
     const next = imagesRef.current.map((img) => (img.id === id ? { ...img, pinned: !img.pinned } : img));
@@ -154,5 +167,5 @@ export function useImages(options?: UseImagesOptions): ImageStore {
 
   const dismissEviction = useCallback(() => setEvictedCount(0), []);
 
-  return { images, evictedCount, add, remove, clear, markDownloaded, togglePinned, dismissEviction };
+  return { images, evictedCount, add, remove, clear, markDownloaded, markSaved, togglePinned, dismissEviction };
 }
