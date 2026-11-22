@@ -109,7 +109,7 @@ it('revokes each Object URL exactly once on remove and clear under StrictMode', 
   expect(revokedUrls).toEqual([firstUrl, ...remainingUrls]);
 });
 
-it('enforces retention limits oldest-first even when newer image has markDownloaded, and keeps eviction notice until dismissed', async () => {
+it('evicts downloaded unpinned image before older undownloaded image, and keeps eviction notice until dismissed', async () => {
   const onEvict = vi.fn();
   await renderHook({
     limits: { maxCount: 2, maxBytes: 1000 },
@@ -122,29 +122,27 @@ it('enforces retention limits oldest-first even when newer image has markDownloa
   await act(async () => {
     store.add([makeNewImage(2)]);
   });
-  // Mark the newer image (seed 2) as downloaded (e.g. user clicked download and cancelled Save As)
   const olderUrl = store.images.find((img) => img.seed === 1)!.url;
-  const newerId = store.images.find((img) => img.seed === 2)!.id;
+  const newer = store.images.find((img) => img.seed === 2)!;
   await act(async () => {
-    store.markDownloaded(newerId);
+    store.markDownloaded(newer.id);
   });
 
-  // Adding seed 3 exceeds maxCount=2; oldest image (seed 1) must be evicted, NOT newer seed 2
+  // Adding seed 3 exceeds maxCount=2; downloaded image (seed 2) is evicted before undownloaded seed 1
   await act(async () => {
     store.add([makeNewImage(3)]);
   });
-  expect(store.images.map((img) => img.seed)).toEqual([3, 2]);
-  expect(revokedUrls).toEqual([olderUrl]);
+  expect(store.images.map((img) => img.seed)).toEqual([3, 1]);
+  expect(revokedUrls).toEqual([newer.url]);
   expect(onEvict).toHaveBeenCalledWith(1);
   expect(store.evictedCount).toBe(1);
 
-  // Adding seed 4 evicts oldest remaining (seed 2) and accumulates evictedCount
-  const seed2Url = store.images.find((img) => img.seed === 2)!.url;
+  // Adding seed 4 evicts oldest remaining (seed 1) and accumulates evictedCount
   await act(async () => {
     store.add([makeNewImage(4)]);
   });
   expect(store.images.map((img) => img.seed)).toEqual([4, 3]);
-  expect(revokedUrls).toEqual([olderUrl, seed2Url]);
+  expect(revokedUrls).toEqual([newer.url, olderUrl]);
   expect(onEvict).toHaveBeenLastCalledWith(1);
   expect(store.evictedCount).toBe(2);
 
@@ -178,8 +176,8 @@ it('keeps beforeunload protection even after markDownloaded until all images are
   expect(removeListener.mock.calls.filter(([type]) => type === 'beforeunload')).toHaveLength(1);
 });
 
-it('reuses existing image.url on Gallery download, renders thumbUrl for older thumbnails, and shows eviction notice', async () => {
-  const onSaveConfirmed = vi.fn();
+it('reuses existing image.url on Gallery download without confirmation dialog, renders thumbUrl for older thumbnails, and shows eviction notice', async () => {
+  const onDownloaded = vi.fn();
   const onDismissEviction = vi.fn();
   const images = [
     {
@@ -214,7 +212,7 @@ it('reuses existing image.url on Gallery download, renders thumbUrl for older th
           onRemove={vi.fn()}
           onClear={vi.fn()}
           onUseSeed={vi.fn()}
-          onSaveConfirmed={onSaveConfirmed}
+          onDownloaded={onDownloaded}
           onTogglePin={vi.fn()}
           onReadPng={vi.fn()}
         />
@@ -239,11 +237,8 @@ it('reuses existing image.url on Gallery download, renders thumbUrl for older th
 
   expect(createdUrls).toEqual([]);
   expect(anchorClick).toHaveBeenCalledOnce();
-  expect(onSaveConfirmed).not.toHaveBeenCalled();
-  await act(async () => {
-    (container.querySelector('button.btn-primary') as HTMLButtonElement).click();
-  });
-  expect(onSaveConfirmed).toHaveBeenCalledWith('new-2');
+  expect(container.querySelector('dialog[open]')).toBeNull();
+  expect(onDownloaded).toHaveBeenCalledWith('new-2');
 });
 
 it('keeps a pinned image when a newer unpinned image would otherwise be the one retained', async () => {
@@ -264,24 +259,6 @@ it('keeps a pinned image when a newer unpinned image would otherwise be the one 
   });
   expect(store.images.map((img) => img.seed)).toEqual([3, 1]);
   expect(store.images.find((img) => img.seed === 1)!.pinned).toBe(true);
-});
-
-it('drops a confirmed save before an older unconfirmed image when the history is over the limit', async () => {
-  await renderHook({ limits: { maxCount: 2, maxBytes: 1000 } });
-  await act(async () => {
-    store.add([makeNewImage(1)]);
-  });
-  await act(async () => {
-    store.add([makeNewImage(2)]);
-  });
-  const savedId = store.images.find((img) => img.seed === 2)!.id;
-  await act(async () => {
-    store.markSaved(savedId);
-  });
-  await act(async () => {
-    store.add([makeNewImage(3)]);
-  });
-  expect(store.images.map((img) => img.seed)).toEqual([3, 1]);
 });
 
 it('keeps a new image when the history is already full of pinned images', async () => {
