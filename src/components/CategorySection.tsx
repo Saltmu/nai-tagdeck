@@ -5,7 +5,7 @@ import { categoryLabel, CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '..
 import { buildCategoryPrompt, parseTagList } from '../lib/prompt';
 import { useCategoryOpen } from '../hooks/useCategoryOpen';
 import { normalize } from '../lib/tagText';
-import { isTagFilterActive, buildTagAliasMap, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
+import { isTagFilterActive, buildTagAliasMap, resolveTagAliases, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import type { PromptTagCategory } from '../lib/tagClassification';
 import { TagRow, type MoveTargetGroup } from './TagRow';
 import { TagInput, type TagInputDraft } from './TagInput';
@@ -107,15 +107,18 @@ export const CategorySection = memo(function CategorySection({
   const moveTargets = useMemo<MoveTargetGroup[] | undefined>(() => {
     if (category === 'negative') return undefined;
     const ownKeys = (target === BASE ? PROMPT_CATEGORY_KEYS : CHARACTER_CATEGORY_KEYS).filter((key) => key !== category);
+    const ownLabel = target === BASE ? 'ベース' : characters?.find((ch) => ch.id === target)?.label || scopeLabel || 'このキャラ';
     const groups: MoveTargetGroup[] = [
       {
-        label: target === BASE ? 'ベース' : scopeLabel || 'このキャラ',
+        id: target,
+        label: ownLabel,
         options: ownKeys.map((key) => ({ target, category: key, label: categoryLabel(key) })),
       },
     ];
     if (characters) {
       if (target !== BASE) {
         groups.push({
+          id: BASE,
           label: 'ベース',
           options: PROMPT_CATEGORY_KEYS.map((key) => ({ target: BASE, category: key, label: categoryLabel(key) })),
         });
@@ -123,6 +126,7 @@ export const CategorySection = memo(function CategorySection({
       for (const ch of characters) {
         if (ch.id === target) continue;
         groups.push({
+          id: ch.id,
           label: ch.label,
           options: CHARACTER_CATEGORY_KEYS.map((key) => ({ target: ch.id, category: key, label: categoryLabel(key) })),
         });
@@ -360,7 +364,7 @@ export const CategorySection = memo(function CategorySection({
                   <TagRow
                     key={t.id}
                     tag={t}
-                    alias={aliasMap.get(normalize(t.tag))?.join(' / ')}
+                    aliases={resolveTagAliases(t.tag, aliasMap)}
                     query={appliedFilter.query}
                     sorting={sorting && canSort && !filtering}
                     canMoveUp={i > 0}

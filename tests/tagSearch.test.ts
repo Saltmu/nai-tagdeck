@@ -86,5 +86,9 @@ describe('タグ検索', () => {
     expect(visibleWorkTags(tags, { query: '金髪', onlyEnabled: false }, aliasMap).map((item) => item.id)).toEqual(['a']);
     expect(visibleWorkTags(tags, { query: '目', onlyEnabled: false }, aliasMap).map((item) => item.id)).toEqual(['b']);
     expect(visibleWorkTags(tags, { query: '目', onlyEnabled: true }, aliasMap).map((item) => item.id)).toEqual([]);
+
+    const hugAliasMap = buildTagAliasMap([{ tag: 'hug', alias: '抱き合う ハグ' }]);
+    const interactionTags = [tag('m', 'mutual#hug')];
+    expect(visibleWorkTags(interactionTags, { query: '抱き合う', onlyEnabled: false }, hugAliasMap).map((item) => item.id)).toEqual(['m']);
   });
 });

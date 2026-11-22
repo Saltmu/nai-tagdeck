@@ -14,6 +14,7 @@ export interface MoveTargetOption {
 }
 
 export interface MoveTargetGroup {
+  id: TargetId;
   label: string;
   options: readonly MoveTargetOption[];
 }
@@ -25,7 +26,7 @@ interface Props {
   onEdit: (id: string, tag: string) => string | null;
   onRemove: (id: string) => void;
   /** 辞書に登録されている日本語名・よみ。 */
-  alias?: string;
+  aliases?: string | readonly string[];
   /** 辞書にないタグのときだけ true。 */
   canRegister?: boolean;
   onRegister?: (tag: WorkTag) => void;
@@ -79,7 +80,7 @@ export const TagRow = memo(function TagRow({
   onWeight,
   onEdit,
   onRemove,
-  alias,
+  aliases,
   canRegister,
   onRegister,
   moveDestinations,
@@ -96,6 +97,7 @@ export const TagRow = memo(function TagRow({
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(tag.tag);
+  const [pendingMove, setPendingMove] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const errorId = useId();
@@ -125,7 +127,15 @@ export const TagRow = memo(function TagRow({
     setError(result);
     if (!result) setEditing(false);
   };
-  const aliasMatched = !!alias && normalize(query).length > 0 && aliasMatchesQuery(alias.split(' / '), query);
+  const commitMove = () => {
+    if (!pendingMove || !moveTargets || !onMoveTag) return;
+    const [groupIdx, optIdx] = pendingMove.split(':').map(Number);
+    const opt = moveTargets[groupIdx ?? -1]?.options[optIdx ?? -1];
+    if (opt) onMoveTag(tag.id, opt.target, opt.category);
+  };
+  const aliasList = typeof aliases === 'string' ? (aliases ? [aliases] : []) : (aliases ?? []);
+  const aliasText = aliasList.join(' / ');
+  const aliasMatched = aliasList.length > 0 && normalize(query).length > 0 && aliasMatchesQuery(aliasList, query);
 
   return (
     <li className={`tag-row${tag.enabled ? '' : ' is-off'}${editing && !sorting ? ' is-editing' : ''}`}>
@@ -149,29 +159,36 @@ export const TagRow = memo(function TagRow({
             }}
           />
           {moveTargets && moveTargets.length > 0 && onMoveTag && (
-            <select
-              className="tag-edit-move"
-              aria-label={`${tag.tag} の移動先カテゴリ`}
-              value=""
-              onChange={(e) => {
-                const [groupIdx, optIdx] = e.target.value.split(':').map(Number);
-                const opt = moveTargets[groupIdx ?? -1]?.options[optIdx ?? -1];
-                if (opt) onMoveTag(tag.id, opt.target, opt.category);
-              }}
-            >
-              <option value="" disabled>カテゴリ移動</option>
-              {moveTargets.length === 1
-                ? moveTargets[0]!.options.map((opt, optIdx) => (
-                    <option key={`${opt.target}:${opt.category}`} value={`0:${optIdx}`}>{opt.label}</option>
-                  ))
-                : moveTargets.map((group, groupIdx) => (
-                    <optgroup key={group.label} label={group.label}>
-                      {group.options.map((opt, optIdx) => (
-                        <option key={`${opt.target}:${opt.category}`} value={`${groupIdx}:${optIdx}`}>{opt.label}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-            </select>
+            <>
+              <select
+                className="tag-edit-move"
+                aria-label={`${tag.tag} の移動先カテゴリ`}
+                value={pendingMove}
+                onChange={(e) => setPendingMove(e.target.value)}
+              >
+                <option value="" disabled>カテゴリ移動</option>
+                {moveTargets.length === 1
+                  ? moveTargets[0]!.options.map((opt, optIdx) => (
+                      <option key={`${opt.target}:${opt.category}`} value={`0:${optIdx}`}>{opt.label}</option>
+                    ))
+                  : moveTargets.map((group, groupIdx) => (
+                      <optgroup key={group.id} label={group.label}>
+                        {group.options.map((opt, optIdx) => (
+                          <option key={`${opt.target}:${opt.category}`} value={`${groupIdx}:${optIdx}`}>{opt.label}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-small"
+                aria-label={`${tag.tag} を移動`}
+                disabled={!pendingMove}
+                onClick={commitMove}
+              >
+                移動
+              </button>
+            </>
           )}
           <button type="button" className="icon-btn" aria-label="保存" title="保存" onClick={commit}>
             <CheckIcon />
@@ -179,7 +196,7 @@ export const TagRow = memo(function TagRow({
           <button type="button" className="icon-btn" aria-label="キャンセル" title="キャンセル" onClick={() => setEditing(false)}>
             <CloseIcon />
           </button>
-          {alias && <span className="tag-alias tag-alias-edit">日本語名: {alias}</span>}
+          {aliasText && <span className="tag-alias tag-alias-edit">日本語名: {aliasText}</span>}
           {error && <span id={errorId} className="tag-edit-error" role="alert">{error}</span>}
         </div>
       ) : sorting ? (
@@ -188,14 +205,14 @@ export const TagRow = memo(function TagRow({
           onPointerDown={startDrag}
         >
           <span className="drag-handle" aria-hidden="true">||</span>
-          <TagLabel tag={tag.tag} query={query} title={alias} />
-          {aliasMatched && alias && <AliasLabel alias={alias} query={query} />}
+          <TagLabel tag={tag.tag} query={query} title={aliasText} />
+          {aliasMatched && aliasText && <AliasLabel alias={aliasText} query={query} />}
         </span>
       ) : (
         <label className="tag-check">
           <input type="checkbox" checked={tag.enabled} onChange={() => onToggle(tag.id)} />
-          <TagLabel tag={tag.tag} query={query} title={alias} />
-          {aliasMatched && alias && <AliasLabel alias={alias} query={query} />}
+          <TagLabel tag={tag.tag} query={query} title={aliasText} />
+          {aliasMatched && aliasText && <AliasLabel alias={aliasText} query={query} />}
         </label>
       )}
 
@@ -249,7 +266,7 @@ export const TagRow = memo(function TagRow({
           )}
           {!editing && (
             <button type="button" className="icon-btn" aria-label={`${tag.tag} を編集`} title="このタグを編集"
-              onClick={() => { setDraft(tag.tag); setError(null); setEditing(true); }}>
+              onClick={() => { setDraft(tag.tag); setPendingMove(''); setError(null); setEditing(true); }}>
               <EditIcon />
             </button>
           )}

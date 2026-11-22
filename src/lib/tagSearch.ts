@@ -1,4 +1,5 @@
 import type { DictEntry, WorkTag } from '../types';
+import { splitInteraction } from './interaction';
 import { normalize } from './tagText';
 
 /** 表示中のタグを、検索語と ON だけで絞る。 */
@@ -37,6 +38,19 @@ export function aliasMatchesQuery(aliases: string | readonly string[] | undefine
   return list.some((alias) => normalize(alias).includes(q));
 }
 
+/** タグ名に対応する辞書エイリアスを引く。インタラクション接頭辞（source# 等）付きなら本体でも引く。 */
+export function resolveTagAliases(
+  tag: string,
+  aliasMap: ReadonlyMap<string, readonly string[]>,
+): readonly string[] | undefined {
+  const exact = aliasMap.get(normalize(tag));
+  if (exact) return exact;
+  const { interaction, body } = splitInteraction(tag);
+  if (!interaction) return undefined;
+  const bodyKey = normalize(body);
+  return bodyKey ? aliasMap.get(bodyKey) : undefined;
+}
+
 /** 正規化（大小文字・全角半角・かな・アンダースコア）後の部分一致。エイリアスも検索対象にする。 */
 export function tagMatchesQuery(tag: string, query: string, aliases?: string | readonly string[]): boolean {
   const q = normalize(query);
@@ -49,7 +63,9 @@ export function visibleWorkTags(
   aliasMap?: ReadonlyMap<string, readonly string[]>,
 ): WorkTag[] {
   return tags.filter(
-    (tag) => (!filter.onlyEnabled || tag.enabled) && tagMatchesQuery(tag.tag, filter.query, aliasMap?.get(normalize(tag.tag))),
+    (tag) =>
+      (!filter.onlyEnabled || tag.enabled) &&
+      tagMatchesQuery(tag.tag, filter.query, aliasMap ? resolveTagAliases(tag.tag, aliasMap) : undefined),
   );
 }
 

@@ -65,8 +65,8 @@ it('hides the delete button while the tag name is being edited', async () => {
 it('shows alias only as title tooltip by default, and renders inline alias or move select on alias search / edit mode', async () => {
   const onMoveTag = vi.fn();
   const moveTargets: MoveTargetGroup[] = [
-    { label: 'ベース', options: [{ target: 'base', category: 'outfit', label: '衣装' }] },
-    { label: 'キャラ1', options: [{ target: 'c1', category: 'appearance', label: '外見' }] },
+    { id: 'base', label: 'ベース', options: [{ target: 'base', category: 'outfit', label: '衣装' }] },
+    { id: 'c1', label: 'キャラ1', options: [{ target: 'c1', category: 'appearance', label: '外見' }] },
   ];
 
   // 通常表示: title のみで .tag-alias や移動 select は出ない
@@ -74,7 +74,7 @@ it('shows alias only as title tooltip by default, and renders inline alias or mo
     <ul>
       <TagRow
         tag={tag}
-        alias="女の子 おんなのこ"
+        aliases={['女の子 / おんなのこ']}
         moveTargets={moveTargets}
         onMoveTag={onMoveTag}
         onToggle={() => {}}
@@ -84,17 +84,17 @@ it('shows alias only as title tooltip by default, and renders inline alias or mo
       />
     </ul>,
   ));
-  expect(container.querySelector('.tag-name')?.getAttribute('title')).toBe('女の子 おんなのこ');
+  expect(container.querySelector('.tag-name')?.getAttribute('title')).toBe('女の子 / おんなのこ');
   expect(container.querySelector('.tag-alias')).toBeNull();
   expect(container.querySelector('.tag-edit-move')).toBeNull();
 
-  // 日本語エイリアスで検索ヒット時: .tag-alias を出し一致箇所を mark する
+  // 日本語エイリアス（' / ' を含む単一エイリアス含む）で検索ヒット時: .tag-alias を出し一致箇所を mark する
   await act(async () => root.render(
     <ul>
       <TagRow
         tag={tag}
-        alias="女の子 おんなのこ"
-        query="女"
+        aliases={['女の子 / おんなのこ']}
+        query="女の子 / おんなのこ"
         moveTargets={moveTargets}
         onMoveTag={onMoveTag}
         onToggle={() => {}}
@@ -105,18 +105,25 @@ it('shows alias only as title tooltip by default, and renders inline alias or mo
     </ul>,
   ));
   const aliasEl = container.querySelector('.tag-alias');
-  expect(aliasEl?.textContent).toBe('女の子 おんなのこ');
-  expect(aliasEl?.querySelector('mark')?.textContent).toBe('女');
+  expect(aliasEl?.textContent).toBe('女の子 / おんなのこ');
+  expect(aliasEl?.querySelector('mark')?.textContent).toBe('女の子 / おんなのこ');
 
-  // 編集モードを開いたとき: .tag-alias と移動 select が表示され、選択すると onMoveTag が呼ばれる
+  // 編集モードを開いたとき: select を変えただけでは移動せず、「移動」ボタン押下で onMoveTag が呼ばれる
   const edit = container.querySelector<HTMLButtonElement>('button[aria-label="1girl を編集"]')!;
   await act(async () => edit.click());
-  expect(container.querySelector('.tag-alias-edit')?.textContent).toContain('女の子 おんなのこ');
+  expect(container.querySelector('.tag-alias-edit')?.textContent).toContain('女の子 / おんなのこ');
   const select = container.querySelector<HTMLSelectElement>('.tag-edit-move')!;
+  const moveButton = container.querySelector<HTMLButtonElement>('button[aria-label="1girl を移動"]')!;
   expect(select).not.toBeNull();
+  expect(moveButton.disabled).toBe(true);
+
   await act(async () => {
     select.value = '1:0';
     select.dispatchEvent(new Event('change', { bubbles: true }));
   });
+  expect(onMoveTag).not.toHaveBeenCalled();
+  expect(moveButton.disabled).toBe(false);
+
+  await act(async () => moveButton.click());
   expect(onMoveTag).toHaveBeenCalledWith('1', 'c1', 'appearance');
 });
