@@ -37,7 +37,7 @@ function buttonByText(text: string): HTMLButtonElement {
   return found as HTMLButtonElement;
 }
 
-async function renderGallery(images: GeneratedImage[], props?: { onDownloaded?: (id: string) => void; onSaveConfirmed?: (id: string) => void; onTogglePin?: (id: string) => void }) {
+async function renderGallery(images: GeneratedImage[], props?: { onSaveConfirmed?: (id: string) => void; onTogglePin?: (id: string) => void }) {
   await act(async () => {
     root.render(
       <DialogProvider>
@@ -48,7 +48,6 @@ async function renderGallery(images: GeneratedImage[], props?: { onDownloaded?: 
           onRemove={vi.fn()}
           onClear={vi.fn()}
           onUseSeed={vi.fn()}
-          onDownloaded={props?.onDownloaded ?? vi.fn()}
           onSaveConfirmed={props?.onSaveConfirmed ?? vi.fn()}
           onTogglePin={props?.onTogglePin ?? vi.fn()}
           onReadPng={vi.fn()}

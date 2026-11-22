@@ -179,7 +179,7 @@ it('keeps beforeunload protection even after markDownloaded until all images are
 });
 
 it('reuses existing image.url on Gallery download, renders thumbUrl for older thumbnails, and shows eviction notice', async () => {
-  const onDownloaded = vi.fn();
+  const onSaveConfirmed = vi.fn();
   const onDismissEviction = vi.fn();
   const images = [
     {
@@ -214,8 +214,7 @@ it('reuses existing image.url on Gallery download, renders thumbUrl for older th
           onRemove={vi.fn()}
           onClear={vi.fn()}
           onUseSeed={vi.fn()}
-          onDownloaded={onDownloaded}
-          onSaveConfirmed={vi.fn()}
+          onSaveConfirmed={onSaveConfirmed}
           onTogglePin={vi.fn()}
           onReadPng={vi.fn()}
         />
@@ -240,7 +239,11 @@ it('reuses existing image.url on Gallery download, renders thumbUrl for older th
 
   expect(createdUrls).toEqual([]);
   expect(anchorClick).toHaveBeenCalledOnce();
-  expect(onDownloaded).toHaveBeenCalledWith('new-2');
+  expect(onSaveConfirmed).not.toHaveBeenCalled();
+  await act(async () => {
+    (container.querySelector('button.btn-primary') as HTMLButtonElement).click();
+  });
+  expect(onSaveConfirmed).toHaveBeenCalledWith('new-2');
 });
 
 it('keeps a pinned image when a newer unpinned image would otherwise be the one retained', async () => {

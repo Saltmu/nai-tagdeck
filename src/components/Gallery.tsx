@@ -18,7 +18,6 @@ interface Props {
   onRemove: (id: string) => void;
   onClear: () => void;
   onUseSeed: (seed: number) => void;
-  onDownloaded: (id: string) => void;
   onSaveConfirmed: (id: string) => void;
   onTogglePin: (id: string) => void;
   onPickPng?: () => void;
@@ -43,7 +42,6 @@ export function Gallery({
   onRemove,
   onClear,
   onUseSeed,
-  onDownloaded,
   onSaveConfirmed,
   onTogglePin,
   onPickPng,
@@ -56,11 +54,11 @@ export function Gallery({
   const [zipMessage, setZipMessage] = useState('');
   const [zipping, setZipping] = useState<'all' | 'new' | null>(null);
   const zippingRef = useRef(false);
+  const zipAllRef = useRef<HTMLButtonElement>(null);
   const openIndex = images.findIndex((img) => img.id === openId);
   const unsavedCount = images.filter((img) => !img.saveConfirmed).length;
   const downloadImage = async (image: GeneratedImage) => {
     downloadUrl(imageFileName(image), image.url);
-    onDownloaded(image.id);
     if (image.saveConfirmed) return;
     const saved = await dialogs.confirm(
       'PNG を保存できましたか？保存できていれば、未ダウンロードの ZIP からは外れます。',
@@ -92,6 +90,8 @@ export function Gallery({
       );
       if (saved) {
         for (const image of targets) onSaveConfirmed(image.id);
+        const unsavedLeft = images.some((img) => !img.saveConfirmed && !targets.some((target) => target.id === img.id));
+        if (!unsavedLeft) zipAllRef.current?.focus();
       } else {
         setZipMessage('保存していないときは、もう一度 ZIP で保存できます。');
       }
@@ -121,9 +121,10 @@ export function Gallery({
         </h2>
         <div className="gallery-actions">
           <button
+            ref={zipAllRef}
             type="button"
             className="btn btn-small"
-            disabled={images.length === 0 || zipping !== null}
+            disabled={images.length === 0}
             aria-busy={zipping === 'all'}
             onClick={() => void downloadZip(false)}
           >
@@ -132,7 +133,7 @@ export function Gallery({
           <button
             type="button"
             className="btn btn-small"
-            disabled={unsavedCount === 0 || zipping !== null}
+            disabled={unsavedCount === 0}
             title="保存できたか未確認の画像をまとめます"
             aria-busy={zipping === 'new'}
             onClick={() => void downloadZip(true)}
@@ -155,7 +156,7 @@ export function Gallery({
           </button>
         </div>
       </div>
-      <p className="hint">画像はこのタブのメモリにだけあり、タブを閉じると消えます。残したい画像はピン留めするか、ZIP または PNG でダウンロードしてください。上限を超えるとピン留めしていない画像から削除され、すべてピン留めしているときは古い画像から削除されます。</p>
+      <p className="hint">画像はこのタブのメモリにだけあり、タブを閉じると消えます。残したい画像はピン留めするか、ZIP または PNG でダウンロードしてください。上限を超えると、ピン留めしていない画像から削除します。その中では、保存できた画像を先に、同じ条件なら古い画像から削除します。すべてピン留めしているときも同じ順です。</p>
       <div
         className={`png-drop-zone${dragging ? ' is-dragging' : ''}`}
         {...dropProps}
@@ -210,9 +211,9 @@ export function Gallery({
                 </button>
                 <button
                   type="button"
-                  className={`btn thumb-download${img.downloaded ? ' is-downloaded' : ''}`}
-                  aria-label={`生成画像 ${images.length - i}のPNGを${img.downloaded ? '再ダウンロード（ダウンロード済み）' : 'ダウンロード'}`}
-                  title={img.downloaded ? 'PNGを再ダウンロード（ダウンロード済み）' : 'PNGをダウンロード'}
+                  className={`btn thumb-download${img.saveConfirmed ? ' is-downloaded' : ''}`}
+                  aria-label={`生成画像 ${images.length - i}のPNGを${img.saveConfirmed ? '再ダウンロード（ダウンロード済み）' : 'ダウンロード'}`}
+                  title={img.saveConfirmed ? 'PNGを再ダウンロード（ダウンロード済み）' : 'PNGをダウンロード'}
                   onClick={() => downloadImage(img)}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
