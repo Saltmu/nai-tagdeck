@@ -37,6 +37,8 @@
   --z-latest-preview: 60;
   --z-toast: 70;
   --z-gesture-shield: 90; /* 候補の外を押したあと、その押下が下の要素に届かないよう一時的に覆う透明な板 */
+  /* 固定ヘッダーの高さ（ResizeObserver で実測値に更新する） */
+  --header-height: 57px;
   /* 狭い画面で下端に固定した生成ドック・未読プレビューの高さ。無いときは 0 */
   --dock-offset: 0px;
   --latest-offset: 0px;
