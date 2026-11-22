@@ -267,6 +267,17 @@ describe('QuickGenerate radiogroup', () => {
     await act(async () => lock.click());
     expect(container.querySelector('.seed-lock')).toBeNull();
     expect(document.activeElement).toBe(container.querySelector('.generate-btn'));
+    const generate = container.querySelector<HTMLButtonElement>('.generate-btn')!;
+    const repeated = new KeyboardEvent('keydown', { key: 'Enter', repeat: true, bubbles: true, cancelable: true });
+    await act(async () => {
+      generate.dispatchEvent(repeated);
+    });
+    expect(repeated.defaultPrevented).toBe(true);
+    const once = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    await act(async () => {
+      generate.dispatchEvent(once);
+    });
+    expect(once.defaultPrevented).toBe(false);
   });
 });
 

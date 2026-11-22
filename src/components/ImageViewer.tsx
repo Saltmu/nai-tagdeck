@@ -245,6 +245,7 @@ function PromptCopy({ title, text, emptyText, copyKey, copyLabel, copiedKey, neg
           type="button"
           className="btn btn-small"
           disabled={!text}
+          aria-label={copied ? `${copyLabel}をコピー済み` : `${copyLabel}をコピー`}
           onClick={() => onCopy(copyKey, text, copyLabel)}
         >
           {copied ? (<><CheckIcon />コピー済み</>) : 'コピー'}

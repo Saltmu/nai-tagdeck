@@ -116,11 +116,20 @@ describe('ImageViewer prompts and parameters', () => {
 
     const copyButtons = [...container.querySelectorAll<HTMLButtonElement>('.viewer-prompt button')];
     expect(copyButtons.map((b) => b.disabled)).toEqual([false, false, false, false, true, false]);
+    expect(copyButtons.map((b) => b.getAttribute('aria-label'))).toEqual([
+      'ベースをコピー',
+      'キャラ1をコピー',
+      'キャラ1のネガティブをコピー',
+      'キャラ2をコピー',
+      'キャラ2のネガティブをコピー',
+      'ネガティブをコピー',
+    ]);
     await act(async () => {
       copyButtons[0]!.click();
     });
     expect(writeText).toHaveBeenCalledWith('1girl');
     expect(copyButtons[0]!.textContent).toContain('コピー済み');
+    expect(copyButtons[0]!.getAttribute('aria-label')).toBe('ベースをコピー済み');
     expect(container.querySelector('.viewer-prompt ~ [role="status"]')?.textContent).toBe('ベースをコピーしました');
 
     await act(async () => {
@@ -171,8 +180,10 @@ describe('ImageViewer prompts and parameters', () => {
     };
     await renderViewer(image({ id: 'img-a', prompt: 'first' }));
     const firstCopy = container.querySelector<HTMLButtonElement>('.viewer-prompt button')!;
+    firstCopy.focus();
     await act(async () => firstCopy.click());
     expect(parent).toBe(container.querySelector('dialog'));
+    expect(document.activeElement).toBe(firstCopy);
     expect(firstCopy.textContent).toContain('コピー済み');
 
     let release: (() => void) | undefined;

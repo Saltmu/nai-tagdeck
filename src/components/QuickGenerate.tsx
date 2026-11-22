@@ -25,6 +25,8 @@ interface Props {
 export function QuickGenerate({ size, seed, onSizeChange, onClearSeed, generating, blocker, onGenerate }: Props) {
   const radioRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const generateRef = useRef<HTMLButtonElement>(null);
+  // 解除ボタンで Enter を押し続けたとき、フォーカス先の生成ボタンが連打を受け取らないようにする
+  const suppressGenerateRepeat = useRef(false);
   const sizes = headerSizes(size);
   const activeIndex = sizes.indexOf(size);
 
@@ -74,6 +76,7 @@ export function QuickGenerate({ size, seed, onSizeChange, onClearSeed, generatin
           aria-label={seedLabel}
           title={seedLabel}
           onClick={() => {
+            suppressGenerateRepeat.current = true;
             generateRef.current?.focus();
             onClearSeed();
           }}
@@ -89,6 +92,14 @@ export function QuickGenerate({ size, seed, onSizeChange, onClearSeed, generatin
         ref={generateRef}
         type="button"
         className={`btn btn-primary generate-btn${blocker ? ' is-blocked' : ''}`}
+        onKeyDown={(e) => {
+          if (suppressGenerateRepeat.current && e.repeat && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+          }
+        }}
+        onKeyUp={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') suppressGenerateRepeat.current = false;
+        }}
         aria-busy={generating}
         aria-label={generating ? '生成中' : '生成する（Ctrl+Enter）'}
         title={blocker ?? '生成する（Ctrl+Enter）'}
