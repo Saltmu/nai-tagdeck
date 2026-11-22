@@ -45,6 +45,8 @@ interface Props {
   suggestedCategories?: Readonly<Record<string, BaseCategorySuggestion>>;
   /** ベース⇔キャラ間やキャラ間でのタグ移動に使うキャラクター一覧。 */
   characters?: readonly { id: string; label: string }[];
+  /** Editor から共有される正規化タグ名→エイリアス一覧の索引。 */
+  aliasMap?: ReadonlyMap<string, readonly string[]>;
 }
 
 export const CategorySection = memo(function CategorySection({
@@ -67,13 +69,14 @@ export const CategorySection = memo(function CategorySection({
   filter,
   suggestedCategories,
   characters,
+  aliasMap,
 }: Props) {
   const [open, toggleOpen] = useCategoryOpen(target, category);
   const [sorting, setSorting] = useState(false);
   const appliedFilter = filter ?? { query: '', onlyEnabled: false };
   const filtering = isTagFilterActive(appliedFilter);
-  const aliasMap = useMemo(() => buildTagAliasMap(entries), [entries]);
-  const visibleTags = filtering ? visibleWorkTags(tags, appliedFilter, aliasMap) : tags;
+  const resolvedAliasMap = useMemo(() => aliasMap ?? buildTagAliasMap(entries), [aliasMap, entries]);
+  const visibleTags = filtering ? visibleWorkTags(tags, appliedFilter, resolvedAliasMap) : tags;
   useEffect(() => {
     if (filtering) setSorting(false);
   }, [filtering]);
@@ -364,7 +367,7 @@ export const CategorySection = memo(function CategorySection({
                   <TagRow
                     key={t.id}
                     tag={t}
-                    aliases={resolveTagAliases(t.tag, aliasMap)}
+                    aliases={resolveTagAliases(t.tag, resolvedAliasMap)}
                     query={appliedFilter.query}
                     sorting={sorting && canSort && !filtering}
                     canMoveUp={i > 0}

@@ -487,6 +487,35 @@ describe('normalizeWorkspace', () => {
         toCategory: 'style',
       }),
     ).toBe(toChar);
+
+    // インタラクション接頭辞付きタグはベースへ移動できない（キャラ間移動は可）
+    const withAction = run(
+      toChar,
+      { type: 'addCharacter' },
+      { type: 'add', target: charId, category: 'pose', tag: 'source#hug' },
+    );
+    const char2Id = withAction.characters[1]!.id;
+    const actionId = withAction.characters[0]!.tags.pose[0]!.id;
+    expect(
+      workspaceReducer(withAction, {
+        type: 'moveTag',
+        fromTarget: charId,
+        fromCategory: 'pose',
+        id: actionId,
+        toTarget: BASE,
+        toCategory: 'pose',
+      }),
+    ).toBe(withAction);
+    const movedAction = workspaceReducer(withAction, {
+      type: 'moveTag',
+      fromTarget: charId,
+      fromCategory: 'pose',
+      id: actionId,
+      toTarget: char2Id,
+      toCategory: 'pose',
+    });
+    expect(movedAction.characters[0]!.tags.pose).toEqual([]);
+    expect(movedAction.characters[1]!.tags.pose.map((t) => t.tag)).toEqual(['source#hug']);
   });
 
   it('キャラクター対応前の保存形式はベースとして読む', () => {

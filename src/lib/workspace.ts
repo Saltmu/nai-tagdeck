@@ -2,6 +2,7 @@ import type { Character, PromptCategoryKey, TagGroups, TargetId, WorkTag, Worksp
 import { CHARACTER_CATEGORY_KEYS, LEGACY_DRESS_STATE_CATEGORY, PROMPT_CATEGORY_KEYS } from './categories';
 import { newId, normalizeId } from './id';
 import { clampWeight, parseTagList } from './prompt';
+import { splitInteraction } from './interaction';
 import { DEFAULT_NEGATIVE } from './novelai';
 import { normalize } from './tagText';
 import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
@@ -304,6 +305,7 @@ function moveTagBetweenGroups(
 
   const tag = sourceList.find((t) => t.id === id);
   if (!tag) return state;
+  if (toTarget === BASE && splitInteraction(tag.tag).interaction !== null) return state;
 
   const key = normalize(tag.tag);
   const exists = destList.some((t) => normalize(t.tag) === key);

@@ -160,4 +160,26 @@ it('shows alias only as title tooltip by default, and renders inline alias or mo
   ));
   await act(async () => moveButton.click());
   expect(onMoveTag).toHaveBeenCalledWith('1', 'c1', 'appearance');
+
+  // インタラクション接頭辞付きタグの編集時はベース移動先を除外する
+  const actionTag: WorkTag = { id: '2', tag: 'source#hug', enabled: true, weight: 1 };
+  await act(async () => root.render(
+    <ul>
+      <TagRow
+        key={actionTag.id}
+        tag={actionTag}
+        moveTargets={reorderedTargets.concat({ id: 'base', label: 'ベース', options: [{ target: 'base', category: 'pose', label: 'ポーズ' }] })}
+        onMoveTag={onMoveTag}
+        onToggle={() => {}}
+        onWeight={() => {}}
+        onEdit={onEdit}
+        onRemove={onRemove}
+      />
+    </ul>,
+  ));
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="source#hug を編集"]')!.click());
+  const actionGroups = [...container.querySelectorAll('.tag-edit-move optgroup')].map((el) => el.getAttribute('label'));
+  expect(actionGroups).toEqual(['キャラ2', 'キャラ1']);
+  const actionOptions = [...container.querySelectorAll('.tag-edit-move option')].map((el) => el.textContent);
+  expect(actionOptions).toEqual(['カテゴリ移動', 'キャラ2 / 外見', 'キャラ1 / 外見']);
 });

@@ -3,6 +3,7 @@ import type { PromptCategoryKey, TargetId, WorkTag } from '../types';
 import { categoryLabel } from '../lib/categories';
 import { WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP, clampWeight } from '../lib/prompt';
 import { aliasMatchesQuery, highlightTag } from '../lib/tagSearch';
+import { splitInteraction } from '../lib/interaction';
 import { normalize } from '../lib/tagText';
 import { WeightInput } from './WeightInput';
 import { BookPlusIcon, CheckIcon, CloseIcon, EditIcon } from './icons';
@@ -126,7 +127,10 @@ export const TagRow = memo(function TagRow({
   };
   const handleWeightChange = useCallback((weight: number) => onWeight(tag.id, weight), [onWeight, tag.id]);
   const step = (delta: number) => onWeight(tag.id, clampWeight(tag.weight + delta));
-  const selectedMove = moveTargets
+  const visibleMoveTargets = moveTargets && splitInteraction(tag.tag).interaction !== null
+    ? moveTargets.filter((group) => group.id !== 'base')
+    : moveTargets;
+  const selectedMove = visibleMoveTargets
     ?.flatMap((group) => group.options)
     .find((opt) => moveOptionKey(opt.target, opt.category) === pendingMove);
   const hasUnsavedRename = draft.trim() !== tag.tag.trim();
@@ -164,7 +168,7 @@ export const TagRow = memo(function TagRow({
               if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
             }}
           />
-          {moveTargets && moveTargets.length > 0 && onMoveTag && (
+          {visibleMoveTargets && visibleMoveTargets.length > 0 && onMoveTag && (
             <>
               <select
                 className="tag-edit-move"
@@ -173,16 +177,16 @@ export const TagRow = memo(function TagRow({
                 onChange={(e) => setPendingMove(e.target.value)}
               >
                 <option value="" disabled>カテゴリ移動</option>
-                {moveTargets.length === 1
-                  ? moveTargets[0]!.options.map((opt) => {
+                {visibleMoveTargets.length === 1
+                  ? visibleMoveTargets[0]!.options.map((opt) => {
                       const key = moveOptionKey(opt.target, opt.category);
                       return <option key={key} value={key}>{opt.label}</option>;
                     })
-                  : moveTargets.map((group) => (
+                  : visibleMoveTargets.map((group) => (
                       <optgroup key={group.id} label={group.label}>
                         {group.options.map((opt) => {
                           const key = moveOptionKey(opt.target, opt.category);
-                          return <option key={key} value={key}>{opt.label}</option>;
+                          return <option key={key} value={key}>{`${group.label} / ${opt.label}`}</option>;
                         })}
                       </optgroup>
                     ))}

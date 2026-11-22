@@ -502,6 +502,7 @@ export function Editor({
             characterNegative={characterNegative}
             onCharacterNegativeChange={onCharacterNegativeChange}
             filter={tagFilter}
+            aliasMap={aliasMap}
           />
         ) : active ? (
           <CharacterCard
@@ -523,6 +524,7 @@ export function Editor({
             canvasSize={canvasSize}
             peerCenters={peerCenters}
             characterTargets={characterTargets}
+            aliasMap={aliasMap}
           />
         ) : (
           <div className="category-grid editor-pane">
@@ -545,6 +547,7 @@ export function Editor({
                 suggestedCategories={key === 'unclassified' ? baseSuggestions : undefined}
                 filter={tagFilter}
                 characters={characterTargets}
+                aliasMap={aliasMap}
               />
             ))}
           </div>
@@ -577,6 +580,7 @@ interface NegativePaneProps {
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
   filter: TagFilter;
+  aliasMap: ReadonlyMap<string, readonly string[]>;
 }
 
 /** ネガティブはカテゴリに分けず、1つの並びで編集する。 */
@@ -592,6 +596,7 @@ function NegativePane({
   characterNegative,
   onCharacterNegativeChange,
   filter,
+  aliasMap,
 }: NegativePaneProps) {
   const id = useId();
   const [characterOpen, setCharacterOpen] = useState(false);
@@ -621,6 +626,7 @@ function NegativePane({
         notify={notify}
         onRegister={onRegister}
         filter={filter}
+        aliasMap={aliasMap}
       />
       <div className="negative-actions">
         <button type="button" className="btn btn-small" disabled={hasAllDefaults} onClick={addDefaults}>

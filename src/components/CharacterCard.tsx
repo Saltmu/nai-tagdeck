@@ -38,6 +38,8 @@ interface Props {
   peerCenters?: readonly PeerCharacterCenter[];
   /** タグ移動先に使うキャラクター一覧。 */
   characterTargets?: readonly { id: string; label: string }[];
+  /** Editor から共有されるエイリアス索引。 */
+  aliasMap?: ReadonlyMap<string, readonly string[]>;
 }
 
 export function CharacterCard({
@@ -58,6 +60,7 @@ export function CharacterCard({
   canvasSize = { width: 832, height: 1216 },
   peerCenters = [],
   characterTargets,
+  aliasMap,
 }: Props) {
   const { id, enabled, tags } = character;
   const name = character.name.trim() || `キャラ${index + 1}`;
@@ -246,6 +249,7 @@ export function CharacterCard({
             onAdded={key === 'pose' ? onPoseAdded : undefined}
             filter={filter}
             characters={characterTargets}
+            aliasMap={aliasMap}
           />
         ))}
       </div>
