@@ -41,7 +41,6 @@ const mockPresets = (): PresetStore => ({
   setPresets: () => {},
   activeId: null,
   setActiveId: () => {},
-  commitPresets: async () => false,
   persistence: [
     { status: 'idle', loaded: true, error: null },
     { status: 'idle', loaded: true, error: null },

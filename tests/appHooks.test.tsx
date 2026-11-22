@@ -35,7 +35,7 @@ beforeEach(() => {
   };
   backupArgs = {
     dictionary: { entries: [], loaded: true, error: null, save: vi.fn(), saveMany: vi.fn(), remove: vi.fn(), importEntries: vi.fn().mockResolvedValue(0), restoreInitial: vi.fn() },
-    presets: { presets: [], setPresets: vi.fn(), commitPresets: vi.fn(async () => false), activeId: null, setActiveId: vi.fn(), persistence: [] },
+    presets: { presets: [], setPresets: vi.fn(), activeId: null, setActiveId: vi.fn(), persistence: [] },
     workspace: emptyWorkspace(), dispatch: vi.fn(), settings: DEFAULT_SETTINGS, updateSettings: vi.fn(),
     generation: DEFAULT_GENERATION, updateGeneration: vi.fn(),
   };

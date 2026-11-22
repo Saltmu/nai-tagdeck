@@ -60,103 +60,13 @@ function sameTag(a: WorkspaceAction, b: WorkspaceAction): boolean {
   return a.id === b.id && a.target === b.target && a.category === b.category;
 }
 
-/** その項目が、履歴の戻し先で置き換える想定の値のままなら戻す。あとから手で変えた項目は残す。 */
-function extrasToApply(
-  change: ExtrasChange,
-  current: { characterNegativePrompt: string; generation: GenerationSettings },
-  direction: 'undo' | 'redo',
-): UndoExtras {
-  const extras: UndoExtras = {};
-  const from = direction === 'undo' ? change.after : change.before;
-  const to = direction === 'undo' ? change.before : change.after;
-  if (from.characterNegativePrompt !== undefined && current.characterNegativePrompt === from.characterNegativePrompt) {
-    extras.characterNegativePrompt = to.characterNegativePrompt;
-  }
-  if (from.generation && to.generation) {
-    const generation: Partial<GenerationSettings> = {};
-    for (const key of Object.keys(from.generation) as (keyof GenerationSettings)[]) {
-      const expected = from.generation[key];
-      const next = to.generation[key];
-      if (expected === undefined || next === undefined) continue;
-      if (Object.is(current.generation[key], expected)) generation[key] = next as never;
-    }
-    if (Object.keys(generation).length > 0) extras.generation = generation;
-  }
-  return extras;
-}
-
-/** 履歴の外で変えた項目は、以降の Undo / Redo で戻さない。 */
-function stripEdited(change: ExtrasChange | undefined, edited: UndoExtras): ExtrasChange | undefined {
-  if (!change) return undefined;
-  const before: UndoExtras = {
-    ...change.before,
-    generation: change.before.generation ? { ...change.before.generation } : undefined,
-  };
-  const after: UndoExtras = {
-    ...change.after,
-    generation: change.after.generation ? { ...change.after.generation } : undefined,
-  };
-  if (edited.characterNegativePrompt !== undefined) {
-    delete before.characterNegativePrompt;
-    delete after.characterNegativePrompt;
-  }
-  if (edited.generation) {
-    for (const key of Object.keys(edited.generation) as (keyof GenerationSettings)[]) {
-      delete before.generation?.[key];
-      delete after.generation?.[key];
-    }
-  }
-  if (before.generation && Object.keys(before.generation).length === 0) delete before.generation;
-  if (after.generation && Object.keys(after.generation).length === 0) delete after.generation;
-  if (
-    before.characterNegativePrompt === undefined &&
-    before.generation === undefined &&
-    after.characterNegativePrompt === undefined &&
-    after.generation === undefined
-  ) {
-    return undefined;
-  }
-  return { before, after };
-}
-
-/** Undo / Redo で実際に戻した項目だけを、反対側の履歴へ残す。 */
-function keptChange(change: ExtrasChange, applied: UndoExtras): ExtrasChange | undefined {
-  const before: UndoExtras = {};
-  const after: UndoExtras = {};
-  if (
-    applied.characterNegativePrompt !== undefined &&
-    change.before.characterNegativePrompt !== undefined &&
-    change.after.characterNegativePrompt !== undefined
-  ) {
-    before.characterNegativePrompt = change.before.characterNegativePrompt;
-    after.characterNegativePrompt = change.after.characterNegativePrompt;
-  }
-  if (applied.generation && change.before.generation && change.after.generation) {
-    const beforeGeneration: Partial<GenerationSettings> = {};
-    const afterGeneration: Partial<GenerationSettings> = {};
-    for (const key of Object.keys(applied.generation) as (keyof GenerationSettings)[]) {
-      const beforeValue = change.before.generation[key];
-      const afterValue = change.after.generation[key];
-      if (beforeValue === undefined || afterValue === undefined) continue;
-      beforeGeneration[key] = beforeValue as never;
-      afterGeneration[key] = afterValue as never;
-    }
-    if (Object.keys(afterGeneration).length > 0) {
-      before.generation = beforeGeneration;
-      after.generation = afterGeneration;
-    }
-  }
-  if (before.characterNegativePrompt === undefined && before.generation === undefined) return undefined;
-  return { before, after };
-}
-
 function freezeExtras(
   after: UndoExtras,
   current: { characterNegativePrompt: string; generation: GenerationSettings },
 ): ExtrasChange | undefined {
   const before: UndoExtras = {};
   const frozen: UndoExtras = {};
-  if (after.characterNegativePrompt !== undefined) {
+  if (after.characterNegativePrompt !== undefined && after.characterNegativePrompt !== current.characterNegativePrompt) {
     before.characterNegativePrompt = current.characterNegativePrompt;
     frozen.characterNegativePrompt = after.characterNegativePrompt;
   }
@@ -165,7 +75,7 @@ function freezeExtras(
     const afterGeneration: Partial<GenerationSettings> = {};
     for (const key of Object.keys(after.generation) as (keyof GenerationSettings)[]) {
       const value = after.generation[key];
-      if (value === undefined) continue;
+      if (value === undefined || Object.is(value, current.generation[key])) continue;
       beforeGeneration[key] = current.generation[key] as never;
       afterGeneration[key] = value as never;
     }
@@ -184,7 +94,8 @@ function freezeExtras(
  * 欄を離れる、または 3 秒空くと、そのまとまりは終わる。
  * テキスト入力中の Ctrl/Cmd+Z は入力欄に任せ、ダイアログ表示中は反応しない。
  * 永続化の読み込みなど、この dispatch を通らない置換は履歴を捨てる。
- * 第2引数で渡した共通キャラネガティブと生成設定は、そのステップだけ一緒に戻す。
+ * 第2引数で渡した共通キャラネガティブと生成設定は、適用時に変わった項目だけをそのステップの Undo / Redo で戻す。
+ * 生成設定や共通キャラネガティブの手入力は履歴に入らないため、Undo 時は適用前の値へ戻す。
  */
 export function useTagUndo(
   workspace: Workspace,
@@ -299,21 +210,15 @@ export function useTagUndo(
     const nextPast = pastRef.current.slice(0, -1);
     pastRef.current = nextPast;
     setPast(nextPast);
-    const undoSync = extrasSyncRef.current;
-    const undoPatch = step.extras && undoSync ? extrasToApply(step.extras, undoSync.capture(), 'undo') : undefined;
     const nextFuture = [
       ...futureRef.current,
-      {
-        state: current,
-        activePresetId: currentPresetId,
-        extras: step.extras && undoPatch ? keptChange(step.extras, undoPatch) : undefined,
-      },
+      { state: current, activePresetId: currentPresetId, extras: step.extras },
     ];
     futureRef.current = nextFuture;
     setFuture(nextFuture);
     lastActionRef.current = null;
     apply(step.before, step.activePresetId);
-    if (undoPatch && (undoPatch.characterNegativePrompt !== undefined || undoPatch.generation)) undoSync?.restore(undoPatch);
+    if (step.extras) extrasSyncRef.current?.restore(step.extras.before);
     setStatus(`元に戻しました。元に戻せる操作は残り ${nextPast.length} 件です。`);
   }, [apply]);
 
@@ -325,21 +230,15 @@ export function useTagUndo(
     const nextFuture = futureRef.current.slice(0, -1);
     futureRef.current = nextFuture;
     setFuture(nextFuture);
-    const redoSync = extrasSyncRef.current;
-    const redoPatch = step.extras && redoSync ? extrasToApply(step.extras, redoSync.capture(), 'redo') : undefined;
     const nextPast = [
       ...pastRef.current,
-      {
-        before: current,
-        activePresetId: currentPresetId,
-        extras: step.extras && redoPatch ? keptChange(step.extras, redoPatch) : undefined,
-      },
+      { before: current, activePresetId: currentPresetId, extras: step.extras },
     ];
     pastRef.current = nextPast;
     setPast(nextPast);
     lastActionRef.current = null;
     apply(step.state, step.activePresetId);
-    if (redoPatch && (redoPatch.characterNegativePrompt !== undefined || redoPatch.generation)) redoSync?.restore(redoPatch);
+    if (step.extras) extrasSyncRef.current?.restore(step.extras.after);
     setStatus(`やり直しました。やり直せる操作は残り ${nextFuture.length} 件です。`);
   }, [apply]);
 
@@ -374,23 +273,12 @@ export function useTagUndo(
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const forgetExternal = useCallback((edited: UndoExtras) => {
-    if (!pastRef.current.some((step) => step.extras) && !futureRef.current.some((step) => step.extras)) return;
-    const nextPast = pastRef.current.map((step) => ({ ...step, extras: stripEdited(step.extras, edited) }));
-    const nextFuture = futureRef.current.map((step) => ({ ...step, extras: stripEdited(step.extras, edited) }));
-    pastRef.current = nextPast;
-    futureRef.current = nextFuture;
-    setPast(nextPast);
-    setFuture(nextFuture);
-  }, []);
-
   const canUndo = past.length > 0;
   const canRedo = future.length > 0;
   return {
     dispatch: trackedDispatch,
     undo,
     redo,
-    forgetExternal,
     canUndo,
     canRedo,
     status,

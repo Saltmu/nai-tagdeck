@@ -35,7 +35,6 @@ const presets = {
   presets: [],
   persistence: [],
   setPresets: () => {},
-  commitPresets: async () => false,
   activeId: null,
   setActiveId: () => {},
 } satisfies PresetStore;

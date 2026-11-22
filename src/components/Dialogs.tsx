@@ -7,8 +7,6 @@ export interface DialogApi {
   alert: (message: string) => Promise<void>;
   /** ボタンを複数並べて選ばせる。キャンセル（Esc を含む）なら null。 */
   choose: <V extends string>(message: string, choices: readonly Choice<V>[], options?: ChooseOptions) => Promise<V | null>;
-  /** いま開いているダイアログをキャンセルとして閉じる。待ちがなければ何もしない。 */
-  dismiss: () => void;
 }
 
 export interface DialogLink {
@@ -25,6 +23,8 @@ export interface ChooseOptions {
   links?: readonly DialogLink[];
   /** 選択肢の下に小さく出す補足。 */
   note?: string;
+  /** 中断されたら、このダイアログだけをキャンセルとして閉じる。 */
+  signal?: AbortSignal;
 }
 
 export interface Choice<V extends string = string> {
@@ -43,13 +43,15 @@ export interface ConfirmOptions {
   danger?: boolean;
   /** 本文の下に、高さ制限つきで出す詳細。 */
   details?: string;
+  /** 中断されたら、このダイアログだけをキャンセルとして閉じる。 */
+  signal?: AbortSignal;
 }
 
 type Request = { id: number } & (
   | { kind: 'confirm'; message: string; okLabel?: string; danger?: boolean; details?: string; resolve: (v: boolean) => void }
   | { kind: 'prompt'; message: string; defaultValue: string; okLabel?: string; resolve: (v: string | null) => void }
   | { kind: 'alert'; message: string; resolve: () => void }
-  | ({ kind: 'choose'; message: string; choices: readonly Choice[]; resolve: (v: string | null) => void } & ChooseOptions)
+  | ({ kind: 'choose'; message: string; choices: readonly Choice[]; resolve: (v: string | null) => void } & Omit<ChooseOptions, 'signal'>)
 );
 type NewRequest = Request extends infer R ? (R extends Request ? Omit<R, 'id'> : never) : never;
 
@@ -65,44 +67,60 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   // 同時に複数出たときは順番に表示する
   const [queue, setQueue] = useState<Request[]>([]);
   const nextId = useRef(0);
-  const push = useCallback((req: NewRequest) => {
-    const id = ++nextId.current;
-    setQueue((q) => [...q, { ...req, id } as Request]);
-  }, []);
+  const enqueue = useCallback(
+    <R,>(make: (resolve: (value: R) => void) => NewRequest, cancelledValue: R, signal?: AbortSignal): Promise<R> => {
+      if (signal?.aborted) return Promise.resolve(cancelledValue);
+      return new Promise<R>((resolve) => {
+        let done = false;
+        const id = ++nextId.current;
+        const onAbort = () => {
+          if (done) return;
+          done = true;
+          signal?.removeEventListener('abort', onAbort);
+          setQueue((q) => q.filter((item) => item.id !== id));
+          resolve(cancelledValue);
+        };
+        const settle = (value: R) => {
+          if (done) return;
+          done = true;
+          signal?.removeEventListener('abort', onAbort);
+          resolve(value);
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+        setQueue((q) => [...q, { ...make(settle), id } as Request]);
+      });
+    },
+    [],
+  );
 
   const api = useMemo<DialogApi>(
     () => ({
-      confirm: (message, options) =>
-        new Promise((resolve) => push({ kind: 'confirm', message, ...options, resolve })),
+      confirm: (message, options) => {
+        const { signal, ...rest } = options ?? {};
+        return enqueue((resolve) => ({ kind: 'confirm', message, ...rest, resolve }), false, signal);
+      },
       prompt: (message, defaultValue = '', options) =>
-        new Promise((resolve) => push({ kind: 'prompt', message, defaultValue, ...options, resolve })),
-      alert: (message) => new Promise((resolve) => push({ kind: 'alert', message, resolve })),
-      choose: <V extends string>(message: string, choices: readonly Choice<V>[], options?: ChooseOptions) =>
-        new Promise<V | null>((resolve) =>
-          push({ kind: 'choose', message, choices, ...options, resolve: resolve as (v: string | null) => void }),
-        ),
-      dismiss: () => {
-        setQueue((q) => {
-          const current = q[0];
-          if (!current) return q;
-          if (current.kind === 'confirm') current.resolve(false);
-          else if (current.kind === 'prompt') current.resolve(null);
-          else if (current.kind === 'choose') current.resolve(null);
-          else current.resolve();
-          return q.slice(1);
-        });
+        enqueue<string | null>((resolve) => ({ kind: 'prompt', message, defaultValue, ...options, resolve }), null),
+      alert: (message) => enqueue<void>((resolve) => ({ kind: 'alert', message, resolve }), undefined),
+      choose: <V extends string>(message: string, choices: readonly Choice<V>[], options?: ChooseOptions) => {
+        const { signal, ...rest } = options ?? {};
+        return enqueue<V | null>(
+          (resolve) => ({ kind: 'choose', message, choices, ...rest, resolve: resolve as (v: string | null) => void }),
+          null,
+          signal,
+        );
       },
     }),
-    [push],
+    [enqueue],
   );
 
   const current = queue[0];
-  const finish = useCallback(() => setQueue((q) => q.slice(1)), []);
+  const finish = useCallback((id: number) => setQueue((q) => q.filter((item) => item.id !== id)), []);
 
   return (
     <DialogContext.Provider value={api}>
       {children}
-      {current && <AppDialog key={current.id} request={current} onDone={finish} />}
+      {current && <AppDialog key={current.id} request={current} onDone={() => finish(current.id)} />}
     </DialogContext.Provider>
   );
 }

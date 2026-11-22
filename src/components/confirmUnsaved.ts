@@ -9,18 +9,22 @@ export type UnsavedChoice = 'proceed' | 'save';
  */
 export async function confirmUnsavedChanges(
   dialogs: DialogApi,
-  options: { dirty: boolean; activeName: string | null; action: string; okLabel: string },
+  options: { dirty: boolean; activeName: string | null; action: string; okLabel: string; signal?: AbortSignal },
 ): Promise<UnsavedChoice | null> {
-  const { dirty, activeName, action, okLabel } = options;
+  const { dirty, activeName, action, okLabel, signal } = options;
   if (!dirty) return 'proceed';
   if (!activeName) {
-    const ok = await dialogs.confirm(`今のタグはプリセットに保存されていません。${action}`, { okLabel });
+    const ok = await dialogs.confirm(`今のタグはプリセットに保存されていません。${action}`, { okLabel, signal });
     return ok ? 'proceed' : null;
   }
-  const choice = await dialogs.choose(`プリセット「${activeName}」に変更が反映されていません。${action}`, [
-    { value: 'discard', label: `反映せずに${okLabel}` },
-    { value: 'save', label: `変更を反映してから${okLabel}`, primary: true },
-  ]);
+  const choice = await dialogs.choose(
+    `プリセット「${activeName}」に変更が反映されていません。${action}`,
+    [
+      { value: 'discard', label: `反映せずに${okLabel}` },
+      { value: 'save', label: `変更を反映してから${okLabel}`, primary: true },
+    ],
+    { signal },
+  );
   if (choice === 'save') return 'save';
   if (choice === 'discard') return 'proceed';
   return null;

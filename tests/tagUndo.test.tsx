@@ -357,52 +357,29 @@ it('restores character negative and generation only on the import step', async (
   await act(async () => root.render(<ExtrasHarness initial={ws} />));
   await run(() => api.dispatch(
     { type: 'replace', workspace: emptyWorkspace() },
-    { characterNegativePrompt: 'lowres', generation: { steps: 28, seed: 42 } },
+    { characterNegativePrompt: 'lowres', generation: { steps: 28 } },
   ));
   expect(ws.base.appearance).toEqual([]);
   expect(characterNegativePrompt).toBe('lowres');
-  expect(generation).toMatchObject({ steps: 28, seed: 42 });
+  expect(generation).toMatchObject({ steps: 28, seed: 11 });
 
   await run(() => api.dispatch({ type: 'add', target: BASE, category: 'appearance', tag: 'hat', weight: 1 }));
-  generation = { ...generation, seed: 11 };
+  // 適用で触っていない項目（seed）への手入力は Undo でも残る。
+  generation = { ...generation, seed: 99 };
   await run(() => api.undo());
   expect(ws.base.appearance.map((tag) => tag.tag)).toEqual([]);
-  expect(generation).toMatchObject({ steps: 28, seed: 11 });
+  expect(generation).toMatchObject({ steps: 28, seed: 99 });
   expect(characterNegativePrompt).toBe('lowres');
 
   await run(() => api.undo());
   expect(names()).toEqual(['a', 'b', 'c', 'd']);
-  expect(generation).toMatchObject({ steps: 19, seed: 11 });
+  expect(generation).toMatchObject({ steps: 19, seed: 99 });
   expect(characterNegativePrompt).toBe('blurry');
 
   await run(() => api.redo());
   expect(ws.base.appearance).toEqual([]);
-  expect(generation).toMatchObject({ steps: 28, seed: 11 });
+  expect(generation).toMatchObject({ steps: 28, seed: 99 });
   expect(characterNegativePrompt).toBe('lowres');
-});
-
-it('keeps a manual generation value that matches an earlier import', async () => {
-  let generation: GenerationSettings = { ...DEFAULT_GENERATION, steps: 19 };
-  const sync: UndoExtrasSync = {
-    capture: () => ({ characterNegativePrompt: '', generation: { ...generation } }),
-    restore: (extras: UndoExtras) => {
-      if (extras.generation) generation = { ...generation, ...extras.generation };
-    },
-  };
-  function ExtrasHarness({ initial }: { initial: Workspace }) {
-    const [workspace, dispatch] = useReducer(workspaceReducer, initial);
-    ws = workspace;
-    api = useTagUndo(workspace, dispatch, undefined, sync);
-    return null;
-  }
-  await act(async () => root.render(<ExtrasHarness initial={ws} />));
-  await run(() => api.dispatch({ type: 'replace', workspace: emptyWorkspace() }, { generation: { steps: 28 } }));
-  await run(() => api.dispatch({ type: 'replace', workspace: emptyWorkspace() }, { generation: { steps: 23 } }));
-  generation = { ...generation, steps: 28 };
-  await run(() => api.forgetExternal({ generation: { steps: 28 } }));
-  await run(() => api.undo());
-  await run(() => api.undo());
-  expect(generation.steps).toBe(28);
 });
 
 it('does not record an action that changes nothing', async () => {

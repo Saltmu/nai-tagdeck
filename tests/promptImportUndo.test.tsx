@@ -3,8 +3,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import App from '../src/App';
-import { DialogProvider } from '../src/components/Dialogs';
-import { toBackupJSON, type Backup } from '../src/lib/backup';
+import { DialogProvider, useDialogs, type DialogApi } from '../src/components/Dialogs';
+import { toBackupJSON } from '../src/lib/backup';
 import { getKV, listEntries, replaceAllEntries, setKV } from '../src/lib/db';
 import { normalizeGeneration } from '../src/lib/generation';
 import { createPreset } from '../src/lib/presets';
@@ -26,6 +26,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 let container: HTMLDivElement;
 let root: Root;
+let dialogApi: DialogApi;
 const dialogMethods = ['showModal', 'close'] as const;
 const originalDialogMethods = dialogMethods.map((name) => Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, name));
 const imageBytes = pngFixture({
@@ -37,6 +38,11 @@ const preset = createPreset('基本', normalizeWorkspace({
   base: { quality: [{ tag: 'saved-tag', enabled: true, weight: 1 }] },
   negative: [{ tag: 'old negative', enabled: true, weight: 1 }],
 }));
+
+function DialogSpy() {
+  dialogApi = useDialogs();
+  return null;
+}
 
 function imageFile(): File {
   const file = new File([imageBytes], 'image.png', { type: 'image/png' });
@@ -58,20 +64,6 @@ const openBase = () => click(container.querySelector<HTMLButtonElement>('.editor
 const openNegative = () => click(container.querySelector<HTMLButtonElement>('.editor-tab-negative')!);
 const chooseDialog = () => Array.from(container.querySelectorAll('dialog'))
   .find((dialog) => dialog.textContent?.includes('変更が反映されていません'));
-
-async function importBackup(data: Backup) {
-  await click(button('設定'));
-  const input = container.querySelector<HTMLInputElement>('input[accept*="json"]');
-  if (!input) throw new Error('バックアップの入力がありません');
-  const file = new File([toBackupJSON(data)], 'backup.json', { type: 'application/json' });
-  await act(async () => {
-    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-  const confirm = container.querySelector('dialog.app-dialog-confirm');
-  if (!confirm) throw new Error('バックアップ確認がありません');
-  await click(button('読み込む', confirm));
-}
 
 async function dropImport() {
   const target = container.querySelector('.png-drop-zone')!;
@@ -107,7 +99,7 @@ beforeEach(async () => {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
-  await act(async () => root.render(<DialogProvider><App onResetAll={() => {}} /></DialogProvider>));
+  await act(async () => root.render(<DialogProvider><DialogSpy /><App onResetAll={() => {}} /></DialogProvider>));
   await click(button('編集'));
 });
 
@@ -198,7 +190,7 @@ it('confirms when a PNG would replace an edited negative that the active preset 
     activePreset: legacy.id,
   })[key as 'workspace'] as never);
   root = createRoot(container);
-  await act(async () => root.render(<DialogProvider><App onResetAll={() => {}} /></DialogProvider>));
+  await act(async () => root.render(<DialogProvider><DialogSpy /><App onResetAll={() => {}} /></DialogProvider>));
   await click(button('編集'));
   expect(container.textContent).not.toContain('変更あり');
 
@@ -212,111 +204,26 @@ it('confirms when a PNG would replace an edited negative that the active preset 
   expect(container.textContent).toContain('custom neg');
 });
 
-it('does not apply a PNG after saving fails while the confirmation is open', async () => {
+it('cancels only the PNG confirmation when saving fails and leaves another queued dialog open', async () => {
+  let otherResolved = false;
   await click(button('existing を削除'));
   const dialog = await dropImport();
+  await act(async () => {
+    void dialogApi.confirm('別の確認').then(() => { otherResolved = true; });
+  });
   await click(button('適用', dialog));
-  expect(chooseDialog()?.textContent).toContain('変更が反映されていません');
   vi.mocked(setKV).mockRejectedValue(new Error('disk'));
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 400)); });
   expect(container.textContent).toContain('保存できません');
   expect(container.querySelector('.prompt-import-dialog')).toBeNull();
   expect(chooseDialog()).toBeUndefined();
+  expect(otherResolved).toBe(false);
+  expect(container.querySelector('dialog.app-dialog-confirm')?.textContent).toContain('別の確認');
   expect(preview()).toBe('ONのタグがありません');
   expect(field('steps')?.value).toBe('19');
 });
 
-function setInputValue(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-  setter?.call(input, value);
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
-it('keeps a normalized step entry on the PNG undo history', async () => {
-  const dialog = await dropImport();
-  await click(button('適用', dialog));
-  await click(button('反映せずに適用', chooseDialog()!));
-  const steps = field('steps');
-  if (!(steps instanceof HTMLInputElement)) throw new Error('ステップがありません');
-  expect(steps.value).toBe('28');
-  await act(async () => {
-    steps.focus();
-    steps.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-  });
-  await act(async () => { setInputValue(steps, '29'); });
-  await act(async () => {
-    steps.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
-  });
-  expect(field('steps')?.value).toBe('28');
-  await click(button('元に戻す'));
-  expect(preview()).toBe('existing');
-  expect(field('steps')?.value).toBe('19');
-});
-
-it('keeps the saved preset on screen when applying the PNG is cancelled', async () => {
-  let releasePreset: (() => void) | undefined;
-  let rejectWorkspace: ((error: Error) => void) | undefined;
-  vi.mocked(setKV).mockImplementation((key: string) => {
-    if (key === 'presets') {
-      return new Promise((resolve) => { releasePreset = () => resolve(); });
-    }
-    if (key === 'workspace') return new Promise((_, reject) => { rejectWorkspace = reject; });
-    return Promise.resolve();
-  });
-  await click(button('existing を削除'));
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 400)); });
-  if (!rejectWorkspace) throw new Error('作業状態の保存が始まっていません');
-  const dialog = await dropImport();
-  await click(button('適用', dialog));
-  await act(async () => {
-    button('変更を反映してから適用', chooseDialog()!).click();
-    for (let i = 0; i < 50 && !releasePreset; i += 1) await Promise.resolve();
-    rejectWorkspace?.(new Error('disk'));
-    await act(async () => {});
-    releasePreset?.();
-  });
-  expect(preview()).toBe('ONのタグがありません');
-  expect(container.textContent).not.toContain('変更あり');
-  expect(container.textContent).toContain('保存できません');
-  expect(container.textContent).not.toContain('standing');
-});
-
-it('reports a failed preset overwrite when the earlier preset edit is still saved', async () => {
-  await click(button('名前変更'));
-  const name = container.querySelector<HTMLInputElement>('input.app-dialog-input');
-  if (!name) throw new Error('名前の入力がありません');
-  await act(async () => { setInputValue(name, '別名'); });
-  await click(button('変更', name.closest('dialog')!));
-  let presetWrites = 0;
-  vi.mocked(setKV).mockImplementation(async (key: string) => {
-    if (key !== 'presets') return;
-    presetWrites += 1;
-    if (presetWrites === 1) throw new Error('preset-disk');
-  });
-  const dialog = await dropImport();
-  await click(button('適用', dialog));
-  await click(button('変更を反映してから適用', chooseDialog()!));
-  expect(container.querySelector('.toast')?.textContent).toContain('プリセットに変更を保存できませんでした');
-  expect(preview()).toBe('existing');
-  expect((container.querySelector('.preset-search input') as HTMLInputElement).value).toBe('別名');
-});
-
-it('does not replace the workspace when the preset save fails', async () => {
-  const dialog = await dropImport();
-  await click(button('適用', dialog));
-  vi.mocked(setKV).mockImplementation(async (key: string) => {
-    if (key === 'presets') throw new Error('preset-disk');
-  });
-  await click(button('変更を反映してから適用', chooseDialog()!));
-  expect(preview()).toBe('existing');
-  expect(container.textContent).toContain('保存できません');
-  expect(container.querySelector('.toast')?.textContent ?? '').not.toContain('上書き');
-  expect(container.querySelector('.prompt-import-dialog')).toBeNull();
-  expect(setKV).toHaveBeenCalledWith('presets', expect.anything());
-  expect(vi.mocked(setKV).mock.calls.some(([key, saved]) => key === 'workspace' && JSON.stringify(saved).includes('standing'))).toBe(false);
-});
-
-it('asks again when a backup lands while the PNG confirmation is open', async () => {
+it('aborts applying and returns to preview when a backup finishes while the confirmation is open', async () => {
   let release!: () => void;
   vi.mocked(replaceAllEntries).mockImplementation(() => new Promise<void>((resolve) => { release = resolve; }));
   const added = createPreset('追加', normalizeWorkspace({
@@ -347,9 +254,14 @@ it('asks again when a backup lands while the PNG confirmation is open', async ()
   expect(preview()).toBe('backup-tag');
 
   await click(button('変更を反映してから適用', chooseDialog()!));
-  const again = container.querySelector('dialog.app-dialog-confirm');
-  expect(again?.textContent).toContain('今のタグはプリセットに保存されていません');
-  await click(button('適用', again!));
+  expect(container.querySelector('.toast')?.textContent).toContain('適用を中止しました');
+  expect(preview()).toBe('backup-tag');
+  expect((container.querySelector('.prompt-import-dialog') as HTMLDialogElement | null)?.open).toBe(true);
+
+  await click(button('適用', container.querySelector('.prompt-import-dialog')!));
+  const confirm = container.querySelector('dialog.app-dialog-confirm');
+  expect(confirm?.textContent).toContain('今のタグはプリセットに保存されていません');
+  await click(button('適用', confirm!));
   expect(preview()).toBe('standing');
   const search = container.querySelector<HTMLInputElement>('.preset-search input');
   if (!search) throw new Error('プリセット検索がありません');
@@ -357,25 +269,38 @@ it('asks again when a backup lands while the PNG confirmation is open', async ()
   expect(container.textContent).toContain('追加');
 });
 
-it('keeps a shared character negative that a later backup set to the same value', async () => {
-  const dialog = await dropImport();
-  await click(button('適用', dialog));
-  await click(button('反映せずに適用', chooseDialog()!));
-  await importBackup({
-    dictionary: [],
-    presets: [preset],
-    workspace: normalizeWorkspace({ base: { quality: [{ tag: 'backup-tag' }] } }),
-    settings: { ...DEFAULT_SETTINGS, characterNegativePrompt: 'imported neg' },
-    generation: normalizeGeneration({ steps: 28, seed: 42, size: 'square' }),
+it('aborts applying and uses the updated preview when the dictionary changes while the confirmation is open', async () => {
+  let release!: () => void;
+  vi.mocked(replaceAllEntries).mockImplementation(() => new Promise<void>((resolve) => { release = resolve; }));
+  await click(container.querySelector<HTMLButtonElement>('.tab-dictionary')!);
+  const input = container.querySelector<HTMLInputElement>('input[accept*="csv"]');
+  if (!input) throw new Error('辞書の入力がありません');
+  const file = new File(['tag,category\ngirl,appearance\n'], 'dict.csv', { type: 'text/csv' });
+  Object.defineProperty(file, 'text', { value: async () => 'tag,category\ngirl,appearance\n' });
+  await act(async () => {
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  expect(preview()).toBe('backup-tag');
+  await click(button('追加・上書き'));
+  if (!release) throw new Error('辞書の保存が始まっていません');
+
   await click(button('編集'));
-  await click(button('元に戻す'));
-  expect(preview()).toBe('standing');
-  await click(button('元に戻す'));
+  const dialog = await dropImport();
+  expect(dialog.textContent).toContain('キャラ1　1件（未分類 1件）');
+  await click(button('適用', dialog));
+  await act(async () => { release(); });
+  expect(container.querySelector('.prompt-import-dialog')?.textContent).toContain('外見 1件');
+
+  await click(button('反映せずに適用', chooseDialog()!));
+  expect(container.querySelector('.toast')?.textContent).toContain('適用を中止しました');
   expect(preview()).toBe('existing');
-  await openNegative();
-  expect(field('character-text')?.value).toBe('imported neg');
+
+  await click(button('適用', container.querySelector('.prompt-import-dialog')!));
+  await click(button('反映せずに適用', chooseDialog()!));
+  expect(preview()).toBe('standing');
+  await click(container.querySelectorAll<HTMLButtonElement>('.editor-tablist [role="tab"]')[1]!);
+  expect(container.querySelector('select[aria-label="girl の移動先カテゴリ"]')).toBeNull();
+  expect(container.textContent).toContain('girl');
 });
 
 it('saves the current preset before applying the image prompt', async () => {
