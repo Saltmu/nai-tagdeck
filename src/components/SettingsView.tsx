@@ -49,7 +49,7 @@ export function SettingsView({ token, notify, getBackup, onImportBackup, onReset
                 <li>ネガティブプロンプトは専用の編集タブでタグとして編集できます。</li>
                 <li>生成画面で生成設定を確認して画像を生成します。生成にはこの画面の「トークン」設定が必要です。</li>
                 <li>気に入った組み合わせは、編集画面の「新しいプリセットとして保存」で名前を付けて残せます。プリセットを読み込んだ後の変更は「変更を上書き」で反映できます。</li>
-                <li>生成した画像は「PNGをダウンロード」で端末に保存します。</li>
+                <li>生成した画像は「PNGをダウンロード」または「ZIPで保存」で端末に保存します。保存できたと答えた画像だけが、未ダウンロードの ZIP から外れます。ピン留めした画像は、履歴の上限では後から削除されます。削除するときは、保存できた画像を先に、同じ条件なら古い画像から削除します。</li>
               </ol>
             </div>
           </details>
@@ -57,7 +57,7 @@ export function SettingsView({ token, notify, getBackup, onImportBackup, onReset
             <summary>自動保存の補足</summary>
             <div className="accordion-body">
               <p className="hint">作業内容はこのブラウザに自動保存され、次回も続きから編集できます。</p>
-              <p className="hint">生成画像は自動保存されません。「PNGをダウンロード」で端末に残してください。</p>
+              <p className="hint">生成画像は自動保存されません。必要な画像はダウンロードしてください。ピン留めは、タブを閉じるまでの保護です。</p>
               <p className="hint">辞書・プリセット・作業内容・設定を別の端末やサイトに移すときは、下の「バックアップを書き出す」を使います。</p>
             </div>
           </details>

@@ -42,7 +42,25 @@ const renderHook = async (options?: UseImagesOptions) => {
   });
 };
 
+const stubDialog = () => {
+  const prototype = HTMLDialogElement.prototype;
+  const originals = ['showModal', 'close'].map((name) => [name, Object.getOwnPropertyDescriptor(prototype, name)] as const);
+  Object.defineProperties(prototype, {
+    showModal: { configurable: true, value: function (this: HTMLDialogElement) { this.open = true; } },
+    close: { configurable: true, value: function (this: HTMLDialogElement) { this.open = false; } },
+  });
+  return () => {
+    for (const [name, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(prototype, name, descriptor);
+      else Reflect.deleteProperty(prototype, name);
+    }
+  };
+};
+
+let restoreDialog: (() => void) | undefined;
+
 beforeEach(() => {
+  restoreDialog = stubDialog();
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -62,6 +80,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  restoreDialog?.();
   vi.restoreAllMocks();
 });
 
@@ -160,7 +179,7 @@ it('keeps beforeunload protection even after markDownloaded until all images are
 });
 
 it('reuses existing image.url on Gallery download, renders thumbUrl for older thumbnails, and shows eviction notice', async () => {
-  const onDownloaded = vi.fn();
+  const onSaveConfirmed = vi.fn();
   const onDismissEviction = vi.fn();
   const images = [
     {
@@ -169,6 +188,7 @@ it('reuses existing image.url on Gallery download, renders thumbUrl for older th
       url: 'blob:full-2',
       thumbUrl: 'blob:thumb-2',
       downloaded: false,
+      pinned: false,
     },
     {
       ...makeNewImage(1, 128, 1024, 1024),
@@ -176,6 +196,7 @@ it('reuses existing image.url on Gallery download, renders thumbUrl for older th
       url: 'blob:full-1',
       thumbUrl: 'blob:thumb-1',
       downloaded: false,
+      pinned: false,
     },
   ];
 
@@ -193,7 +214,8 @@ it('reuses existing image.url on Gallery download, renders thumbUrl for older th
           onRemove={vi.fn()}
           onClear={vi.fn()}
           onUseSeed={vi.fn()}
-          onDownloaded={onDownloaded}
+          onSaveConfirmed={onSaveConfirmed}
+          onTogglePin={vi.fn()}
           onReadPng={vi.fn()}
         />
       </DialogProvider>,
@@ -217,5 +239,69 @@ it('reuses existing image.url on Gallery download, renders thumbUrl for older th
 
   expect(createdUrls).toEqual([]);
   expect(anchorClick).toHaveBeenCalledOnce();
-  expect(onDownloaded).toHaveBeenCalledWith('new-2');
+  expect(onSaveConfirmed).not.toHaveBeenCalled();
+  await act(async () => {
+    (container.querySelector('button.btn-primary') as HTMLButtonElement).click();
+  });
+  expect(onSaveConfirmed).toHaveBeenCalledWith('new-2');
+});
+
+it('keeps a pinned image when a newer unpinned image would otherwise be the one retained', async () => {
+  await renderHook({ limits: { maxCount: 2, maxBytes: 1000 } });
+  await act(async () => {
+    store.add([makeNewImage(1)]);
+  });
+  const pinnedId = store.images[0]!.id;
+  await act(async () => {
+    store.togglePinned(pinnedId);
+  });
+  expect(store.images[0]!.pinned).toBe(true);
+  await act(async () => {
+    store.add([makeNewImage(2)]);
+  });
+  await act(async () => {
+    store.add([makeNewImage(3)]);
+  });
+  expect(store.images.map((img) => img.seed)).toEqual([3, 1]);
+  expect(store.images.find((img) => img.seed === 1)!.pinned).toBe(true);
+});
+
+it('drops a confirmed save before an older unconfirmed image when the history is over the limit', async () => {
+  await renderHook({ limits: { maxCount: 2, maxBytes: 1000 } });
+  await act(async () => {
+    store.add([makeNewImage(1)]);
+  });
+  await act(async () => {
+    store.add([makeNewImage(2)]);
+  });
+  const savedId = store.images.find((img) => img.seed === 2)!.id;
+  await act(async () => {
+    store.markSaved(savedId);
+  });
+  await act(async () => {
+    store.add([makeNewImage(3)]);
+  });
+  expect(store.images.map((img) => img.seed)).toEqual([3, 1]);
+});
+
+it('keeps a new image when the history is already full of pinned images', async () => {
+  await renderHook({ limits: { maxCount: 2, maxBytes: 1000 } });
+  await act(async () => {
+    store.add([makeNewImage(1)]);
+  });
+  await act(async () => {
+    store.togglePinned(store.images[0]!.id);
+  });
+  await act(async () => {
+    store.add([makeNewImage(2)]);
+  });
+  await act(async () => {
+    store.togglePinned(store.images[0]!.id);
+  });
+  await act(async () => {
+    store.add([makeNewImage(3)]);
+  });
+  expect(store.images.map((img) => img.seed)).toEqual([3, 2]);
+  expect(store.images.find((img) => img.seed === 3)!.pinned).toBe(false);
+  expect(store.images.find((img) => img.seed === 2)!.pinned).toBe(true);
 });

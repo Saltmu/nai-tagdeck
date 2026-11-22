@@ -10,10 +10,17 @@
 }
 
 /* 最新の1枚は全幅で大きく。縦長でも画面からはみ出さないよう幅を縦横比で抑える */
-.thumbs > .thumb:first-child {
+.thumbs > .thumb:first-child,
+.thumbs > .thumb-frame:first-child {
   grid-column: 1 / -1;
   justify-self: center;
   width: min(100%, calc((100dvh - 15rem) * var(--ar, 1)));
+}
+
+.thumb-frame {
+  position: relative;
+  container-type: inline-size;
+  min-width: 0;
 }
 
 .thumb {
@@ -21,6 +28,11 @@
   overflow: hidden;
   border-radius: 8px;
   background: var(--surface-2);
+}
+
+.thumb-frame .thumb {
+  width: 100%;
+  aspect-ratio: var(--ar);
 }
 
 .thumb-btn {
@@ -40,21 +52,64 @@
   object-fit: cover;
 }
 
-.thumb-download {
+.gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.thumb.is-pinned {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.thumb-actions {
+  position: absolute;
+  z-index: 1;
+  top: 0.4rem;
+  left: 0.4rem;
+  right: 0.4rem;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.thumb-download,
+.thumb-pin {
   color: var(--overlay-text);
   background: var(--overlay-bg);
   border-color: var(--overlay-border);
-  position: absolute;
-  top: 0.4rem;
-  right: 0.4rem;
+  position: static;
   width: 44px;
   min-height: 44px;
   padding: 0;
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+  pointer-events: auto;
 }
 
-.thumb-download:hover:not(:disabled) {
+/* 幅がボタン2つ分より狭いときは、はみ出すプレビューの外へ出す。 */
+@container (max-width: 7.5rem) {
+  .thumb-actions {
+    position: static;
+    margin-top: 0.25rem;
+    justify-content: flex-end;
+    gap: 0.25rem;
+  }
+}
+
+.thumb-download:hover:not(:disabled),
+.thumb-pin:hover:not(:disabled) {
   background: var(--overlay-bg-hover);
+}
+
+.thumb-pin.is-pinned {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.thumb-pin.is-pinned:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 .thumb-download.is-downloaded {

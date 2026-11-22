@@ -282,7 +282,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onRemove={imageStore.remove}
               onClear={imageStore.clear}
               onUseSeed={applySeed}
-              onDownloaded={imageStore.markDownloaded}
+              onSaveConfirmed={imageStore.markSaved}
+              onTogglePin={imageStore.togglePinned}
               onPickPng={pickPng}
               onReadPng={openPromptImport}
             />

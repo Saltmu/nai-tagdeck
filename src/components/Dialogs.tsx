@@ -41,10 +41,12 @@ export interface ConfirmOptions {
   danger?: boolean;
   /** 本文の下に、高さ制限つきで出す詳細。 */
   details?: string;
+  /** 開いた直後のフォーカス。キーリピートで肯定ボタンが押されないようにするとき cancel。 */
+  initialFocus?: 'ok' | 'cancel';
 }
 
 type Request = { id: number } & (
-  | { kind: 'confirm'; message: string; okLabel?: string; danger?: boolean; details?: string; resolve: (v: boolean) => void }
+  | { kind: 'confirm'; message: string; okLabel?: string; danger?: boolean; details?: string; initialFocus?: 'ok' | 'cancel'; resolve: (v: boolean) => void }
   | { kind: 'prompt'; message: string; defaultValue: string; okLabel?: string; resolve: (v: string | null) => void }
   | { kind: 'alert'; message: string; resolve: () => void }
   | ({ kind: 'choose'; message: string; choices: readonly Choice[]; resolve: (v: string | null) => void } & ChooseOptions)
@@ -133,7 +135,7 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
       if (element) {
         setScrollable(element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth);
       }
-      (request.danger ? cancel.current : primary.current)?.focus({ preventScroll: true });
+      (request.danger || request.initialFocus === 'cancel' ? cancel.current : primary.current)?.focus({ preventScroll: true });
       resetScroll();
       const frame = requestAnimationFrame(resetScroll);
       return () => cancelAnimationFrame(frame);
