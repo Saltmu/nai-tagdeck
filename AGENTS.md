@@ -2,6 +2,8 @@
 
 NovelAI Diffusion V5 向けのタグ編集・画像生成アプリ。React / TypeScript / Vite で構成し、ビルド成果物を静的配信する。使い方、ローカルでの起動、公開手順は [README.md](README.md) を参照する。
 
+コード変更を伴う実装・修正依頼では、[issue-implementation スキル](.agents/skills/issue-implementation/SKILL.md) に従う。
+
 ## 変更箇所を探す
 
 | 対象 | 主なファイル |
