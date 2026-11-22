@@ -357,31 +357,27 @@ it('restores character negative and generation only on the import step', async (
   await act(async () => root.render(<ExtrasHarness initial={ws} />));
   await run(() => api.dispatch(
     { type: 'replace', workspace: emptyWorkspace() },
-    { characterNegativePrompt: 'lowres', generation: { steps: 28 } },
+    { characterNegativePrompt: 'lowres', generation: { steps: 28, seed: 42 } },
   ));
   expect(ws.base.appearance).toEqual([]);
   expect(characterNegativePrompt).toBe('lowres');
-  expect(generation.steps).toBe(28);
-  expect(generation.seed).toBe(11);
+  expect(generation).toMatchObject({ steps: 28, seed: 42 });
 
   await run(() => api.dispatch({ type: 'add', target: BASE, category: 'appearance', tag: 'hat', weight: 1 }));
   generation = { ...generation, seed: 99 };
   await run(() => api.undo());
   expect(ws.base.appearance.map((tag) => tag.tag)).toEqual([]);
-  expect(generation.steps).toBe(28);
-  expect(generation.seed).toBe(99);
+  expect(generation).toMatchObject({ steps: 28, seed: 99 });
   expect(characterNegativePrompt).toBe('lowres');
 
   await run(() => api.undo());
   expect(names()).toEqual(['a', 'b', 'c', 'd']);
-  expect(generation.steps).toBe(19);
-  expect(generation.seed).toBe(99);
+  expect(generation).toMatchObject({ steps: 19, seed: 99 });
   expect(characterNegativePrompt).toBe('blurry');
 
   await run(() => api.redo());
   expect(ws.base.appearance).toEqual([]);
-  expect(generation.steps).toBe(28);
-  expect(generation.seed).toBe(99);
+  expect(generation).toMatchObject({ steps: 28, seed: 99 });
   expect(characterNegativePrompt).toBe('lowres');
 });
 

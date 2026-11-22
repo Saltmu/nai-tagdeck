@@ -38,11 +38,18 @@ export function PromptImportDialog({ source, entries, onCancel, onApply }: Props
   const [read, setRead] = useState<ImportState | null>(null);
   const [applyGeneration, setApplyGeneration] = useState(false);
   const [busy, setBusy] = useState(false);
+  const applyButton = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef(false);
 
   useEffect(() => {
     const element = dialog.current;
     if (element && !element.open) element.showModal();
   }, []);
+  useEffect(() => {
+    if (busy || !returnFocus.current) return;
+    returnFocus.current = false;
+    applyButton.current?.focus();
+  }, [busy]);
   useEffect(() => {
     let current = true;
     void readPromptImport(source.blob, entries).then(
@@ -71,7 +78,10 @@ export function PromptImportDialog({ source, entries, onCancel, onApply }: Props
       try {
         const applied = await onApply(result, settingsAvailable && applyGeneration);
         if (applied) dialog.current?.close();
-        else setBusy(false);
+        else {
+          returnFocus.current = true;
+          setBusy(false);
+        }
       } catch (cause) {
         setBusy(false);
         throw cause;
@@ -128,7 +138,7 @@ export function PromptImportDialog({ source, entries, onCancel, onApply }: Props
       <div className="app-dialog-actions">
         <button type="button" className="btn" onClick={cancel} disabled={busy} autoFocus>{error ? '閉じる' : 'キャンセル'}</button>
         {result && (
-          <button type="button" className="btn btn-primary" onClick={apply} disabled={busy}>
+          <button ref={applyButton} type="button" className="btn btn-primary" onClick={apply} disabled={busy}>
             適用
           </button>
         )}

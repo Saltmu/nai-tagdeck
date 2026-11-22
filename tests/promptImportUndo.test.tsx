@@ -115,6 +115,7 @@ it('asks before replacing unsaved preset edits and undoes the imported settings 
   expect(confirm?.textContent).toContain('共通のキャラ用ネガティブと生成設定も更新します');
   await click(button('キャンセル', confirm!));
   expect(preview()).toBe('existing');
+  expect(document.activeElement).toBe(button('適用', container.querySelector('.prompt-import-dialog')!));
   expect((container.querySelector('.prompt-import-dialog') as HTMLDialogElement | null)?.open).toBe(true);
 
   await click(button('適用', container.querySelector('.prompt-import-dialog')!));

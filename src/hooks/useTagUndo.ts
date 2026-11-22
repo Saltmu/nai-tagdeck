@@ -60,6 +60,31 @@ function sameTag(a: WorkspaceAction, b: WorkspaceAction): boolean {
   return a.id === b.id && a.target === b.target && a.category === b.category;
 }
 
+/** その項目が、履歴の戻し先で置き換える想定の値のままなら戻す。あとから手で変えた項目は残す。 */
+function extrasToApply(
+  change: ExtrasChange,
+  current: { characterNegativePrompt: string; generation: GenerationSettings },
+  direction: 'undo' | 'redo',
+): UndoExtras {
+  const extras: UndoExtras = {};
+  const from = direction === 'undo' ? change.after : change.before;
+  const to = direction === 'undo' ? change.before : change.after;
+  if (from.characterNegativePrompt !== undefined && current.characterNegativePrompt === from.characterNegativePrompt) {
+    extras.characterNegativePrompt = to.characterNegativePrompt;
+  }
+  if (from.generation && to.generation) {
+    const generation: Partial<GenerationSettings> = {};
+    for (const key of Object.keys(from.generation) as (keyof GenerationSettings)[]) {
+      const expected = from.generation[key];
+      const next = to.generation[key];
+      if (expected === undefined || next === undefined) continue;
+      if (Object.is(current.generation[key], expected)) generation[key] = next as never;
+    }
+    if (Object.keys(generation).length > 0) extras.generation = generation;
+  }
+  return extras;
+}
+
 function freezeExtras(
   after: UndoExtras,
   current: { characterNegativePrompt: string; generation: GenerationSettings },
@@ -217,7 +242,11 @@ export function useTagUndo(
     setFuture(nextFuture);
     lastActionRef.current = null;
     apply(step.before, step.activePresetId);
-    if (step.extras) extrasSyncRef.current?.restore(step.extras.before);
+    const undoSync = extrasSyncRef.current;
+    if (step.extras && undoSync) {
+      const patch = extrasToApply(step.extras, undoSync.capture(), 'undo');
+      if (patch.characterNegativePrompt !== undefined || patch.generation) undoSync.restore(patch);
+    }
     setStatus(`元に戻しました。元に戻せる操作は残り ${nextPast.length} 件です。`);
   }, [apply]);
 
@@ -237,7 +266,11 @@ export function useTagUndo(
     setPast(nextPast);
     lastActionRef.current = null;
     apply(step.state, step.activePresetId);
-    if (step.extras) extrasSyncRef.current?.restore(step.extras.after);
+    const redoSync = extrasSyncRef.current;
+    if (step.extras && redoSync) {
+      const patch = extrasToApply(step.extras, redoSync.capture(), 'redo');
+      if (patch.characterNegativePrompt !== undefined || patch.generation) redoSync.restore(patch);
+    }
     setStatus(`やり直しました。やり直せる操作は残り ${nextFuture.length} 件です。`);
   }, [apply]);
 
