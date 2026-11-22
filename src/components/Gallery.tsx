@@ -208,7 +208,7 @@ export function Gallery({
             <summary aria-label="履歴上限と削除ルールの詳細">?</summary>
             <ul className="gallery-meter-rules">
               <li>画像はタブのメモリにのみ保持され、閉じると消去されます。</li>
-              <li>上限（{MAX_IMAGE_HISTORY_COUNT}枚・{maxMb}MB）を超えると、ピン留め以外 → DL操作済 → 古い順に削除されます（すべてピン留め時も同じ順）。</li>
+              <li>上限（{MAX_IMAGE_HISTORY_COUNT}枚・{maxMb}MB）を超えると、新しく生成した画像を残し、既存の画像から「ピン留め以外 → DL操作済 → 古い順」で削除されます（既存の画像がすべてピン留めのときは、ピン留め画像から同じ順で削除）。</li>
               <li>DL操作済はダウンロード開始時に付きます（保存をキャンセルした場合も対象）。保存完了はブラウザで確認してください。</li>
             </ul>
           </details>

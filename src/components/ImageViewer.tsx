@@ -322,7 +322,13 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
             >
               <PinIcon filled={image.pinned} />
             </button>
-            <button type="button" className="icon-btn" onClick={onDownload} aria-label="PNGをダウンロード" title="PNGをダウンロード">
+            <button
+              type="button"
+              className={`icon-btn${image.downloaded ? ' is-downloaded' : ''}`}
+              onClick={onDownload}
+              aria-label={image.downloaded ? 'PNGを再ダウンロード（DL操作済み）' : 'PNGをダウンロード'}
+              title={image.downloaded ? 'PNGを再ダウンロード（DL操作済み）' : 'PNGをダウンロード'}
+            >
               <DownloadIcon />
             </button>
             {removeArmed ? (
