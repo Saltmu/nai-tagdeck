@@ -2,7 +2,7 @@ import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
 import { usePngDrop } from '../hooks/usePngDrop';
 import { downloadBlob, downloadUrl, timeStamp } from '../lib/browser';
-import { MAX_IMAGE_HISTORY_COUNT } from '../lib/imageHistory';
+import { MAX_IMAGE_HISTORY_BYTES, MAX_IMAGE_HISTORY_COUNT } from '../lib/imageHistory';
 import { imageZipBlob } from '../lib/imageZip';
 import { ImageViewer, imageFileName } from './ImageViewer';
 import { DownloadIcon, PinIcon, TempIcon } from './icons';
@@ -68,7 +68,23 @@ export function Gallery({
   const downloadedCount = images.filter((img) => img.downloaded).length;
   const unpinnedUndownloadedCount = images.filter((img) => !img.pinned && !img.downloaded).length;
   const unpinnedDownloadedCount = images.filter((img) => !img.pinned && img.downloaded).length;
-  const meterScale = Math.max(MAX_IMAGE_HISTORY_COUNT, images.length);
+  const totalBytes = images.reduce((sum, img) => sum + img.blob.size, 0);
+  const countRatio = images.length / MAX_IMAGE_HISTORY_COUNT;
+  const byteRatio = totalBytes / MAX_IMAGE_HISTORY_BYTES;
+  const useByteScale = byteRatio > countRatio;
+  const pinnedBytes = images.reduce((sum, img) => sum + (img.pinned ? img.blob.size : 0), 0);
+  const unpinnedUndownloadedBytes = images.reduce((sum, img) => sum + (!img.pinned && !img.downloaded ? img.blob.size : 0), 0);
+  const unpinnedDownloadedBytes = images.reduce((sum, img) => sum + (!img.pinned && img.downloaded ? img.blob.size : 0), 0);
+  const meterScale = useByteScale
+    ? Math.max(MAX_IMAGE_HISTORY_BYTES, totalBytes)
+    : Math.max(MAX_IMAGE_HISTORY_COUNT, images.length);
+  const pinnedWidth = ((useByteScale ? pinnedBytes : pinnedCount) / meterScale) * 100;
+  const unsavedWidth = ((useByteScale ? unpinnedUndownloadedBytes : unpinnedUndownloadedCount) / meterScale) * 100;
+  const savedWidth = ((useByteScale ? unpinnedDownloadedBytes : unpinnedDownloadedCount) / meterScale) * 100;
+  const isAtLimit = images.length >= MAX_IMAGE_HISTORY_COUNT || totalBytes >= MAX_IMAGE_HISTORY_BYTES;
+  const mib = 1024 * 1024;
+  const usedMb = totalBytes === 0 ? '0' : (totalBytes / mib < 10 ? (totalBytes / mib).toFixed(1) : String(Math.round(totalBytes / mib)));
+  const maxMb = Math.round(MAX_IMAGE_HISTORY_BYTES / mib);
 
   const downloadImage = (image: GeneratedImage) => {
     downloadUrl(imageFileName(image), image.url);
@@ -116,8 +132,8 @@ export function Gallery({
       <div className="card-head">
         <h2 className="card-title">
           画像
-          <span className={`count${images.length >= MAX_IMAGE_HISTORY_COUNT ? ' is-full' : ''}`}>
-            {images.length}/{MAX_IMAGE_HISTORY_COUNT}
+          <span className={`count${isAtLimit ? ' is-full' : ''}`}>
+            {images.length}/{MAX_IMAGE_HISTORY_COUNT}枚 · {usedMb}/{maxMb}MB
           </span>
         </h2>
         <div className="gallery-actions">
@@ -153,32 +169,32 @@ export function Gallery({
       <div
         className="gallery-meter"
         role="group"
-        aria-label={`タブ内一時保存 ${images.length}/${MAX_IMAGE_HISTORY_COUNT}枚（ピン留め ${pinnedCount}枚、DL操作済み ${downloadedCount}枚）`}
+        aria-label={`タブを閉じると消去 ${images.length}/${MAX_IMAGE_HISTORY_COUNT}枚・${usedMb}/${maxMb}MB（ピン留め ${pinnedCount}枚、DL操作済み ${downloadedCount}枚）`}
       >
         <div className="gallery-meter-bar" aria-hidden="true">
-          {pinnedCount > 0 && (
+          {pinnedWidth > 0 && (
             <span
               className="gallery-meter-seg is-pinned"
-              style={{ width: `${(pinnedCount / meterScale) * 100}%` }}
+              style={{ width: `${pinnedWidth}%` }}
             />
           )}
-          {unpinnedUndownloadedCount > 0 && (
+          {unsavedWidth > 0 && (
             <span
               className="gallery-meter-seg is-unsaved"
-              style={{ width: `${(unpinnedUndownloadedCount / meterScale) * 100}%` }}
+              style={{ width: `${unsavedWidth}%` }}
             />
           )}
-          {unpinnedDownloadedCount > 0 && (
+          {savedWidth > 0 && (
             <span
               className="gallery-meter-seg is-saved"
-              style={{ width: `${(unpinnedDownloadedCount / meterScale) * 100}%` }}
+              style={{ width: `${savedWidth}%` }}
             />
           )}
         </div>
         <div className="gallery-meter-meta">
-          <span className="gallery-chip is-ephemeral" title="このタブのメモリに一時保存（タブを閉じると消去）">
+          <span className="gallery-chip is-ephemeral" title="画像はこのタブのメモリにだけ保持されます。残したい画像はダウンロードしてください">
             <TempIcon />
-            <span>タブ一時保存</span>
+            <span>タブを閉じると消去</span>
           </span>
           <span
             className="gallery-chip is-pinned"

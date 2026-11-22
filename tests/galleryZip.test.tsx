@@ -156,12 +156,15 @@ it('does not export a zip after its pinned images are removed', async () => {
   expect(onDownloaded).not.toHaveBeenCalled();
 });
 
-it('disables pinned zip action when nothing is pinned, renders visual retention meter, and toggles pin', async () => {
+it('disables pinned zip action when nothing is pinned, renders visual retention meter with byte limit and tab-close warning, and toggles pin', async () => {
   const onTogglePin = vi.fn();
   await renderGallery([], { onTogglePin });
   expect(zipButton().disabled).toBe(true);
   expect(container.querySelector('.gallery-meter')).not.toBeNull();
   expect(container.textContent).not.toContain('画像はこのタブのメモリにだけあり');
+  expect(container.textContent).toContain('タブを閉じると消去');
+  expect(container.textContent).toContain('0/30枚');
+  expect(container.textContent).toContain('0/80MB');
 
   const only = image(4, { downloaded: true, pinned: false });
   await renderGallery([only], { onTogglePin });
