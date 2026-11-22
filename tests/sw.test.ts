@@ -460,6 +460,35 @@ function createSwHarness(
 describe('Service Worker runtime under subdirectory deployment', () => {
   const baseUrl = 'https://shishio.x0.to/nai-tagdeck/';
 
+  it('serves cached tutorial HTML for offline tutorial navigation under subdirectory deployment', async () => {
+    const input = baseInput();
+    input.bundle['tutorial/index.html'] = {
+      type: 'asset',
+      source: '<!doctype html><title>tutorial</title>',
+    };
+    const { source } = buildSwAsset(input);
+    const sw = createSwHarness(source, baseUrl);
+    await sw.dispatchLifecycle('install');
+    await sw.dispatchLifecycle('activate');
+
+    sw.fetchMock.mockRejectedValueOnce(new TypeError('offline'));
+    const { response } = await sw.dispatchFetch({
+      url: `${baseUrl}tutorial/?scene=issue-token`,
+      method: 'GET',
+      mode: 'navigate',
+    });
+    expect(await response?.text()).toBe('<!doctype html><title>tutorial</title>');
+
+    sw.fetchMock.mockRejectedValueOnce(new TypeError('offline'));
+    const slashless = await sw.dispatchFetch({
+      url: `${baseUrl}tutorial?scene=issue-token`,
+      method: 'GET',
+      mode: 'navigate',
+    });
+    expect(slashless.response?.status).toBe(301);
+    expect(slashless.response?.headers.get('location')).toBe(`${baseUrl}tutorial/?scene=issue-token`);
+  });
+
   it('precaches subdirectory assets, matches ?v=tag-check icons from cache, and serves offline navigation', async () => {
     const { source, version } = buildSwAsset(baseInput());
     const sw = createSwHarness(source, baseUrl);

@@ -7,6 +7,7 @@
 const CACHE = 'nai-tagdeck-__VERSION__';
 const PRECACHE = __PRECACHE__;
 const OFFLINE_HTML = __OFFLINE_HTML__;
+const OFFLINE_TUTORIAL_HTML = __OFFLINE_TUTORIAL_HTML__;
 
 function putInCache(request, response) {
   if (!response.ok) return Promise.resolve();
@@ -56,13 +57,24 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     updateGenerationList((order) => (order.includes(CACHE) ? order : order.concat(CACHE))).then(() =>
       caches.open(CACHE).then((cache) =>
-        cache.addAll(PRECACHE).then(() =>
-          // ./ を取りに行かない。途中のキャッシュが、この版のスクリプトと違う HTML を返すことがある。
-          cache.put(
-            './',
-            new Response(OFFLINE_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
-          ),
-        ),
+        cache.addAll(PRECACHE).then(() => {
+          // ./ や ./tutorial/index.html を取りに行かない。途中のキャッシュが、この版のスクリプトと違う HTML を返すことがある。
+          const puts = [
+            cache.put(
+              './',
+              new Response(OFFLINE_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
+            ),
+          ];
+          if (OFFLINE_TUTORIAL_HTML) {
+            puts.push(
+              cache.put(
+                './tutorial/index.html',
+                new Response(OFFLINE_TUTORIAL_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
+              ),
+            );
+          }
+          return Promise.all(puts);
+        }),
       ),
     ),
   );
@@ -98,8 +110,23 @@ self.addEventListener('fetch', (event) => {
   // ページ本体は、この版のインストール時に入れたものをオフライン用に保つ。
   // 待っている新しい版の HTML で上書きすると、そのスクリプトがこのキャッシュに無く、オフラインで開けなくなる。
   if (req.mode === 'navigate') {
+    const reqUrl = new URL(req.url);
+    const basePath = new URL('./', self.registration?.scope || self.location.href).pathname;
+    const reqPath = reqUrl.pathname;
+    const relPath = reqPath.startsWith(basePath) ? reqPath.slice(basePath.length) : '';
+    const isSlashlessTutorial = relPath === 'tutorial';
+    const isTutorial = relPath === 'tutorial/' || relPath === 'tutorial/index.html';
+    const fallbackKey = isTutorial ? './tutorial/index.html' : './';
     event.respondWith(
-      fetch(req).catch(() => caches.match('./', { cacheName: CACHE }).then((res) => res || Response.error())),
+      fetch(req).catch(() => {
+        if (isSlashlessTutorial) {
+          return Response.redirect(new URL(`${basePath}tutorial/${reqUrl.search}`, reqUrl.origin).href, 301);
+        }
+        return caches
+          .match(fallbackKey, { cacheName: CACHE })
+          .then((res) => res || caches.match('./', { cacheName: CACHE }))
+          .then((res) => res || Response.error());
+      }),
     );
     return;
   }

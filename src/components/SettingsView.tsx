@@ -3,6 +3,7 @@ import { TokenSettings } from './TokenSettings';
 import { BackupCard } from './BackupCard';
 import type { Backup } from '../lib/backup';
 import { DangerZone } from './DangerZone';
+import { tutorialUrl } from '../lib/tutorialLinks';
 
 interface Props {
   token: TokenState;
@@ -19,6 +20,17 @@ export function SettingsView({ token, notify, getBackup, onImportBackup, onReset
     <div className="settings">
       <section className="card" aria-label="使い方">
         <h2 className="card-title">使い方</h2>
+        <div className="tutorial-entry">
+          <a
+            href={tutorialUrl({ view: 'chapters', from: 'howto' })}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn"
+          >
+            操作チュートリアルを開く
+          </a>
+          <p className="hint">APIトークンの発行・登録からタグ編集、初回生成までを別タブの練習画面で体験できます。</p>
+        </div>
         <div className="accordion-list">
           <details className="accordion">
             <summary>初回案内をもう一度表示</summary>

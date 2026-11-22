@@ -9,10 +9,18 @@ export interface DialogApi {
   choose: <V extends string>(message: string, choices: readonly Choice<V>[], options?: ChooseOptions) => Promise<V | null>;
 }
 
+export interface DialogLink {
+  label: string;
+  description?: string;
+  href: string;
+}
+
 export interface ChooseOptions {
   dismissOnBackdrop?: boolean;
   /** メッセージの上に出す見出し。 */
   title?: string;
+  /** 選択肢の下に出す別タブリンク。 */
+  links?: readonly DialogLink[];
   /** 選択肢の下に小さく出す補足。 */
   note?: string;
 }
@@ -176,6 +184,22 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
                 <span className="app-dialog-choice-label">{c.label}</span>
                 {c.description && <span className="app-dialog-choice-desc">{c.description}</span>}
               </button>
+            ))}
+          </div>
+        )}
+        {request.kind === 'choose' && request.links && request.links.length > 0 && (
+          <div className="app-dialog-links">
+            {request.links.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="app-dialog-link"
+              >
+                <span className="app-dialog-link-label">{link.label}</span>
+                {link.description && <span className="app-dialog-choice-desc">{link.description}</span>}
+              </a>
             ))}
           </div>
         )}
