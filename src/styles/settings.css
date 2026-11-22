@@ -30,3 +30,15 @@ textarea {
   max-width: 860px;
 }
 
+.tutorial-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.tutorial-entry .hint {
+  margin: 0;
+}
+

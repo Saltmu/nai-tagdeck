@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from 'react';
 import type { TokenState } from '../hooks/useToken';
 import { maskToken, normalizeToken, validateToken, type TokenStorage } from '../lib/token';
+import { tutorialUrl } from '../lib/tutorialLinks';
 
 interface Props {
   token: TokenState;
@@ -100,6 +101,14 @@ export function TokenSettings({ token, notify }: Props) {
           <button type="submit" className="btn btn-primary" disabled={!normalizeToken(input)}>
             保存
           </button>
+          <a
+            href={tutorialUrl({ scene: 'issue-token', from: 'token-settings' })}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn"
+          >
+            APIトークンの発行方法を見る
+          </a>
         </div>
       </form>
       <p className="hint">

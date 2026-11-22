@@ -1,7 +1,7 @@
 /// <reference types="vitest/config" />
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import { configDefaults } from 'vitest/config';
 import react from '@vitejs/plugin-react';
@@ -134,6 +134,12 @@ export default defineConfig({
   plugins: [react(), cspPlugin(), swPlugin()],
   build: {
     sourcemap: false,
+    rollupOptions: {
+      input: {
+        main: resolve(import.meta.dirname, 'index.html'),
+        tutorial: resolve(import.meta.dirname, 'tutorial/index.html'),
+      },
+    },
   },
   test: {
     environment: 'node',

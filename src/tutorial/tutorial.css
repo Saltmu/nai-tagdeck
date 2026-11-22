@@ -1,0 +1,357 @@
+/* ---- tutorial page ---- */
+.tutorial-shell {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.tutorial-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tutorial-header-brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tutorial-header-brand h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.tutorial-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tutorial-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.tutorial-player-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.tutorial-mode-switch,
+.tutorial-nav-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tutorial-subtitle-bar {
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.tutorial-step-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.tutorial-step-title {
+  margin: 0.25rem 0;
+  font-size: 1.05rem;
+}
+
+.tutorial-subtitle-text {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.tutorial-action-hint {
+  margin: 0.45rem 0 0;
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.tutorial-chapters {
+  padding: 1rem;
+}
+
+.tutorial-chapter-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.tutorial-chapter-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tutorial-chapter-btn.is-current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.tutorial-chapter-num {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.tutorial-chapter-summary {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.tutorial-stage {
+  padding: 1rem;
+}
+
+.tutorial-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+/* 強調表示 */
+.is-spotlight {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tutorial-spotlight-box {
+  padding: 0.5rem;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+/* 完成例・完了画面 */
+.tutorial-example-scene,
+.tutorial-complete-scene {
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (min-width: 780px) {
+  .tutorial-example-scene,
+  .tutorial-complete-scene {
+    grid-template-columns: minmax(220px, 300px) 1fr;
+  }
+}
+
+.tutorial-illustration {
+  margin: 0;
+  text-align: center;
+}
+
+.tutorial-illustration-svg {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.tutorial-illustration-caption {
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.tutorial-scene-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.85rem;
+}
+
+.tutorial-return-highlight {
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.tutorial-copy-guide {
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+/* NovelAI 練習パネル */
+.tutorial-nai-frame {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.tutorial-nai-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.tutorial-nai-body {
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tutorial-nai-tabs {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.tutorial-nai-dialog {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.tutorial-nai-token-box {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* タグ編集：スマホは縦並び、PC は横並び */
+.tutorial-editor-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .tutorial-editor-split {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  }
+}
+
+.tutorial-editor-pane,
+.tutorial-preview-pane {
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.tutorial-pane-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.tutorial-category-block {
+  margin-top: 0.75rem;
+}
+
+.tutorial-category-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+
+.tutorial-tag-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tutorial-tag-item {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.tutorial-tag-item.is-off {
+  opacity: 0.65;
+  text-decoration: line-through;
+}
+
+.tutorial-tag-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.tutorial-off-note {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.tutorial-generate-scene {
+  display: grid;
+  gap: 1rem;
+}
+
+.tutorial-generate-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}

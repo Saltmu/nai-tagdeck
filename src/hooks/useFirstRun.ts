@@ -3,6 +3,7 @@ import type { Workspace } from '../types';
 import type { WorkspaceAction } from '../lib/workspace';
 import { isEmptyWorkspace } from '../lib/presets';
 import { createSampleWorkspace } from '../lib/sampleWorkspace';
+import { tutorialUrl } from '../lib/tutorialLinks';
 import { useDialogs } from '../components/Dialogs';
 import type { Dictionary } from './useDictionary';
 import type { PresetStore } from './usePresets';
@@ -59,6 +60,13 @@ export function useFirstRun({ ready, hasExistingData, dictionary, workspace, dis
         ],
         {
           title: hasExistingData ? '初回案内' : 'nai-tagdeck へようこそ',
+          links: [
+            {
+              label: 'チュートリアルで試す',
+              description: 'APIトークンの発行から最初の1枚の生成までを練習画面で体験できます（別タブで開きます）。',
+              href: tutorialUrl({ scene: 'example', from: 'first-run' }),
+            },
+          ],
           note: '画像は「生成」を押したときだけ生成されます。外部との通信は、アプリの読み込み・更新と、画像生成時の NovelAI だけです。本ツールは非公式で、動作・生成結果を保証しません。詳しくは設定の「使い方」「免責事項」をご覧ください。',
           dismissOnBackdrop: true,
         },
