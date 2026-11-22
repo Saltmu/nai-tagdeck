@@ -33,7 +33,12 @@ export function migrateNegative(rawWorkspace: unknown, rawSettings: unknown): Wo
   return normalizeWorkspace(rawWorkspace, legacy === null ? undefined : tagsFromText(legacy));
 }
 
-export type ParsedBackup = { ok: true; data: Backup; warnings: string[] } | { ok: false; error: string };
+export type ParsedBackup =
+  | { ok: true; data: Backup; warnings: string[]; dictionaryErrors: string[] }
+  | { ok: false; error: string };
+
+/** 確認ダイアログに出す辞書エラーの上限。残りは件数だけ知らせる。 */
+const MAX_DICTIONARY_ERRORS_SHOWN = 10;
 
 const MISSING_SECTION = {
   dictionary: 'dictionary がないため、空の辞書で補います',
@@ -76,6 +81,31 @@ export function parseBackup(text: string): ParsedBackup {
       settings: normalizeSettings(r.settings),
       generation: normalizeGeneration(r.generation),
     },
-    warnings: [...warnings, ...dict.errors],
+    warnings,
+    dictionaryErrors: dict.errors,
   };
+}
+
+/** 読み込み確認の本文。補完内容は summary、辞書の行エラーはスクロールする details に分ける。 */
+export function backupImportMessage(
+  fileName: string,
+  data: Pick<Backup, 'dictionary' | 'presets'>,
+  warnings: readonly string[],
+  dictionaryErrors: readonly string[],
+): { summary: string; details: string } {
+  const summary = [
+    `${fileName} を読み込みます。`,
+    `・辞書 ${data.dictionary.length}件、プリセット ${data.presets.length}件を追加・上書きします`,
+    '・作業中のタグと設定（ネガティブ・生成の設定）は置き換わります',
+    ...warnings.map((warning) => `・${warning}`),
+  ];
+  const details: string[] = [];
+  if (dictionaryErrors.length > 0) {
+    summary.push(`・辞書のうち ${dictionaryErrors.length}件は読めなかったためスキップします`);
+    for (const error of dictionaryErrors.slice(0, MAX_DICTIONARY_ERRORS_SHOWN)) details.push(`・${error}`);
+    const rest = dictionaryErrors.length - MAX_DICTIONARY_ERRORS_SHOWN;
+    if (rest > 0) details.push(`・ほか ${rest}件`);
+  }
+  summary.push('', 'よろしいですか？');
+  return { summary: summary.join('\n'), details: details.join('\n') };
 }

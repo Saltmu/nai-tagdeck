@@ -13,8 +13,57 @@
   background: rgb(0 0 0 / 0.5);
 }
 
+.app-dialog-confirm {
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+}
+
+.app-dialog-confirm[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-dialog-confirm > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 余白があるときは本文だけをスクロールする。ボタンが収まらないときはダイアログ全体をスクロールする。 */
+.app-dialog-scroll {
+  flex: 1 1 auto;
+  min-height: 4.5em;
+  padding: 2px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.app-dialog-scroll:focus-visible {
+  outline-offset: -2px;
+}
+
+.app-dialog-confirm .app-dialog-actions {
+  flex: none;
+}
+
 .app-dialog-message {
   margin: 0 0 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.app-dialog-scroll .app-dialog-message:last-child {
+  margin-bottom: 0;
+}
+
+.app-dialog-details {
+  margin: 0 0 0.9rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

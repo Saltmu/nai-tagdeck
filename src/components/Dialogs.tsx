@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 /** window.confirm / prompt / alert の代わりに、アプリ内で描画するダイアログ。 */
 export interface DialogApi {
@@ -39,10 +39,12 @@ export interface ConfirmOptions {
   okLabel?: string;
   /** 削除など、取り消せない操作のとき赤いボタンにする。 */
   danger?: boolean;
+  /** 本文の下に、高さ制限つきで出す詳細。 */
+  details?: string;
 }
 
 type Request = { id: number } & (
-  | { kind: 'confirm'; message: string; okLabel?: string; danger?: boolean; resolve: (v: boolean) => void }
+  | { kind: 'confirm'; message: string; okLabel?: string; danger?: boolean; details?: string; resolve: (v: boolean) => void }
   | { kind: 'prompt'; message: string; defaultValue: string; okLabel?: string; resolve: (v: string | null) => void }
   | { kind: 'alert'; message: string; resolve: () => void }
   | ({ kind: 'choose'; message: string; choices: readonly Choice[]; resolve: (v: string | null) => void } & ChooseOptions)
@@ -97,17 +99,45 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
   const input = useRef<HTMLInputElement>(null);
   const primary = useRef<HTMLButtonElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [value, setValue] = useState(request.kind === 'prompt' ? request.defaultValue : '');
+  const [scrollable, setScrollable] = useState(false);
   const settled = useRef(false);
   const id = useId();
+
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const overflows = () => element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
+    const update = () => setScrollable(overflows());
+    update();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [request]);
 
   useEffect(() => {
     const d = dialog.current;
     if (d && !d.open) d.showModal();
-    // autoFocus は showModal より先に効いてしまい、先頭の「キャンセル」にフォーカスが移るので、開いた後で当て直す
+    // autoFocus は showModal より先に効いてしまい、先頭の「キャンセル」にフォーカスが移るので、開いた後で当て直す。
+    const resetScroll = () => {
+      if (dialog.current) dialog.current.scrollTop = 0;
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    };
     if (request.kind === 'prompt') input.current?.select();
-    else if (request.kind === 'confirm' && request.danger) cancel.current?.focus();
-    else primary.current?.focus();
+    else if (request.kind === 'confirm') {
+      // showModal がキャンセルへスクロールした後でも、警告の先頭を見せる。開いた後の寸法でタブ可否を決める。
+      resetScroll();
+      const element = scrollRef.current;
+      if (element) {
+        setScrollable(element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth);
+      }
+      (request.danger ? cancel.current : primary.current)?.focus({ preventScroll: true });
+      resetScroll();
+      const frame = requestAnimationFrame(resetScroll);
+      return () => cancelAnimationFrame(frame);
+    } else primary.current?.focus();
   }, [request]);
 
   // choice: choose で押されたボタンの値（Enter で主ボタンを押したときは省略）
@@ -131,7 +161,7 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
   return (
     <dialog
       ref={dialog}
-      className="app-dialog"
+      className={request.kind === 'confirm' ? 'app-dialog app-dialog-confirm' : 'app-dialog'}
       aria-labelledby={request.kind === 'choose' && request.title ? `${id}-title` : `${id}-msg`}
       aria-describedby={request.kind === 'choose' && request.title ? `${id}-msg` : undefined}
       onClick={(e) => {
@@ -154,9 +184,18 @@ function AppDialog({ request, onDone }: { request: Request; onDone: () => void }
             {request.title}
           </h2>
         )}
-        <p id={`${id}-msg`} className="app-dialog-message">
-          {request.message}
-        </p>
+        {request.kind === 'confirm' ? (
+          <div ref={scrollRef} className="app-dialog-scroll" tabIndex={scrollable ? 0 : undefined}>
+            <p id={`${id}-msg`} className="app-dialog-message">
+              {request.message}
+            </p>
+            {request.details && <div className="app-dialog-details">{request.details}</div>}
+          </div>
+        ) : (
+          <p id={`${id}-msg`} className="app-dialog-message">
+            {request.message}
+          </p>
+        )}
         {request.kind === 'prompt' && (
           <input
             ref={input}

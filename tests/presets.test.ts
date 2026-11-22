@@ -10,7 +10,7 @@ import {
   renamePreset,
   sameWorkspace,
 } from '../src/lib/presets';
-import { parseBackup, toBackupJSON } from '../src/lib/backup';
+import { backupImportMessage, parseBackup, toBackupJSON } from '../src/lib/backup';
 import { BASE, NEGATIVE, emptyWorkspace, workspaceReducer } from '../src/lib/workspace';
 import { DEFAULT_SETTINGS } from '../src/lib/settings';
 import { DEFAULT_GENERATION } from '../src/lib/generation';
@@ -124,7 +124,7 @@ describe('backup', () => {
 
   it('書き出した内容を読み戻せる', () => {
     const parsed = parseBackup(toBackupJSON(data));
-    expect(parsed).toEqual({ ok: true, data, warnings: [] });
+    expect(parsed).toEqual({ ok: true, data, warnings: [], dictionaryErrors: [] });
   });
 
   it('トークンは含めない', () => {
@@ -155,7 +155,7 @@ describe('backup', () => {
   });
 
   it('先頭の BOM を除き、未対応の version は拒否する', () => {
-    expect(parseBackup(`\uFEFF${toBackupJSON(data)}`)).toEqual({ ok: true, data, warnings: [] });
+    expect(parseBackup(`\uFEFF${toBackupJSON(data)}`)).toEqual({ ok: true, data, warnings: [], dictionaryErrors: [] });
     expect(parseBackup(toBackupJSON(data).replace('"version": 1', '"version": 2'))).toMatchObject({
       ok: false,
       error: 'このアプリが読めるバックアップは version 1 です（ファイルは version 2）',
@@ -175,7 +175,8 @@ describe('backup', () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) throw new Error(parsed.error);
     expect(parsed.data.dictionary.map((entry) => entry.tag)).toEqual(['smile']);
-    expect(parsed.warnings).toEqual(['1件目: tag が空です']);
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.dictionaryErrors).toEqual(['1件目: tag が空です']);
   });
 
   it('dictionary が配列でなければ空にして警告する', () => {
@@ -192,6 +193,31 @@ describe('backup', () => {
     if (!parsed.ok) throw new Error(parsed.error);
     expect(parsed.data.dictionary).toEqual([]);
     expect(parsed.warnings).toEqual(['dictionary の形式が不正なため、空の辞書で補います']);
+    expect(parsed.dictionaryErrors).toEqual([]);
+  });
+
+  it('確認文は補完の警告と辞書のスキップを分けて書く', () => {
+    const parsed = parseBackup(JSON.stringify({
+      kind: 'backup',
+      dictionary: [{ tag: '', category: 'quality' }, { tag: 'smile', category: 'appearance' }],
+      presets: [],
+      workspace: {},
+      settings: {},
+    }));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const message = backupImportMessage('partial.json', parsed.data, parsed.warnings, parsed.dictionaryErrors);
+    expect(message.summary).toContain('・version がないため、version 1 として読み込みます');
+    expect(message.summary).toContain('・generation がないため、初期の生成設定で補います');
+    expect(message.summary).toContain('・辞書 1件、プリセット 0件を追加・上書きします');
+    expect(message.summary).toContain('・辞書のうち 1件は読めなかったためスキップします');
+    expect(message.summary).not.toContain('辞書のうち 2件');
+    expect(message.details).toBe('・1件目: tag が空です');
+    const many = Array.from({ length: 12 }, () => 'n件目: tag が空です');
+    const capped = backupImportMessage('a.json', parsed.data, [], many);
+    expect(capped.summary).toContain('・辞書のうち 12件は読めなかったためスキップします');
+    expect(capped.details).toContain('・ほか 2件');
+    expect(capped.details.match(/tag が空です/g)).toHaveLength(10);
   });
 });
 
