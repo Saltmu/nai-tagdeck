@@ -5,9 +5,9 @@ import { categoryLabel, CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '..
 import { buildCategoryPrompt, parseTagList } from '../lib/prompt';
 import { useCategoryOpen } from '../hooks/useCategoryOpen';
 import { normalize } from '../lib/tagText';
-import { isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
+import { isTagFilterActive, buildTagAliasMap, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import type { PromptTagCategory } from '../lib/tagClassification';
-import { TagRow } from './TagRow';
+import { TagRow, type MoveTargetGroup } from './TagRow';
 import { TagInput, type TagInputDraft } from './TagInput';
 import { CheckIcon, CopyIcon, PasteIcon, SortIcon, ToggleAllIcon } from './icons';
 
@@ -43,6 +43,8 @@ interface Props {
   filter?: TagFilter;
   /** ベースの未分類タグに対する移動先候補（WorkTag.id → 正規化タグ名と候補カテゴリ）。 */
   suggestedCategories?: Readonly<Record<string, BaseCategorySuggestion>>;
+  /** ベース⇔キャラ間やキャラ間でのタグ移動に使うキャラクター一覧。 */
+  characters?: readonly { id: string; label: string }[];
 }
 
 export const CategorySection = memo(function CategorySection({
@@ -64,12 +66,14 @@ export const CategorySection = memo(function CategorySection({
   onAdded,
   filter,
   suggestedCategories,
+  characters,
 }: Props) {
   const [open, toggleOpen] = useCategoryOpen(target, category);
   const [sorting, setSorting] = useState(false);
   const appliedFilter = filter ?? { query: '', onlyEnabled: false };
   const filtering = isTagFilterActive(appliedFilter);
-  const visibleTags = filtering ? visibleWorkTags(tags, appliedFilter) : tags;
+  const aliasMap = useMemo(() => buildTagAliasMap(entries), [entries]);
+  const visibleTags = filtering ? visibleWorkTags(tags, appliedFilter, aliasMap) : tags;
   useEffect(() => {
     if (filtering) setSorting(false);
   }, [filtering]);
@@ -100,6 +104,32 @@ export const CategorySection = memo(function CategorySection({
         : undefined,
     [category, target],
   );
+  const moveTargets = useMemo<MoveTargetGroup[] | undefined>(() => {
+    if (category === 'negative') return undefined;
+    const ownKeys = (target === BASE ? PROMPT_CATEGORY_KEYS : CHARACTER_CATEGORY_KEYS).filter((key) => key !== category);
+    const groups: MoveTargetGroup[] = [
+      {
+        label: target === BASE ? 'ベース' : scopeLabel || 'このキャラ',
+        options: ownKeys.map((key) => ({ target, category: key, label: categoryLabel(key) })),
+      },
+    ];
+    if (characters) {
+      if (target !== BASE) {
+        groups.push({
+          label: 'ベース',
+          options: PROMPT_CATEGORY_KEYS.map((key) => ({ target: BASE, category: key, label: categoryLabel(key) })),
+        });
+      }
+      for (const ch of characters) {
+        if (ch.id === target) continue;
+        groups.push({
+          label: ch.label,
+          options: CHARACTER_CATEGORY_KEYS.map((key) => ({ target: ch.id, category: key, label: categoryLabel(key) })),
+        });
+      }
+    }
+    return groups;
+  }, [category, target, scopeLabel, characters]);
 
   const handleToggle = useCallback(
     (id: string) => dispatch({ type: 'toggle', target, category, id }),
@@ -133,6 +163,14 @@ export const CategorySection = memo(function CategorySection({
   const handleMoveCategory = useCallback(
     (id: string, to: PromptCategoryKey) => dispatch({ type: 'moveFromUnclassified', target, id, to }),
     [dispatch, target],
+  );
+  const handleMoveTag = useCallback(
+    (id: string, toTarget: TargetId, toCategory: PromptCategoryKey) => {
+      if (category !== 'negative') {
+        dispatch({ type: 'moveTag', fromTarget: target, fromCategory: category, id, toTarget, toCategory });
+      }
+    },
+    [dispatch, target, category],
   );
   const handleMove = useCallback(
     (id: string, delta: -1 | 1) => dispatch({ type: 'move', target, category, id, delta }),
@@ -322,6 +360,7 @@ export const CategorySection = memo(function CategorySection({
                   <TagRow
                     key={t.id}
                     tag={t}
+                    alias={aliasMap.get(normalize(t.tag))?.join(' / ')}
                     query={appliedFilter.query}
                     sorting={sorting && canSort && !filtering}
                     canMoveUp={i > 0}
@@ -337,6 +376,8 @@ export const CategorySection = memo(function CategorySection({
                     moveDestinations={destinations}
                     suggestedCategory={suggestedCategory}
                     onMoveCategory={destinations ? handleMoveCategory : undefined}
+                    moveTargets={moveTargets}
+                    onMoveTag={moveTargets ? handleMoveTag : undefined}
                   />
                 );
               })}

@@ -290,3 +290,33 @@ it('keeps a single top tag-add input without duplicating when switching tabs', a
     errorSpy.mockRestore();
   }
 });
+
+it('matches dictionary aliases in editor search and displays inline alias hint', async () => {
+  const ws = emptyWorkspace();
+  ws.base.appearance = [workTag('blonde', 'blonde hair'), workTag('long', 'long hair')];
+  await act(async () => root.render(
+    <DialogProvider>
+      <Editor
+        workspace={ws}
+        dispatch={dispatch}
+        loaded
+        dictionary={dictionary}
+        syntax="numeric"
+        onCopy={() => {}}
+        notify={() => {}}
+        presets={presets}
+        characterNegative=""
+        onCharacterNegativeChange={() => {}}
+        shown
+      />
+    </DialogProvider>,
+  ));
+
+  await search('金髪');
+  expect(textOf('.tag-filter-count')).toBe('該当 1件');
+  const rows = [...container.querySelectorAll('.tag-row')];
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.querySelector('.tag-name')?.textContent).toBe('blonde hair');
+  expect(rows[0]!.querySelector('.tag-alias')?.textContent).toBe('金髪');
+  expect(rows[0]!.querySelector('.tag-alias mark')?.textContent).toBe('金髪');
+});

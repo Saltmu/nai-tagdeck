@@ -1,4 +1,4 @@
-import type { WorkTag } from '../types';
+import type { DictEntry, WorkTag } from '../types';
 import { normalize } from './tagText';
 
 /** 表示中のタグを、検索語と ON だけで絞る。 */
@@ -11,14 +11,46 @@ export function isTagFilterActive(filter: TagFilter): boolean {
   return filter.onlyEnabled || normalize(filter.query).length > 0;
 }
 
-/** 正規化（大小文字・全角半角・かな・アンダースコア）後の部分一致。 */
-export function tagMatchesQuery(tag: string, query: string): boolean {
-  const q = normalize(query);
-  return q.length === 0 || normalize(tag).includes(q);
+/** 辞書エントリから、正規化タグ名ごとの日本語エイリアス一覧を引ける索引を作る。 */
+export function buildTagAliasMap(entries: readonly Pick<DictEntry, 'tag' | 'alias'>[]): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const entry of entries) {
+    const alias = entry.alias.trim();
+    if (!alias) continue;
+    const key = normalize(entry.tag);
+    if (!key) continue;
+    const list = map.get(key);
+    if (!list) {
+      map.set(key, [alias]);
+    } else if (!list.includes(alias)) {
+      list.push(alias);
+    }
+  }
+  return map;
 }
 
-export function visibleWorkTags(tags: readonly WorkTag[], filter: TagFilter): WorkTag[] {
-  return tags.filter((tag) => (!filter.onlyEnabled || tag.enabled) && tagMatchesQuery(tag.tag, filter.query));
+/** エイリアス（日本語名・よみ）のいずれかが検索語に部分一致するか。 */
+export function aliasMatchesQuery(aliases: string | readonly string[] | undefined, query: string): boolean {
+  const q = normalize(query);
+  if (q.length === 0 || !aliases) return false;
+  const list = typeof aliases === 'string' ? [aliases] : aliases;
+  return list.some((alias) => normalize(alias).includes(q));
+}
+
+/** 正規化（大小文字・全角半角・かな・アンダースコア）後の部分一致。エイリアスも検索対象にする。 */
+export function tagMatchesQuery(tag: string, query: string, aliases?: string | readonly string[]): boolean {
+  const q = normalize(query);
+  return q.length === 0 || normalize(tag).includes(q) || aliasMatchesQuery(aliases, query);
+}
+
+export function visibleWorkTags(
+  tags: readonly WorkTag[],
+  filter: TagFilter,
+  aliasMap?: ReadonlyMap<string, readonly string[]>,
+): WorkTag[] {
+  return tags.filter(
+    (tag) => (!filter.onlyEnabled || tag.enabled) && tagMatchesQuery(tag.tag, filter.query, aliasMap?.get(normalize(tag.tag))),
+  );
 }
 
 export interface HighlightPart {

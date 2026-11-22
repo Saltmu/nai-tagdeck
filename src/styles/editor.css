@@ -267,8 +267,19 @@
   min-width: min(8rem, 100%);
 }
 
-.tag-category-move {
+.tag-category-move,
+.tag-edit-move {
   max-width: 7rem;
+}
+
+.tag-alias {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.tag-alias-edit {
+  flex-basis: 100%;
 }
 
 .tag-category-suggest {

@@ -425,6 +425,70 @@ describe('normalizeWorkspace', () => {
     expect(movedScarf.base.unclassified).toEqual([]);
   });
 
+  it('moveTag で通常カテゴリ間・ベースとキャラ間を ON/OFF・重み込みで移動でき、重複は増やさない', () => {
+    let start = run(
+      emptyWorkspace(),
+      { type: 'addCharacter' },
+      { type: 'add', target: BASE, category: 'appearance', tag: 'long hair', weight: 1.4 },
+      { type: 'add', target: BASE, category: 'appearance', tag: 'hat', weight: 1.2 },
+      { type: 'add', target: BASE, category: 'outfit', tag: 'Hat', weight: 1.0 },
+    );
+    const charId = start.characters[0]!.id;
+    const longHairId = start.base.appearance[0]!.id;
+    const hatId = start.base.appearance[1]!.id;
+    start = workspaceReducer(start, { type: 'toggle', target: BASE, category: 'appearance', id: longHairId });
+
+    // 通常カテゴリ間（ベース appearance -> キャラ appearance）へ移動すると ON/OFF と重みを保持する
+    const toChar = workspaceReducer(start, {
+      type: 'moveTag',
+      fromTarget: BASE,
+      fromCategory: 'appearance',
+      id: longHairId,
+      toTarget: charId,
+      toCategory: 'appearance',
+    });
+    expect(toChar.base.appearance.map((t) => t.tag)).toEqual(['hat']);
+    expect(toChar.characters[0]!.tags.appearance).toEqual([
+      { id: longHairId, tag: 'long hair', enabled: false, weight: 1.4 },
+    ]);
+
+    // キャラ appearance -> ベース style へ移動
+    const toBaseStyle = workspaceReducer(toChar, {
+      type: 'moveTag',
+      fromTarget: charId,
+      fromCategory: 'appearance',
+      id: longHairId,
+      toTarget: BASE,
+      toCategory: 'style',
+    });
+    expect(toBaseStyle.characters[0]!.tags.appearance).toEqual([]);
+    expect(toBaseStyle.base.style.map((t) => t.tag)).toEqual(['long hair']);
+
+    // 移動先に同名タグがある場合は移動元から消しつつ移動先の既存タグを残す
+    const dup = workspaceReducer(toBaseStyle, {
+      type: 'moveTag',
+      fromTarget: BASE,
+      fromCategory: 'appearance',
+      id: hatId,
+      toTarget: BASE,
+      toCategory: 'outfit',
+    });
+    expect(dup.base.appearance).toEqual([]);
+    expect(dup.base.outfit.map((t) => [t.tag, t.weight])).toEqual([['Hat', 1]]);
+
+    // キャラ側で無効なカテゴリ（style）への移動は無視される
+    expect(
+      workspaceReducer(toChar, {
+        type: 'moveTag',
+        fromTarget: BASE,
+        fromCategory: 'appearance',
+        id: hatId,
+        toTarget: charId,
+        toCategory: 'style',
+      }),
+    ).toBe(toChar);
+  });
+
   it('キャラクター対応前の保存形式はベースとして読む', () => {
     const ws = normalizeWorkspace({ quality: [{ tag: 'masterpiece' }] });
     expect(ws.base.quality[0]!.tag).toBe('masterpiece');
