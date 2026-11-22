@@ -37,10 +37,17 @@ const mockPresets = (): PresetStore => ({
   ],
 });
 
-function pointerEvent(type: string, init: MouseEventInit & { pointerId?: number } = {}): MouseEvent {
-  const { pointerId = 1, ...mouseInit } = init;
-  const ev = new MouseEvent(type, mouseInit);
+function pointerEvent(
+  type: string,
+  init: MouseEventInit & { pointerId?: number; pointerType?: string } = {},
+): MouseEvent {
+  const { pointerId = 1, pointerType = 'mouse', ...mouseInit } = init;
+  const ev = new MouseEvent(type, {
+    buttons: type === 'pointerup' ? 0 : 1,
+    ...mouseInit,
+  });
   Object.defineProperty(ev, 'pointerId', { value: pointerId });
+  Object.defineProperty(ev, 'pointerType', { value: pointerType });
   return ev;
 }
 
@@ -92,7 +99,7 @@ function createMultiCharWorkspace(): Workspace {
 }
 
 describe('CharacterCenterPicker', () => {
-  it('renders canvas aspect ratio, peer markers, label stacking, pointerId filtering, and separate undo steps per drag', async () => {
+  it('renders canvas aspect ratio, combines overlapping character labels, filters pointerId, stops on unpressed mousemove, and separates drag undo steps', async () => {
     const initial = createMultiCharWorkspace();
     let latestWs = initial;
     const dictionary = mockDictionary();
@@ -138,26 +145,21 @@ describe('CharacterCenterPicker', () => {
     expect(stage.style.maxWidth).toBe('114px');
     expect(container.querySelector('.center-stage-caption')?.textContent).toContain('768×1344');
 
-    // 自分（アリス）と他の ON キャラクター（ボブ、キャロル）が表示され、OFF のデイブは表示されない
+    // アリス (0.5, 0.5) とキャロル（未指定 -> 0.5, 0.5）は同じ座標なので 1 つのラベル「アリス / キャロル」にまとめて表示される
     const activeMarker = stage.querySelector<HTMLElement>('.center-marker-active')!;
-    expect(activeMarker.textContent).toBe('アリス');
+    expect(activeMarker.textContent).toBe('アリス / キャロル');
+    expect(activeMarker.classList.contains('is-shared')).toBe(true);
     expect(activeMarker.style.left).toBe('50%');
     expect(activeMarker.style.top).toBe('50%');
-    expect(activeMarker.style.getPropertyValue('--stack-index')).toBe('0');
 
+    // 別座標のボブ (0.8, 0.2) は独立した peer マーカーとして表示され、OFF のデイブは表示されない
     const peerMarkers = [...stage.querySelectorAll<HTMLElement>('.center-marker-peer')];
-    expect(peerMarkers.map((m) => m.textContent)).toEqual(['ボブ', 'キャロル']);
+    expect(peerMarkers.map((m) => m.textContent)).toEqual(['ボブ']);
     expect(peerMarkers[0]!.style.left).toBe('80%');
     expect(peerMarkers[0]!.style.top).toBe('20%');
     expect(peerMarkers[0]!.classList.contains('is-auto')).toBe(false);
-    expect(peerMarkers[0]!.style.getPropertyValue('--stack-index')).toBe('0');
-    // キャロルは未指定なので (50%, 50%) に is-auto で表示され、アリスと座標が重なるため --stack-index が 1 にオフセットされる
-    expect(peerMarkers[1]!.style.left).toBe('50%');
-    expect(peerMarkers[1]!.style.top).toBe('50%');
-    expect(peerMarkers[1]!.classList.contains('is-auto')).toBe(true);
-    expect(peerMarkers[1]!.style.getPropertyValue('--stack-index')).toBe('1');
 
-    // 5×5 グリッドのセル B4 (x=0.3, y=0.7) をクリック
+    // 5×5 グリッドのセル B4 (x=0.3, y=0.7) をクリックすると、アリスが移動してキャロルが独立した自動中央マーカーとして現れる
     const cellB4 = [...container.querySelectorAll<HTMLButtonElement>('.center-preset-cell')].find(
       (btn) => btn.textContent === 'B4',
     )!;
@@ -165,8 +167,16 @@ describe('CharacterCenterPicker', () => {
     await act(async () => cellB4.click());
     expect(latestWs.characters[0]!.center).toEqual({ x: 0.3, y: 0.7 });
     expect(cellB4.getAttribute('aria-pressed')).toBe('true');
+    expect(activeMarker.textContent).toBe('アリス');
+    expect(activeMarker.classList.contains('is-shared')).toBe(false);
     expect(activeMarker.style.left).toBe('30%');
     expect(activeMarker.style.top).toBe('70%');
+
+    const separatedPeers = [...stage.querySelectorAll<HTMLElement>('.center-marker-peer')];
+    expect(separatedPeers.map((m) => m.textContent)).toEqual(['ボブ', 'キャロル']);
+    expect(separatedPeers[1]!.style.left).toBe('50%');
+    expect(separatedPeers[1]!.style.top).toBe('50%');
+    expect(separatedPeers[1]!.classList.contains('is-auto')).toBe(true);
 
     // 数値入力欄とも同期していることを確認
     const numberInputs = [...container.querySelectorAll<HTMLInputElement>('.center-grid input[type="number"]')];
@@ -257,9 +267,28 @@ describe('CharacterCenterPicker', () => {
     // 下端付近（y > 0.78）ではラベルが上に回るクラス is-above が付く
     expect(activeMarker.classList.contains('is-above')).toBe(true);
 
+    // ウィンドウ外でマウスボタンを離したまま戻ってきた場合（buttons: 0 の pointermove）は更新せずドラッグを終了すること
     await act(async () => {
-      window.dispatchEvent(pointerEvent('pointerup', { bubbles: true, pointerId: 10 }));
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          bubbles: true,
+          pointerId: 10,
+          buttons: 0,
+          clientX: 110,
+          clientY: 210,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          bubbles: true,
+          pointerId: 10,
+          buttons: 1,
+          clientX: 110,
+          clientY: 210,
+        }),
+      );
     });
+    expect(latestWs.characters[0]!.center).toEqual({ x: 0.67, y: 1 });
 
     // 2回目のドラッグ (pointerId: 11): (0.67, 1) -> (0.1, 0.1) -> (0.2, 0.3)
     await act(async () => {

@@ -84,25 +84,38 @@ export function CharacterCenterPicker({
     setDragging(true);
     updateFromClientPoint(e.clientX, e.clientY, mergeKey);
 
-    const onMove = (ev: PointerEvent) => {
-      if (ev.pointerId !== pointerId) return;
-      updateFromClientPoint(ev.clientX, ev.clientY, mergeKey);
-    };
     const cleanup = () => {
       dragCleanupRef.current = null;
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onEnd);
       window.removeEventListener('pointercancel', onEnd);
+      window.removeEventListener('blur', onBlur);
+    };
+    const stopDrag = () => {
+      setDragging(false);
+      cleanup();
+    };
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      // ウィンドウ外でマウスボタンを離したまま戻ってきた場合はドラッグを終了する
+      if ((ev.pointerType === 'mouse' || !ev.pointerType) && typeof ev.buttons === 'number' && (ev.buttons & 1) === 0) {
+        stopDrag();
+        return;
+      }
+      updateFromClientPoint(ev.clientX, ev.clientY, mergeKey);
     };
     const onEnd = (ev: PointerEvent) => {
       if (ev.pointerId !== pointerId) return;
-      setDragging(false);
-      cleanup();
+      stopDrag();
+    };
+    const onBlur = () => {
+      stopDrag();
     };
     dragCleanupRef.current = cleanup;
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onEnd);
     window.addEventListener('pointercancel', onEnd);
+    window.addEventListener('blur', onBlur);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -138,21 +151,54 @@ export function CharacterCenterPicker({
   const stageWidthPx = Math.round(validSize.width * scale);
   const aspect = `${validSize.width} / ${validSize.height}`;
 
-  // 同じ座標に複数マーカーがあるとき、ラベルが重なって隠れないよう座標ごとの順番（stackIndex）を計算する。
-  // 操作中のキャラクターの基準スロットを 0 とし、同じ座標の他キャラは 1, 2... と下へずらす。
-  const peerSlots = useMemo(() => {
-    const counts = new Map<string, number>();
-    counts.set(coordKey(center), 1);
-    return peers.map((peer) => {
+  // 同じ座標に複数キャラクターがいる場合はラベルを 1 つのピルにまとめ、下に並んだプリセット欄に重ならないようにする
+  const { activeGroupNames, activeHasAutoPeer, visiblePeers } = useMemo(() => {
+    const activeKey = coordKey(center);
+    const sameAsActive: string[] = [characterName];
+    let hasAutoAtActive = false;
+
+    const peerGroups = new Map<
+      string,
+      { id: string; pos: CharacterCenter; names: string[]; allAuto: boolean; anyAuto: boolean }
+    >();
+
+    for (const peer of peers) {
       const pos = peer.center ?? DEFAULT_CENTER;
+      const isAuto = peer.center === undefined;
       const key = coordKey(pos);
-      const slot = counts.get(key) ?? 0;
-      counts.set(key, slot + 1);
-      return { peer, pos, isAuto: peer.center === undefined, slot };
-    });
-  }, [center, peers]);
+      if (key === activeKey) {
+        sameAsActive.push(peer.name);
+        if (isAuto) hasAutoAtActive = true;
+        continue;
+      }
+      const existing = peerGroups.get(key);
+      if (existing) {
+        existing.names.push(peer.name);
+        existing.allAuto = existing.allAuto && isAuto;
+        existing.anyAuto = existing.anyAuto || isAuto;
+      } else {
+        peerGroups.set(key, {
+          id: peer.id,
+          pos,
+          names: [peer.name],
+          allAuto: isAuto,
+          anyAuto: isAuto,
+        });
+      }
+    }
+
+    return {
+      activeGroupNames: sameAsActive,
+      activeHasAutoPeer: hasAutoAtActive,
+      visiblePeers: [...peerGroups.values()],
+    };
+  }, [center, characterName, peers]);
 
   const activeNearBottom = center.y > 0.78;
+  const activeLabelText = activeGroupNames.join(' / ');
+  const activeTitle = `${activeLabelText}: (${formatCoord(center.x)}, ${formatCoord(center.y)})${
+    activeHasAutoPeer ? '（未指定・中央の他キャラを含む）' : ''
+  }`;
 
   return (
     <div className="center-picker">
@@ -170,35 +216,32 @@ export function CharacterCenterPicker({
             onKeyDown={handleKeyDown}
           >
             <div className="center-stage-grid" aria-hidden="true" />
-            {peerSlots.map(({ peer, pos, isAuto, slot }) => {
-              const nearBottom = pos.y > 0.78;
+            {visiblePeers.map((group) => {
+              const nearBottom = group.pos.y > 0.78;
+              const labelText = group.names.join(' / ');
               return (
                 <div
-                  key={peer.id}
-                  className={`center-marker center-marker-peer${isAuto ? ' is-auto' : ''}${nearBottom ? ' is-above' : ''}`}
-                  style={{
-                    left: `${pos.x * 100}%`,
-                    top: `${pos.y * 100}%`,
-                    ['--stack-index' as string]: slot,
-                  }}
-                  title={`${peer.name}: (${formatCoord(pos.x)}, ${formatCoord(pos.y)})${isAuto ? '（未指定・中央）' : ''}`}
+                  key={group.id}
+                  className={`center-marker center-marker-peer${group.allAuto ? ' is-auto' : ''}${nearBottom ? ' is-above' : ''}`}
+                  style={{ left: `${group.pos.x * 100}%`, top: `${group.pos.y * 100}%` }}
+                  title={`${labelText}: (${formatCoord(group.pos.x)}, ${formatCoord(group.pos.y)})${
+                    group.anyAuto ? '（未指定・中央）' : ''
+                  }`}
                 >
                   <span className="center-marker-dot" aria-hidden="true" />
-                  <span className="center-marker-label">{peer.name}</span>
+                  <span className="center-marker-label">{labelText}</span>
                 </div>
               );
             })}
             <div
-              className={`center-marker center-marker-active${activeNearBottom ? ' is-above' : ''}`}
-              style={{
-                left: `${center.x * 100}%`,
-                top: `${center.y * 100}%`,
-                ['--stack-index' as string]: 0,
-              }}
-              title={`${characterName}: (${formatCoord(center.x)}, ${formatCoord(center.y)})`}
+              className={`center-marker center-marker-active${activeNearBottom ? ' is-above' : ''}${
+                activeGroupNames.length > 1 ? ' is-shared' : ''
+              }`}
+              style={{ left: `${center.x * 100}%`, top: `${center.y * 100}%` }}
+              title={activeTitle}
             >
               <span className="center-marker-dot" aria-hidden="true" />
-              <span className="center-marker-label">{characterName}</span>
+              <span className="center-marker-label">{activeLabelText}</span>
             </div>
           </div>
           <span className="center-stage-caption">
