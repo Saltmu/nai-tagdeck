@@ -26,15 +26,21 @@
 .app-dialog-confirm > form {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
 }
 
+/* ボタンの残り高さで本文をスクロールする。固定値を引くと高ズームで高さが 0 になる。 */
 .app-dialog-scroll {
+  flex: 1 1 auto;
   min-height: 0;
-  max-height: calc(100dvh - 11rem);
   overflow: auto;
   overscroll-behavior: contain;
+}
+
+.app-dialog-confirm .app-dialog-actions {
+  flex: none;
 }
 
 .app-dialog-message {
