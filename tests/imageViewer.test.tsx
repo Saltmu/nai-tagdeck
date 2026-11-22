@@ -158,7 +158,7 @@ describe('ImageViewer prompts and parameters', () => {
     expect(seedButton.getAttribute('aria-label')).toBe('このシードを次の生成で使う');
   });
 
-  it('announces a failed copy without marking the button done', async () => {
+  it('shows a failed copy on the pressed button and announces it', async () => {
     const writeText = vi.fn().mockRejectedValue(new Error('denied'));
     vi.stubGlobal('navigator', Object.assign(Object.create(navigator), { clipboard: { writeText } }));
     document.execCommand = () => false;
@@ -168,11 +168,34 @@ describe('ImageViewer prompts and parameters', () => {
     await act(async () => {
       copyButtons[0]!.click();
     });
-    expect(copyButtons[0]!.textContent).not.toContain('コピー済み');
+    expect(copyButtons[0]!.textContent).toContain('コピーできませんでした');
+    expect(copyButtons[0]!.getAttribute('aria-label')).toBe('ベースをコピーできませんでした');
+    expect(copyButtons[0]!.closest('.preview-list')).not.toBeNull();
     const status = container.querySelector<HTMLElement>('.viewer-prompt ~ [role="status"]');
     expect(status?.textContent).toBe('コピーできませんでした');
-    expect(status?.classList.contains('visually-hidden')).toBe(false);
+    expect(status?.classList.contains('visually-hidden')).toBe(true);
     expect(container.querySelector('.viewer-side')?.getAttribute('tabindex')).toBe('0');
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(copyButtons[0]!.textContent).not.toContain('コピーできませんでした');
+    expect(copyButtons[0]!.getAttribute('aria-label')).toBe('ベースをコピー');
+  });
+
+  it('shows a failed copy when the clipboard fallback throws and removes the textarea', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+    vi.stubGlobal('navigator', Object.assign(Object.create(navigator), { clipboard: { writeText } }));
+    document.execCommand = () => {
+      throw new Error('missing');
+    };
+    await renderViewer(image());
+    const copyButton = container.querySelector<HTMLButtonElement>('.viewer-prompt button')!;
+    copyButton.focus();
+    await act(async () => copyButton.click());
+    expect(container.querySelector('textarea')).toBeNull();
+    expect(document.activeElement).toBe(copyButton);
+    expect(copyButton.textContent).toContain('コピーできませんでした');
+    expect(container.querySelector('.viewer-prompt ~ [role="status"]')?.textContent).toBe('コピーできませんでした');
   });
 
   it('copies with a textarea inside the dialog and ignores a result for the previous image', async () => {

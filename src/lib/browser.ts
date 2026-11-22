@@ -10,12 +10,16 @@ export async function copyText(text: string, parent: ParentNode = document.body)
     ta.setAttribute('readonly', '');
     ta.className = 'visually-hidden';
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    parent.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand('copy');
-    ta.remove();
-    if (previous?.isConnected) previous.focus();
-    return ok;
+    try {
+      parent.appendChild(ta);
+      ta.select();
+      return typeof document.execCommand === 'function' && document.execCommand('copy');
+    } catch {
+      return false;
+    } finally {
+      ta.remove();
+      if (previous?.isConnected) previous.focus();
+    }
   }
 }
 

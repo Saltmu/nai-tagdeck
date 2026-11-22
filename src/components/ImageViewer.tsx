@@ -230,25 +230,32 @@ interface PromptCopyProps {
   copyKey: string;
   copyLabel: string;
   copiedKey: string | null;
+  failedKey: string | null;
   negative?: boolean;
   hint?: string;
   onCopy: (key: string, text: string, label: string) => void;
 }
 
-function PromptCopy({ title, text, emptyText, copyKey, copyLabel, copiedKey, negative, hint, onCopy }: PromptCopyProps) {
+function PromptCopy({ title, text, emptyText, copyKey, copyLabel, copiedKey, failedKey, negative, hint, onCopy }: PromptCopyProps) {
   const copied = copiedKey === copyKey;
+  const failed = failedKey === copyKey;
+  const ariaLabel = copied
+    ? `${copyLabel}をコピー済み`
+    : failed
+      ? `${copyLabel}をコピーできませんでした`
+      : `${copyLabel}をコピー`;
   return (
     <div className={`preview-item${negative ? ' preview-negative' : ''}`}>
       <dt>
         {title}
         <button
           type="button"
-          className="btn btn-small"
+          className={`btn btn-small${failed ? ' btn-danger' : ''}`}
           disabled={!text}
-          aria-label={copied ? `${copyLabel}をコピー済み` : `${copyLabel}をコピー`}
+          aria-label={ariaLabel}
           onClick={() => onCopy(copyKey, text, copyLabel)}
         >
-          {copied ? (<><CheckIcon />コピー済み</>) : 'コピー'}
+          {copied ? (<><CheckIcon />コピー済み</>) : failed ? 'コピーできませんでした' : 'コピー'}
         </button>
       </dt>
       <dd>
@@ -275,8 +282,8 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
   const dialog = useRef<HTMLDialogElement>(null);
   const [seedApplied, setSeedApplied] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [failedKey, setFailedKey] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState('');
-  const [copyFailed, setCopyFailed] = useState(false);
   const imageIdRef = useRef(image.id);
   imageIdRef.current = image.id;
   // 削除は1回目で確認状態にし、2回目で実行する。連打で消えないよう、確認状態になってから
@@ -287,8 +294,8 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
   useEffect(() => {
     setSeedApplied(false);
     setCopiedKey(null);
+    setFailedKey(null);
     setCopyStatus('');
-    setCopyFailed(false);
     setRemoveArmed(false);
   }, [image]);
   useEffect(() => {
@@ -311,6 +318,11 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
     const t = setTimeout(() => setCopiedKey(null), COPY_MS);
     return () => clearTimeout(t);
   }, [copiedKey]);
+  useEffect(() => {
+    if (!failedKey) return;
+    const t = setTimeout(() => setFailedKey(null), COPY_MS);
+    return () => clearTimeout(t);
+  }, [failedKey]);
   useEffect(() => {
     const d = dialog.current;
     if (d && !d.open) d.showModal();
@@ -337,11 +349,16 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
 
   const copyPrompt = async (key: string, text: string, label: string) => {
     const sourceId = image.id;
-    const ok = await copyText(text, dialog.current ?? document.body);
+    let ok = false;
+    try {
+      ok = await copyText(text, dialog.current ?? document.body);
+    } catch {
+      ok = false;
+    }
     if (imageIdRef.current !== sourceId) return;
     setCopyStatus(ok ? `${label}をコピーしました` : 'コピーできませんでした');
-    setCopyFailed(!ok);
     setCopiedKey(ok ? key : null);
+    setFailedKey(ok ? null : key);
   };
   const rows = characterRows(image);
   const baseLabel = rows.length > 0 ? 'ベース' : 'プロンプト全体';
@@ -510,6 +527,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
                 copyKey="base"
                 copyLabel={baseLabel}
                 copiedKey={copiedKey}
+                failedKey={failedKey}
                 onCopy={copyPrompt}
               />
               {rows.map((c, i) => (
@@ -521,6 +539,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
                     copyKey={`char-${i}`}
                     copyLabel={c.title}
                     copiedKey={copiedKey}
+                    failedKey={failedKey}
                     hint={c.center ? `位置　横 ${c.center.x}、縦 ${c.center.y}` : undefined}
                     onCopy={copyPrompt}
                   />
@@ -532,6 +551,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
                       copyKey={`char-neg-${i}`}
                       copyLabel={`${c.title}のネガティブ`}
                       copiedKey={copiedKey}
+                      failedKey={failedKey}
                       negative
                       onCopy={copyPrompt}
                     />
@@ -546,13 +566,14 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
                   copyKey="negative"
                   copyLabel="ネガティブ"
                   copiedKey={copiedKey}
+                  failedKey={failedKey}
                   negative
                   onCopy={copyPrompt}
                 />
               )}
             </dl>
           </details>
-          <p className={`viewer-copy-status${copyFailed ? '' : ' visually-hidden'}`} role="status" aria-live="polite">{copyStatus}</p>
+          <p className="viewer-copy-status visually-hidden" role="status" aria-live="polite">{copyStatus}</p>
         </div>
       </div>
     </dialog>

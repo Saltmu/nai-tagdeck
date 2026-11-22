@@ -66,6 +66,11 @@
   overflow: visible;
 }
 
+/* 失敗表示は押したボタン自身に出す。長い文言は見出し行の中で折り返す */
+.viewer-prompt .preview-item dt {
+  flex-wrap: wrap;
+}
+
 .viewer-copy-status {
   margin: 0;
   color: var(--danger);
