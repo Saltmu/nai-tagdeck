@@ -344,6 +344,20 @@
   text-decoration: none;
 }
 
+.tutorial-step-done {
+  margin-top: 0.85rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
 .tutorial-generate-scene {
   display: grid;
   gap: 1rem;

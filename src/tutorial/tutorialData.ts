@@ -213,10 +213,8 @@ export function parseTutorialLocation(search: string): InitialTutorialLocation {
   };
 }
 
-/** チュートリアル専用の練習用辞書。夕焼け・街並み・帽子などの日本語検索を確実に含む。 */
+/** チュートリアル専用の練習用辞書。夕焼け・街並み・帽子などの日本語検索を確実に含む（既存同名タグは上書き）。 */
 export function createTutorialDictionary(): DictEntry[] {
-  const base = sampleDictionary();
-  const existing = new Set(base.map((e) => e.tag.toLowerCase()));
   const now = new Date().toISOString();
   const extras: Array<[DictEntry['category'], string, string]> = [
     ['background', 'sunset', '夕焼け 夕暮れ ゆうやけ ゆうぐれ 背景'],
@@ -226,20 +224,17 @@ export function createTutorialDictionary(): DictEntry[] {
     ['outfit', 'coat', 'コート 上着'],
     ['pose', 'walking', '歩く あるく'],
   ];
-  const added: DictEntry[] = [];
-  for (const [i, [category, tag, alias]] of extras.entries()) {
-    if (!existing.has(tag.toLowerCase())) {
-      added.push({
-        id: `tutorial-dict-${tag.replace(/\s+/g, '-')}`,
-        tag,
-        alias,
-        category,
-        default_weight: 1,
-        sort_order: i * 10,
-        updated_at: now,
-      });
-    }
-  }
+  const overrideTags = new Set(extras.map(([, tag]) => tag.toLowerCase()));
+  const base = sampleDictionary().filter((e) => !overrideTags.has(e.tag.toLowerCase()));
+  const added: DictEntry[] = extras.map(([category, tag, alias], i) => ({
+    id: `tutorial-dict-${tag.replace(/\s+/g, '-')}`,
+    tag,
+    alias,
+    category,
+    default_weight: 1,
+    sort_order: i * 10,
+    updated_at: now,
+  }));
   return [...added, ...base];
 }
 

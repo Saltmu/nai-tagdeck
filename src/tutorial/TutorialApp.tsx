@@ -41,9 +41,11 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
   // 練習用ステート（メモリ内のみ。IndexedDB / localStorage / sessionStorage / API には一切触れない）
   const [practiceClipboard, setPracticeClipboard] = useState('');
   const [tokenInput, setTokenInput] = useState('');
+  const [tokenError, setTokenError] = useState<string | null>(null);
   const [tokenStorage, setTokenStorage] = useState<TokenStorage>('session');
   const [savedToken, setSavedToken] = useState<string | null>(null);
   const [sampleLoaded, setSampleLoaded] = useState(false);
+  const [stepCompleted, setStepCompleted] = useState(false);
   const [workspace, dispatch] = useReducer(workspaceReducer, undefined, emptyWorkspace);
   const entries = useMemo(() => createTutorialDictionary(), []);
   const [sizeKey, setSizeKey] = useState<(typeof SIZE_OPTIONS)[number]['key']>('portrait');
@@ -90,6 +92,8 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
       const clamped = Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, nextIndex));
       syncStateForStep(clamped);
       setStepIndex(clamped);
+      setStepCompleted(false);
+      setTokenError(null);
       setShowChapters(false);
     },
     [syncStateForStep],
@@ -133,10 +137,11 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
         break;
       case 'register-paste':
         setTokenInput(PRACTICE_TOKEN);
+        setTokenError(null);
         advance();
         break;
       case 'register-save':
-        setSavedToken(tokenInput || PRACTICE_TOKEN);
+        setSavedToken(PRACTICE_TOKEN);
         notify('練習用トークンを保存しました（練習画面内のみ）');
         advance();
         break;
@@ -178,10 +183,10 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
   }, [mode, paused, showChapters, step.autoAdvanceMs, performDemoAction]);
 
   const handleCopyPrompt = useCallback(
-    (text: string, label: string) => {
+    async (text: string, label: string) => {
       if (!text) return;
-      void copyText(text).catch(() => false);
-      notify(`${label}をコピーしました`);
+      const ok = await copyText(text).catch(() => false);
+      notify(ok ? `${label}をコピーしました` : 'コピーできませんでした');
     },
     [notify],
   );
@@ -419,8 +424,7 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
                             className="btn btn-primary is-spotlight"
                             onClick={() => {
                               setPracticeClipboard(PRACTICE_TOKEN);
-                              void copyText(PRACTICE_TOKEN).catch(() => false);
-                              notify('練習用トークンをコピーしました');
+                              notify('練習用トークンをコピーしました（練習画面内のみ）');
                               advance();
                             }}
                           >
@@ -449,22 +453,44 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
               <label className="field">
                 <span>トークン</span>
                 <input
-                  type="text"
+                  type="password"
+                  autoComplete="off"
                   value={tokenInput}
-                  placeholder="pst-..."
+                  placeholder="練習用トークンのみ入力できます"
+                  aria-invalid={tokenError ? true : undefined}
                   onChange={(e) => {
-                    setTokenInput(e.target.value);
-                    if (step.id === 'register-paste' && e.target.value.trim().length > 0) {
+                    const value = e.target.value.trim();
+                    if (!value) {
+                      setTokenInput('');
+                      setTokenError(null);
+                      return;
+                    }
+                    if (value !== PRACTICE_TOKEN) {
+                      setTokenInput('');
+                      setTokenError(
+                        '実トークンは練習画面には入力できません。元の nai-tagdeck タブの「設定 → NovelAI のトークン」へ直接貼り付けてください。',
+                      );
+                      return;
+                    }
+                    setTokenError(null);
+                    setTokenInput(value);
+                    if (step.id === 'register-paste') {
                       advance();
                     }
                   }}
                 />
               </label>
+              {tokenError && (
+                <p className="form-error" role="alert">
+                  {tokenError}
+                </p>
+              )}
               <div className="form-actions">
                 <button
                   type="button"
                   className={`btn${step.id === 'register-paste' ? ' btn-primary is-spotlight' : ''}`}
                   onClick={() => {
+                    setTokenError(null);
                     setTokenInput(practiceClipboard || PRACTICE_TOKEN);
                     notify('練習用トークンを貼り付けました');
                     if (step.id === 'register-paste') advance();
@@ -498,9 +524,10 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
                 <button
                   type="button"
                   className={`btn btn-primary${step.id === 'register-save' ? ' is-spotlight' : ''}`}
-                  disabled={!tokenInput.trim()}
+                  disabled={tokenInput.trim() !== PRACTICE_TOKEN}
                   onClick={() => {
-                    setSavedToken(tokenInput.trim());
+                    if (tokenInput.trim() !== PRACTICE_TOKEN) return;
+                    setSavedToken(PRACTICE_TOKEN);
                     notify('練習用トークンを保存しました（練習画面内のみ）');
                     if (step.id === 'register-save') advance();
                   }}
@@ -523,16 +550,18 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
             workspace={workspace}
             entries={entries}
             sampleLoaded={sampleLoaded}
+            stepCompleted={stepCompleted}
             onLoadSample={handleLoadSample}
             onDispatch={dispatch}
             onBackgroundAdded={() => {
-              notify('背景タグを追加しました');
-              if (step.id === 'editor-add-background') advance();
+              notify('背景タグを追加しました。カテゴリとプロンプトの変化を確認してください');
+              if (step.id === 'editor-add-background') setStepCompleted(true);
             }}
             onHatToggledOff={() => {
               notify('帽子タグを OFF にしました（編集欄に残ったままプロンプトから外れます）');
-              if (step.id === 'editor-toggle-hat') advance();
+              if (step.id === 'editor-toggle-hat') setStepCompleted(true);
             }}
+            onNextStep={advance}
             onCopy={handleCopyPrompt}
           />
         )}

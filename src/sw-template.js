@@ -98,8 +98,16 @@ self.addEventListener('fetch', (event) => {
   // ページ本体は、この版のインストール時に入れたものをオフライン用に保つ。
   // 待っている新しい版の HTML で上書きすると、そのスクリプトがこのキャッシュに無く、オフラインで開けなくなる。
   if (req.mode === 'navigate') {
+    const pathname = new URL(req.url).pathname;
+    const isTutorial = /\/tutorial(?:\/(?:index\.html)?)?$/.test(pathname);
+    const fallbackKey = isTutorial ? './tutorial/index.html' : './';
     event.respondWith(
-      fetch(req).catch(() => caches.match('./', { cacheName: CACHE }).then((res) => res || Response.error())),
+      fetch(req).catch(() =>
+        caches
+          .match(fallbackKey, { cacheName: CACHE })
+          .then((res) => res || caches.match('./', { cacheName: CACHE }))
+          .then((res) => res || Response.error()),
+      ),
     );
     return;
   }

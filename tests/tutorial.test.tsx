@@ -141,11 +141,28 @@ describe('TutorialApp', () => {
     clickButton('保存');
     clickButton('タグの例と辞書を読み込む');
 
-    // お手本を見るで背景タグを追加
-    clickButton('お手本を見る');
+    // 日本語「夕焼け」で候補から sunset を選び、同じ画面で反映を確認してから次へ進む
+    const tagInput = container.querySelector('input[placeholder*="夕焼け"]') as HTMLInputElement | null;
+    expect(tagInput).toBeTruthy();
+    await act(async () => {
+      tagInput!.focus();
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(tagInput!, '夕焼け');
+      tagInput!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const sunsetOption = Array.from(container.querySelectorAll('[role="option"]')).find((el) =>
+      el.textContent?.includes('sunset'),
+    ) as HTMLElement | undefined;
+    expect(sunsetOption).toBeTruthy();
+    await act(async () => {
+      sunsetOption!.click();
+    });
+    // 追加直後も編集画面に留まり、プロンプトに sunset が反映されていることを確認できる
     expect(container.textContent).toContain('sunset');
+    expect(container.textContent).toContain('カテゴリとプロンプトに反映されました');
+    clickButton('確認して次へ');
 
-    // キャラの hat を OFF にする
+    // キャラの hat を OFF にする（編集欄に残ったままプロンプトから外れ、その場で確認できる）
     const hatCheckbox = Array.from(container.querySelectorAll('input[type="checkbox"]')).find((el) =>
       el.parentElement?.textContent?.includes('hat'),
     ) as HTMLInputElement | undefined;
@@ -153,6 +170,9 @@ describe('TutorialApp', () => {
     await act(async () => {
       hatCheckbox!.click();
     });
+    expect(container.textContent).toContain('OFF（編集欄に残る）');
+    expect(container.textContent).toContain('タグは編集欄に残ったまま、プロンプトから外れました');
+    clickButton('確認して次へ');
 
     // 生成ボタンを押して完了画面へ
     clickButton('生成');
@@ -201,5 +221,33 @@ describe('TutorialApp', () => {
     clickButton('見るだけ');
     clickButton('一時停止');
     expect(container.textContent).toContain('再生');
+  });
+
+  it('rejects real tokens in the practice input and does not overwrite system clipboard on practice copy', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+
+    await act(async () => {
+      root.render(<TutorialApp initialSearch="?scene=issue-token" />);
+    });
+    clickButton('Settings');
+    clickButton('Account');
+    clickButton('Get Persistent API Token');
+    clickButton('Overwrite');
+    clickButton('コピー');
+    expect(writeText).not.toHaveBeenCalled();
+
+    const tokenField = container.querySelector('input[type="password"]') as HTMLInputElement | null;
+    expect(tokenField).toBeTruthy();
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(tokenField!, 'pst-real-user-secret-token-123456');
+      tokenField!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(tokenField!.value).toBe('');
+    expect(container.textContent).toContain('実トークンは練習画面には入力できません');
   });
 });

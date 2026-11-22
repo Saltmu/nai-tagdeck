@@ -12,10 +12,12 @@ interface Props {
   workspace: Workspace;
   entries: DictEntry[];
   sampleLoaded: boolean;
+  stepCompleted: boolean;
   onLoadSample: () => void;
   onDispatch: (action: WorkspaceAction) => void;
   onBackgroundAdded: () => void;
   onHatToggledOff: () => void;
+  onNextStep: () => void;
   onCopy: (text: string, label: string) => void;
 }
 
@@ -24,10 +26,12 @@ export function TutorialTagEditor({
   workspace,
   entries,
   sampleLoaded,
+  stepCompleted,
   onLoadSample,
   onDispatch,
   onBackgroundAdded,
   onHatToggledOff,
+  onNextStep,
   onCopy,
 }: Props) {
   const [activePane, setActivePane] = useState<'base' | 'character'>(
@@ -171,6 +175,18 @@ export function TutorialTagEditor({
                 </div>
               </div>
             ) : null}
+            {stepCompleted && (stepId === 'editor-add-background' || stepId === 'editor-toggle-hat') && (
+              <div className="tutorial-step-done" role="status">
+                <span>
+                  {stepId === 'editor-add-background'
+                    ? 'カテゴリとプロンプトに反映されました。確認できたら次へ進みましょう。'
+                    : 'タグは編集欄に残ったまま、プロンプトから外れました。確認できたら次へ進みましょう。'}
+                </span>
+                <button type="button" className="btn btn-primary btn-small is-spotlight" onClick={onNextStep}>
+                  確認して次へ
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
