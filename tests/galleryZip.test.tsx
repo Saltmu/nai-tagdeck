@@ -100,7 +100,8 @@ it('downloads every image in a zip using the individual file names and marks the
   for (const item of ordered) {
     expect(files[imageFileName(item)]).toEqual(new Uint8Array(await item.blob.arrayBuffer()));
   }
-  expect(onDownloaded.mock.calls.map((call) => call[0])).toEqual(['img-2', 'img-1']);
+  expect(onDownloaded).not.toHaveBeenCalled();
+  expect(container.querySelector('.notice')?.textContent).toContain('もう一度保存できます');
 });
 
 it('zips only images that are not downloaded yet', async () => {
@@ -117,7 +118,8 @@ it('zips only images that are not downloaded yet', async () => {
   expect(saved[0]!.name).toMatch(/^nai-tagdeck-undownloaded-\d{8}-\d{6}\.zip$/);
   const files = unzipSync(new Uint8Array(await saved[0]!.blob.arrayBuffer()));
   expect(Object.keys(files)).toEqual([imageFileName(images[0]!)]);
-  expect(onDownloaded.mock.calls.map((call) => call[0])).toEqual(['img-2']);
+  expect(onDownloaded).not.toHaveBeenCalled();
+  expect(buttonByText('未ダウンロードを ZIP で保存').disabled).toBe(false);
 });
 
 it('disables zip actions when there is nothing to save and toggles pin from the thumbnail', async () => {

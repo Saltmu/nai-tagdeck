@@ -80,6 +80,18 @@ describe('applyImageRetention', () => {
     expect(res.evicted.map((x) => x.id)).toEqual(['n1']);
   });
 
+  it('keeps a newly added image and evicts the oldest pinned image when the rest are pinned', () => {
+    const items = [
+      makeItem('new', 100, false, false, false),
+      makeItem('p1', 100, false, false, true),
+      makeItem('p2', 100, false, false, true),
+      makeItem('p3', 100, false, false, true),
+    ];
+    const res = applyImageRetention(items, { maxCount: 3, maxBytes: 1000 }, 1);
+    expect(res.retained.map((x) => x.id)).toEqual(['new', 'p1', 'p2']);
+    expect(res.evicted.map((x) => x.id)).toEqual(['p3']);
+  });
+
   it('evicts oldest pinned images when every image is pinned', () => {
     const items = [
       makeItem('p1', 100, false, false, true),

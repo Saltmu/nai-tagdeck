@@ -47,6 +47,7 @@ export function Gallery({
   const [openId, setOpenId] = useState<string | null>(null);
   const [fileError, setFileError] = useState('');
   const [zipError, setZipError] = useState('');
+  const [zipMessage, setZipMessage] = useState('');
   const [zipping, setZipping] = useState<'all' | 'new' | null>(null);
   const zippingRef = useRef(false);
   const openIndex = images.findIndex((img) => img.id === openId);
@@ -61,6 +62,7 @@ export function Gallery({
     zippingRef.current = true;
     setZipping(onlyUndownloaded ? 'new' : 'all');
     setZipError('');
+    setZipMessage('');
     try {
       const files = [];
       for (const image of [...targets].reverse()) {
@@ -71,7 +73,8 @@ export function Gallery({
       }
       const prefix = onlyUndownloaded ? 'nai-tagdeck-undownloaded' : 'nai-tagdeck';
       downloadBlob(`${prefix}-${timeStamp()}.zip`, imageZipBlob(files));
-      for (const image of targets) onDownloaded(image.id);
+      // <a download> では保存完了やキャンセルを確認できない。downloaded にすると未ダウンロード ZIP から外れ、取り消した保存をやり直せない。
+      setZipMessage(`${targets.length}枚を ZIP にしました。保存をキャンセルしたときは、もう一度保存できます。`);
     } catch {
       setZipError('ZIP の作成に失敗しました');
     } finally {
@@ -146,6 +149,7 @@ export function Gallery({
       </div>
       {fileError && <p className="error-banner" role="alert">{fileError}</p>}
       {zipError && <p className="error-banner" role="alert">{zipError}</p>}
+      {zipMessage && <p className="notice" role="status">{zipMessage}</p>}
       {evictedCount > 0 && (
         <div className="notice" role="status">
           <span>履歴上限のため、古い画像 {evictedCount}枚を削除しました。残したい画像はピン留めするかダウンロードしてください。</span>

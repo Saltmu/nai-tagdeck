@@ -21,6 +21,7 @@
   overflow: hidden;
   border-radius: 8px;
   background: var(--surface-2);
+  container-type: inline-size;
 }
 
 .thumb-btn {
@@ -70,6 +71,15 @@
 
 .thumb-pin {
   left: 0.4rem;
+}
+
+/* 最新画像は縦長だと幅がボタン2つ分より狭くなる。そのときは右へ縦に並べ、ピンがダウンロードに隠れないようにする。 */
+@container (max-width: 7.5rem) {
+  .thumb-pin {
+    left: auto;
+    right: 0.4rem;
+    top: calc(0.4rem + 44px + 0.25rem);
+  }
 }
 
 .thumb-download:hover:not(:disabled),

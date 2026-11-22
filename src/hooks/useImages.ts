@@ -76,6 +76,7 @@ export function useImages(options?: UseImagesOptions): ImageStore {
     const { retained, evicted } = applyImageRetention(
       [...created, ...imagesRef.current],
       limitsRef.current,
+      created.length,
     );
     imagesRef.current = retained;
     setImages(retained);

@@ -242,3 +242,25 @@ it('keeps a pinned image when a newer unpinned image would otherwise be the one 
   expect(store.images.map((img) => img.seed)).toEqual([3, 1]);
   expect(store.images.find((img) => img.seed === 1)!.pinned).toBe(true);
 });
+
+it('keeps a new image when the history is already full of pinned images', async () => {
+  await renderHook({ limits: { maxCount: 2, maxBytes: 1000 } });
+  await act(async () => {
+    store.add([makeNewImage(1)]);
+  });
+  await act(async () => {
+    store.togglePinned(store.images[0]!.id);
+  });
+  await act(async () => {
+    store.add([makeNewImage(2)]);
+  });
+  await act(async () => {
+    store.togglePinned(store.images[0]!.id);
+  });
+  await act(async () => {
+    store.add([makeNewImage(3)]);
+  });
+  expect(store.images.map((img) => img.seed)).toEqual([3, 2]);
+  expect(store.images.find((img) => img.seed === 3)!.pinned).toBe(false);
+  expect(store.images.find((img) => img.seed === 2)!.pinned).toBe(true);
+});

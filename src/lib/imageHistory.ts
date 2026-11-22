@@ -30,14 +30,19 @@ export interface RetentionResult<T extends RetainableImage> {
 /**
  * 新しい画像を先頭に含む配列に対し、枚数・総バイト数の上限に収まるよう破棄する。
  * 同じ段では古い画像を先に捨てる。
- * 1. ピン留めしていない、保存完了が確認された画像（saveConfirmed）
- * 2. ピン留めしていない画像
- * 3. 残りがすべてピン留めのとき: 保存完了が確認された画像、なければ古い画像
+ * 先頭 protectCount 枚は、今回追加した画像として、それより古い画像で上限に収まるあいだ残す。
+ * 1. 保護対象でない、ピン留めしていない、保存完了が確認された画像（saveConfirmed）
+ * 2. 保護対象でない、ピン留めしていない画像
+ * 3. 保護対象でない画像（すべてピン留めのときは、保存完了が確認されたもの、なければ古いもの）
+ * 4. それでも超えるときは、保護対象も含めて同じ順
  * 最後の1枚は残す。
  */
-function oldestIndex<T extends RetainableImage>(images: T[], match: (img: T) => boolean): number {
+function oldestIndex<T extends RetainableImage>(
+  images: T[],
+  match: (img: T, index: number) => boolean,
+): number {
   for (let i = images.length - 1; i >= 0; i--) {
-    if (match(images[i]!)) return i;
+    if (match(images[i]!, i)) return i;
   }
   return -1;
 }
@@ -45,23 +50,32 @@ function oldestIndex<T extends RetainableImage>(images: T[], match: (img: T) => 
 export function applyImageRetention<T extends RetainableImage>(
   images: T[],
   limits: ImageHistoryLimits = DEFAULT_IMAGE_HISTORY_LIMITS,
+  protectCount = 0,
 ): RetentionResult<T> {
   const retained = [...images];
   const evicted: T[] = [];
   let totalBytes = retained.reduce((sum, img) => sum + img.blob.size, 0);
+  let protectedPrefix = Math.max(0, Math.min(protectCount, retained.length));
 
   const pickEvictIndex = (): number => {
-    const unpinnedSaved = oldestIndex(retained, (img) => !img.pinned && !!img.saveConfirmed);
+    const pick = (match: (img: T, index: number) => boolean) => oldestIndex(retained, match);
+    const outside = (index: number) => index >= protectedPrefix;
+    const unpinnedSaved = pick((img, index) => outside(index) && !img.pinned && !!img.saveConfirmed);
     if (unpinnedSaved >= 0) return unpinnedSaved;
-    const unpinned = oldestIndex(retained, (img) => !img.pinned);
+    const unpinned = pick((img, index) => outside(index) && !img.pinned);
     if (unpinned >= 0) return unpinned;
-    const saved = oldestIndex(retained, (img) => !!img.saveConfirmed);
+    const saved = pick((img, index) => outside(index) && !!img.saveConfirmed);
     if (saved >= 0) return saved;
+    const older = pick((_img, index) => outside(index));
+    if (older >= 0) return older;
+    const savedInside = pick((img) => !!img.saveConfirmed);
+    if (savedInside >= 0) return savedInside;
     return retained.length - 1;
   };
 
   while (retained.length > 1 && (retained.length > limits.maxCount || totalBytes > limits.maxBytes)) {
     const idx = pickEvictIndex();
+    if (idx < protectedPrefix) protectedPrefix -= 1;
     const [removed] = retained.splice(idx, 1);
     if (!removed) break;
     totalBytes -= removed.blob.size;
