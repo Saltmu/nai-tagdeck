@@ -2,7 +2,9 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import type { GeneratedCharacterDetail, GeneratedImage } from '../hooks/useImages';
 import { copyText, timeStamp } from '../lib/browser';
 import { modeLabel, samplerLabel } from '../lib/generation';
+import { PROMPT_TOKEN_ESTIMATE_NOTE } from '../lib/prompt';
 import { CheckIcon, CloseIcon, DownloadIcon, LockIcon, NextIcon, PinIcon, PrevIcon, TrashIcon } from './icons';
+import { PromptMetrics, PromptMetricsWarning } from './PromptPreview';
 
 interface Props {
   image: GeneratedImage;
@@ -236,11 +238,13 @@ interface PromptCopyProps {
   copiedKey: string | null;
   failedKey: string | null;
   negative?: boolean;
+  /** 公式の 1471 はベースプロンプトの上限。ベースの行だけ警告する。 */
+  warnOnLimit?: boolean;
   hint?: string;
   onCopy: (key: string, text: string, label: string) => void;
 }
 
-function PromptCopy({ title, text, emptyText, copyKey, copyLabel, copiedKey, failedKey, negative, hint, onCopy }: PromptCopyProps) {
+function PromptCopy({ title, text, emptyText, copyKey, copyLabel, copiedKey, failedKey, negative, warnOnLimit = false, hint, onCopy }: PromptCopyProps) {
   const copied = copiedKey === copyKey;
   const failed = failedKey === copyKey;
   const ariaLabel = copied
@@ -252,6 +256,7 @@ function PromptCopy({ title, text, emptyText, copyKey, copyLabel, copiedKey, fai
     <div className={`preview-item${negative ? ' preview-negative' : ''}`}>
       <dt>
         {title}
+        <PromptMetrics text={text} warn={warnOnLimit} />
         <button
           type="button"
           className={`btn btn-small${failed ? ' btn-danger' : ''}`}
@@ -265,6 +270,7 @@ function PromptCopy({ title, text, emptyText, copyKey, copyLabel, copiedKey, fai
       <dd>
         <output className={`preview-text${text ? '' : ' is-empty'}`}>{text || emptyText}</output>
         {hint && <p className="hint">{hint}</p>}
+        <PromptMetricsWarning text={text} warn={warnOnLimit} />
       </dd>
     </div>
   );
@@ -538,6 +544,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
                 copyLabel={baseLabel}
                 copiedKey={copiedKey}
                 failedKey={failedKey}
+                warnOnLimit
                 onCopy={copyPrompt}
               />
               {rows.map((c, i) => (
@@ -582,6 +589,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
                 />
               )}
             </dl>
+            <p className="hint">{PROMPT_TOKEN_ESTIMATE_NOTE}</p>
           </details>
           <p className="viewer-copy-status visually-hidden" role="status" aria-live="polite">{copyStatus}</p>
         </div>

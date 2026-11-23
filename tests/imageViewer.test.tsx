@@ -4,6 +4,13 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ImageViewer } from '../src/components/ImageViewer';
 import type { GeneratedImage } from '../src/hooks/useImages';
+import {
+  PROMPT_TOKEN_ESTIMATE_NOTE,
+  PROMPT_TOKEN_LIMIT_GUIDE,
+  PROMPT_TOKEN_WARN_THRESHOLD,
+  formatPromptMetrics,
+  measurePrompt,
+} from '../src/lib/prompt';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -225,5 +232,53 @@ describe('ImageViewer prompts and parameters', () => {
     const thirdCopy = container.querySelector<HTMLButtonElement>('.viewer-prompt button')!;
     expect(thirdCopy.textContent).not.toContain('コピー済み');
     expect(container.querySelector('.viewer-prompt ~ [role="status"]')?.textContent).toBe('');
+  });
+
+  it('shows a token estimate for each prompt and a warning that still allows copy', async () => {
+    const long = Array.from({ length: PROMPT_TOKEN_WARN_THRESHOLD }, () => 'a').join(' ');
+    await renderViewer(image({
+      prompt: long,
+      characterPrompts: ['wolf'],
+      characterDetails: [{ prompt: 'wolf', negative: '' }],
+      negativePrompt: 'lowres',
+    }));
+
+    const byTitle = (title: string) => {
+      const found = [...container.querySelectorAll<HTMLElement>('.viewer-prompt .preview-item')].find((node) =>
+        node.querySelector('dt')?.childNodes[0]?.textContent?.trim() === title,
+      );
+      if (!found) throw new Error(`missing ${title}`);
+      return found;
+    };
+    const base = byTitle('ベース');
+    expect(base.querySelector('output')?.textContent).toBe(long);
+    expect(base.querySelector('.preview-metrics')?.textContent).toBe(formatPromptMetrics(measurePrompt(long)));
+    expect(base.querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(true);
+    expect(base.querySelector('.hint')?.textContent).toContain(String(PROMPT_TOKEN_LIMIT_GUIDE));
+    expect(base.querySelector('button')?.disabled).toBe(false);
+    expect(byTitle('キャラ1').querySelector('.preview-metrics')?.textContent).toBe(formatPromptMetrics(measurePrompt('wolf')));
+    expect(byTitle('キャラ1のネガティブ').querySelector('.preview-metrics')).toBeNull();
+    expect(byTitle('ネガティブ').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+    expect(container.querySelector('.viewer-prompt')?.textContent).toContain(PROMPT_TOKEN_ESTIMATE_NOTE);
+
+    await renderViewer(image({
+      prompt: 'solo',
+      characterPrompts: [long],
+      characterDetails: [{ prompt: long, negative: long }],
+      negativePrompt: long,
+    }));
+    const row = (title: string) => {
+      const found = [...container.querySelectorAll<HTMLElement>('.viewer-prompt .preview-item')].find((node) =>
+        node.querySelector('dt')?.childNodes[0]?.textContent?.trim() === title,
+      );
+      if (!found) throw new Error(`missing ${title}`);
+      return found;
+    };
+    expect(row('ベース').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+    expect(row('キャラ1').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+    expect(row('キャラ1').querySelector('.hint')).toBeNull();
+    expect(row('キャラ1のネガティブ').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+    expect(row('ネガティブ').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+    expect(row('キャラ1').querySelector('button')?.disabled).toBe(false);
   });
 });
