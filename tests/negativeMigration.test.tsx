@@ -90,12 +90,34 @@ it('does not write a migrated workspace after resetting during the legacy settin
 });
 
 it('keeps a legacy migration in memory when another tab is newer', async () => {
-  receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'settings', seq: 1, at: 1 });
-  stored({ workspace: { base: { quality: [{ tag: 'masterpiece' }] } }, settings: { negativePrompt: 'lowres' } });
-  await render();
-  expect(current.loaded).toBe(true);
-  expect(current.workspace.negative.map((tag) => tag.tag)).toEqual(['lowres']);
-  expect(setKV).not.toHaveBeenCalled();
+  vi.useFakeTimers();
+  try {
+    receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'settings', seq: 1, at: 1 });
+    stored({ workspace: { base: { quality: [{ tag: 'masterpiece' }] } }, settings: { negativePrompt: 'lowres' } });
+    let updateSettings!: ReturnType<typeof useSettings>[1];
+    function CombinedHarness() {
+      current = useWorkspace();
+      const [, update] = useSettings(current.loaded && !current.migrationHeld);
+      updateSettings = update;
+      return null;
+    }
+    await act(async () => root.render(<CombinedHarness />));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+    expect(current.loaded).toBe(true);
+    expect(current.migrationHeld).toBe(true);
+    expect(current.workspace.negative.map((tag) => tag.tag)).toEqual(['lowres']);
+    expect(setKV).not.toHaveBeenCalledWith('workspace', expect.anything());
+    clearTabSyncConflict();
+    await act(async () => updateSettings({ weightSyntax: 'brace' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+    expect(setKV).not.toHaveBeenCalledWith('workspace', expect.anything());
+    expect(setKV).toHaveBeenCalledWith('settings', expect.objectContaining({
+      weightSyntax: 'brace',
+      negativePrompt: 'lowres',
+    }));
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it('locks instead of failing when the migrated workspace write is already stale', async () => {

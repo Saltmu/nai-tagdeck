@@ -65,6 +65,26 @@ describe('sync guard', () => {
     expect((await listEntries()).map((item) => item.id)).toEqual(['kept']);
   });
 
+  it('keeps an earlier scope stale when a later read sees a newer reset generation', async () => {
+    await setKV('workspace', { tag: 'local' });
+    await bumpGuard((guard) => {
+      guard.epoch += 1;
+      guard.seqs = {};
+    });
+    const db = await openRaw();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').delete('workspace');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+    await getKV('settings');
+    await readSyncEpoch();
+    await expect(setKV('workspace', { tag: 'revived' })).rejects.toBeInstanceOf(StaleWriteError);
+    expect(await getKV('workspace')).toBeUndefined();
+  });
+
   it('writes a confirmed snapshot for the same reset generation and refuses an older one', async () => {
     const epoch = await readSyncEpoch();
     await replaceKV('workspace', { tag: 'preferred' }, epoch);

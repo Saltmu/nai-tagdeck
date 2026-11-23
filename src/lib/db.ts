@@ -65,9 +65,8 @@ interface SyncGuard {
   epoch: number;
 }
 
-/** このタブが最後に読んだ版。タブごとにメモリへ置く。 */
-const seenSeq = new Map<string, number>();
-let seenEpoch = 0;
+/** このタブが範囲ごとに最後に読んだ版。タブのメモリに置く。 */
+const seen = new Map<string, { seq: number; epoch: number }>();
 
 function emptyGuard(): SyncGuard {
   return { seqs: {}, epoch: 0 };
@@ -81,14 +80,13 @@ function normalizeGuard(raw: unknown): SyncGuard {
 }
 
 function remember(scope: string, seq: number, epoch: number): void {
-  seenSeq.set(scope, seq);
-  seenEpoch = epoch;
+  seen.set(scope, { seq, epoch });
 }
 
 function isStale(scope: string, guard: SyncGuard): boolean {
-  const seen = seenSeq.get(scope);
-  if (seen === undefined) return false;
-  return seen !== (guard.seqs[scope] ?? 0) || seenEpoch !== guard.epoch;
+  const prior = seen.get(scope);
+  if (!prior) return false;
+  return prior.seq !== (guard.seqs[scope] ?? 0) || prior.epoch !== guard.epoch;
 }
 
 type GuardStore = { get: (key: string) => Promise<unknown> };
@@ -240,15 +238,10 @@ export async function replaceKV(key: KVKey, value: unknown, epoch: number): Prom
 
 export async function readSyncEpoch(): Promise<number> {
   const db = await open();
-  if (!hasTransaction(db)) {
-    const guard = normalizeGuard(await db.get('kv', SYNC_GUARD_KEY));
-    seenEpoch = guard.epoch;
-    return guard.epoch;
-  }
+  if (!hasTransaction(db)) return normalizeGuard(await db.get('kv', SYNC_GUARD_KEY)).epoch;
   const tx = db.transaction('kv', 'readonly');
   const guard = await readGuard(tx.store);
   await tx.done;
-  seenEpoch = guard.epoch;
   return guard.epoch;
 }
 
@@ -263,6 +256,6 @@ export async function clearAllData(): Promise<void> {
   next.epoch = guard.epoch + 1;
   await kv.put(next, SYNC_GUARD_KEY);
   await tx.done;
-  seenSeq.clear();
-  seenEpoch = next.epoch;
+  seen.clear();
+  for (const scope of [...KV_KEYS, DICTIONARY_SEQ]) remember(scope, 0, next.epoch);
 }

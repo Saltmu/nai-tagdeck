@@ -254,6 +254,21 @@ describe('persistent state', () => {
     expect(setKV).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps a newer edit dirty when an older save finishes after the lock', async () => {
+    let finishWrite!: () => void;
+    vi.mocked(getKV).mockResolvedValue('saved');
+    vi.mocked(setKV).mockImplementationOnce(() => new Promise<void>((resolve) => { finishWrite = resolve; }));
+    await act(async () => root.render(<Harness />));
+    await act(async () => change('A'));
+    await tick();
+    await act(async () => change('B'));
+    receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'settings', seq: 4, at: 4 });
+    await act(async () => finishWrite());
+    await tick();
+    expect(setKV).toHaveBeenCalledExactlyOnceWith('workspace', 'A');
+    expect(scopesToSave(getTabSyncConflict()!)).toContain('workspace');
+  });
+
   it('drops a queued write when another tab updates before it runs', async () => {
     let finishWrite!: () => void;
     vi.mocked(getKV).mockResolvedValue('saved');

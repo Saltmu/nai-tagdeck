@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { getKV, setKV, StaleWriteError, type KVKey } from '../lib/db';
+import { getKV, KV_KEYS, listEntries, setKV, StaleWriteError, type KVKey } from '../lib/db';
+import type { DictEntry } from '../types';
 import { getDataResetSignal } from '../lib/reset';
 import { isTabSyncLocked, lockTabSyncFromStaleWrite, publishTabSync, setScopeDirty, startTabSync } from '../lib/tabSync';
 
@@ -12,6 +13,44 @@ export interface PersistenceState {
 }
 
 const INITIAL: PersistenceState = { loaded: false, status: 'loading', error: null, revision: 0 };
+
+const persistedListeners = new Set<(key: KVKey) => void>();
+
+/** そのキーの保存が IndexedDB に届いたときに知らせる。 */
+export function subscribePersisted(listener: (key: KVKey) => void): () => void {
+  persistedListeners.add(listener);
+  return () => { persistedListeners.delete(listener); };
+}
+
+export function notePersisted(key: KVKey): void {
+  for (const listener of persistedListeners) listener(key);
+}
+
+const kvSnapshots = new Map<KVKey, { revision: number; raw: unknown }>();
+let dictionarySnapshot: { revision: number; entries: DictEntry[] } | null = null;
+
+/** 全部読めてから画面へ渡す。途中で失敗したときは、いまの画面を変えない。 */
+export async function readReloadSnapshot(revision: number): Promise<void> {
+  const [entries, ...values] = await Promise.all([
+    listEntries(),
+    ...KV_KEYS.map((key) => getKV(key)),
+  ]);
+  KV_KEYS.forEach((key, index) => {
+    kvSnapshots.set(key, { revision, raw: values[index] });
+  });
+  dictionarySnapshot = { revision, entries };
+}
+
+export function readCachedKV(key: KVKey, revision: number): { hit: true; raw: unknown } | { hit: false } {
+  const slot = kvSnapshots.get(key);
+  if (!slot || slot.revision !== revision) return { hit: false };
+  return { hit: true, raw: slot.raw };
+}
+
+export function readCachedDictionary(revision: number): DictEntry[] | undefined {
+  if (!dictionarySnapshot || dictionarySnapshot.revision !== revision) return undefined;
+  return dictionarySnapshot.entries;
+}
 
 /**
  * IndexedDB の kv ストアから値を読み込み、変更を少し遅らせて書き戻す。
@@ -28,7 +67,7 @@ export function usePersistence<T>(
   const [state, setState] = useState({ key, ...INITIAL });
   const [resetSignal] = useState(getDataResetSignal);
   const writes = useRef(Promise.resolve());
-  const synced = useRef<{ key: string; value: T; inFlight: number } | null>(null);
+  const synced = useRef<{ key: string; value: T; inFlight: number; latestGen: number } | null>(null);
   const current = state.key === key ? state : INITIAL;
   const stateRef = useRef(current);
   stateRef.current = current;
@@ -41,7 +80,9 @@ export function usePersistence<T>(
     const isCurrent = () => active && !resetSignal.aborted;
     synced.current = null;
     setState({ key, ...INITIAL });
-    getKV<unknown>(key)
+    const cached = revision > 0 ? readCachedKV(key, revision) : { hit: false as const };
+    const read = cached.hit ? Promise.resolve(cached.raw) : getKV<unknown>(key);
+    read
       .then(async (raw) => {
         if (!isCurrent()) return;
         // 初回に値が無いときは初期状態のままにする。再読み込みで消えていたときだけ既定値へ戻す。
@@ -63,11 +104,12 @@ export function usePersistence<T>(
   useEffect(() => {
     if (!current.loaded) return;
     if (synced.current?.key !== key) {
-      synced.current = { key, value, inFlight: 0 };
+      synced.current = { key, value, inFlight: 0, latestGen: 0 };
       setScopeDirty(key, false);
       return;
     }
     const tracker = synced.current;
+    const generation = ++tracker.latestGen;
     if (tracker.inFlight === 0 && Object.is(tracker.value, value)) {
       setScopeDirty(key, false);
       return;
@@ -90,7 +132,8 @@ export function usePersistence<T>(
           if (resetSignal.aborted || isTabSyncLocked() || (!force && !active)) return;
           await setKV(key, value);
           tracker.value = value;
-          setScopeDirty(key, false);
+          if (tracker.latestGen === generation) setScopeDirty(key, false);
+          notePersisted(key);
           publishTabSync('updated', key);
           if (active && (stateRef.current.status !== 'idle' || stateRef.current.error !== null)) {
             setState({ key, loaded: true, status: 'idle', error: null, revision: stateRef.current.revision });

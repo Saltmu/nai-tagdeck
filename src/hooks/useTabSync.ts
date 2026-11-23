@@ -68,26 +68,31 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
     const current = getTabSyncConflict();
     if (!current || busyRef.current) return;
     void (async () => {
-      const storedEpoch = await portsRef.current.readEpoch();
-      const ok = await portsRef.current.confirmOverwrite();
-      const latest = getTabSyncConflict();
-      if (!ok || !latest || busyRef.current) return;
-      if ((await portsRef.current.readEpoch()) !== storedEpoch) {
-        setError('別のタブでデータが削除されたため、保存を中止しました。内容を確認してからもう一度選んでください。');
-        return;
-      }
-      busyRef.current = true;
-      setBusy(true);
-      setError(null);
-      const syncEpoch = getTabSyncEpoch();
+      let started = false;
       try {
+        const storedEpoch = await portsRef.current.readEpoch();
+        const ok = await portsRef.current.confirmOverwrite();
+        if (!ok || busyRef.current || !getTabSyncConflict()) return;
+        if ((await portsRef.current.readEpoch()) !== storedEpoch) {
+          setError('別のタブでデータが削除されたため、保存を中止しました。内容を確認してからもう一度選んでください。');
+          return;
+        }
+        const latest = getTabSyncConflict();
+        const syncEpoch = getTabSyncEpoch();
+        if (!latest || busyRef.current) return;
+        started = true;
+        busyRef.current = true;
+        setBusy(true);
+        setError(null);
         await portsRef.current.saveLocal(latest, storedEpoch);
         if (getTabSyncEpoch() === syncEpoch) clearTabSyncConflict();
       } catch (caught) {
         setError(`このタブの内容を保存できません: ${String(caught)}`);
       } finally {
-        busyRef.current = false;
-        setBusy(false);
+        if (started) {
+          busyRef.current = false;
+          setBusy(false);
+        }
       }
     })();
   }, []);

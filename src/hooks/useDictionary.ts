@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DictEntry } from '../types';
 import { deleteEntry, listEntries, putEntry, putEntries, replaceAllEntries, StaleWriteError } from '../lib/db';
+import { readCachedDictionary } from './usePersistence';
 import { mergeEntries, sortEntries, type ImportMode } from '../lib/io';
 import { getDataResetSignal } from '../lib/reset';
 import { restoreInitialDictionary } from '../lib/sampleDictionary';
@@ -16,7 +17,7 @@ export interface Dictionary {
   importEntries: (incoming: DictEntry[], mode: ImportMode) => Promise<number>;
   restoreInitial: () => Promise<number>;
   /** IndexedDB の最新の辞書を読み直す。生成画像の履歴は触らない。 */
-  reload: () => Promise<void>;
+  reload: (revision?: number) => Promise<void>;
 }
 
 export function useDictionary(): Dictionary {
@@ -50,7 +51,12 @@ export function useDictionary(): Dictionary {
     setLoaded(true);
   }, []);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (revision = 0) => {
+    const cached = revision > 0 ? readCachedDictionary(revision) : undefined;
+    if (cached) {
+      applyLoaded(cached);
+      return;
+    }
     const id = ++loadId.current;
     setLoaded(false);
     try {

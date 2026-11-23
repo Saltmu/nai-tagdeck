@@ -27,6 +27,7 @@ vi.mock('../src/lib/db', () => {
     putEntries: vi.fn(),
     deleteEntry: vi.fn(),
     clearAllData: vi.fn(),
+    KV_KEYS: ['workspace', 'settings', 'generation', 'presets', 'activePreset'],
     StaleWriteError,
   };
 });
@@ -177,6 +178,55 @@ describe('TabSyncNotice', () => {
     await act(async () => button('最新のデータを読み込む').click());
     expect(resyncToken).toHaveBeenCalledOnce();
   });
+
+  it('includes a scope that arrives while the reset generation is checked again', async () => {
+    let releaseEpoch!: (epoch: number) => void;
+    const saveLocal = vi.fn(async () => {});
+    function Harness() {
+      const sync = useTabSync({
+        confirmOverwrite: async () => true,
+        reloadStores: async () => {},
+        saveLocal,
+        readEpoch: vi.fn()
+          .mockResolvedValueOnce(0)
+          .mockImplementationOnce(() => new Promise<number>((resolve) => { releaseEpoch = resolve; })),
+        resyncToken: () => {},
+      });
+      return <TabSyncNotice conflict={sync.conflict} busy={sync.busy} error={sync.error} onReload={sync.reloadLatest} onPrefer={sync.preferLocal} />;
+    }
+    await act(async () => root.render(<Harness />));
+    await act(async () => {
+      receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'settings', seq: 1, at: 1 });
+    });
+    await act(async () => button('このタブの内容を優先して保存する').click());
+    await act(async () => {
+      receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'workspace', seq: 2, at: 2 });
+      releaseEpoch(0);
+    });
+    expect(saveLocal).toHaveBeenCalledWith(expect.objectContaining({
+      scopes: expect.arrayContaining(['settings', 'workspace']),
+    }), 0);
+  });
+
+  it('shows a notice when the reset generation cannot be read', async () => {
+    function Harness() {
+      const sync = useTabSync({
+        confirmOverwrite: async () => true,
+        reloadStores: async () => {},
+        saveLocal: async () => {},
+        readEpoch: async () => { throw new Error('idb down'); },
+        resyncToken: () => {},
+      });
+      return <TabSyncNotice conflict={sync.conflict} busy={sync.busy} error={sync.error} onReload={sync.reloadLatest} onPrefer={sync.preferLocal} />;
+    }
+    await act(async () => root.render(<Harness />));
+    await act(async () => {
+      receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'settings', seq: 1, at: 1 });
+    });
+    await act(async () => button('このタブの内容を優先して保存する').click());
+    expect(container.textContent).toContain('このタブの内容を保存できません');
+    expect(container.textContent).toContain('idb down');
+  });
 });
 
 describe('App tab sync', () => {
@@ -224,5 +274,19 @@ describe('App tab sync', () => {
     await act(async () => button('最新のデータを読み込む').click());
     expect(container.textContent).toContain('tab-sync-reloaded');
     expect(container.querySelectorAll('img').length).toBe(imagesBefore);
+  });
+
+  it('keeps this tab when reloading fails before every store is read', async () => {
+    await act(async () => root.render(<DialogProvider><App onResetAll={() => {}} /></DialogProvider>));
+    expect(container.textContent).toContain('tab-sync-local');
+    await act(async () => {
+      receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'workspace', seq: 4, at: 4 });
+    });
+    vi.mocked(listEntries).mockRejectedValueOnce(new Error('dict down'));
+    workspaceValue = { base: { quality: [{ tag: 'tab-sync-should-stay', enabled: true, weight: 1 }] }, negative: [] };
+    await act(async () => button('最新のデータを読み込む').click());
+    expect(container.textContent).toContain('最新のデータを読み込めません');
+    expect(container.textContent).toContain('tab-sync-local');
+    expect(container.textContent).not.toContain('tab-sync-should-stay');
   });
 });

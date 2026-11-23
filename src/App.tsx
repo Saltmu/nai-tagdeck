@@ -31,7 +31,8 @@ import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { TabSyncNotice } from './components/TabSyncNotice';
 import { useTabSync } from './hooks/useTabSync';
 import { readSyncEpoch, replaceAllEntries, replaceKV, type KVKey } from './lib/db';
-import { publishTabSync, scopesToSave, type SyncScope } from './lib/tabSync';
+import { notePersisted, readReloadSnapshot } from './hooks/usePersistence';
+import { publishTabSync, scopesToSave, setScopeDirty, type SyncScope } from './lib/tabSync';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
 import { importedBaseForMode, type PromptImport } from './lib/promptImport';
@@ -56,8 +57,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const [reloadRevision, setReloadRevision] = useState(0);
   const reloadRevisionRef = useRef(0);
   const kvWaiters = useRef(new Map<number, { resolve: () => void; reject: (error: Error) => void }>());
-  const { workspace, dispatch: rawDispatch, loaded, persistence } = useWorkspace(reloadRevision);
-  const [settings, updateSettings, settingsPersistence] = useSettings(loaded, reloadRevision);
+  const { workspace, dispatch: rawDispatch, loaded, migrationHeld, persistence } = useWorkspace(reloadRevision);
+  const [settings, updateSettings, settingsPersistence] = useSettings(loaded && !migrationHeld, reloadRevision);
   const [generation, updateGeneration, generationPersistence] = useGenerationSettings(reloadRevision);
   const token = useToken();
   const presets = usePresets(reloadRevision);
@@ -117,14 +118,15 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     confirmOverwrite: () => dialogs.confirm('別のタブでの変更を上書きし、このタブの内容を保存しますか？', { okLabel: '上書きして保存' }),
     readEpoch: () => readSyncEpoch(),
     resyncToken: () => token.resync(),
-    reloadStores: () => {
+    reloadStores: async () => {
       const next = reloadRevisionRef.current + 1;
+      await readReloadSnapshot(next);
       reloadRevisionRef.current = next;
       const kvReady = new Promise<void>((resolve, reject) => {
         kvWaiters.current.set(next, { resolve, reject });
       });
       setReloadRevision(next);
-      return Promise.all([kvReady, dictionaryRef.current.reload()]).then(() => undefined);
+      await Promise.all([kvReady, dictionaryRef.current.reload(next)]);
     },
     saveLocal: async (conflict, epoch) => {
       const snapshots: Record<KVKey, unknown> = {
@@ -140,11 +142,14 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         }
         if (scope === 'dictionary') {
           await replaceAllEntries(entriesRef.current, epoch);
+          setScopeDirty('dictionary', false);
           publishTabSync('updated', 'dictionary');
           continue;
         }
         if (!isKvScope(scope)) continue;
         await replaceKV(scope, snapshots[scope], epoch);
+        setScopeDirty(scope, false);
+        notePersisted(scope);
         publishTabSync('updated', scope);
       }
     },
