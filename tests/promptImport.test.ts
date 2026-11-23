@@ -143,7 +143,7 @@ describe('NovelAI PNG import', () => {
 
   it('rejects missing metadata, invalid comments, unknown origin, empty prompts and truncated chunks', async () => {
     await expect(readPromptImport(new Blob(['not png']), [])).rejects.toThrow('PNG 画像');
-    await expect(readPromptImport(new Blob([pngFixture()]), [])).rejects.toThrow('Comment');
+    await expect(readPromptImport(new Blob([pngFixture()]), [])).rejects.toThrow('生成情報');
     await expect(readPromptImport(new Blob([pngFixture('{')]), [])).rejects.toThrow('JSON');
     await expect(readPromptImport(new Blob([pngFixture({ prompt: 'a' }, { origin: false })]), [])).rejects.toThrow('NovelAI');
     await expect(read({ v4_prompt: caption(''), prompt: 'ignored' })).rejects.toThrow('適用できる正');

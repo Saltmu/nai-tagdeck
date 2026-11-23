@@ -107,7 +107,7 @@ export function importedBaseForMode(result: Pick<PromptImport, 'base' | 'furData
 export async function readPromptImport(blob: Blob, entries: readonly DictEntry[]): Promise<PromptImport> {
   const metadata = await readPngMetadata(blob);
   if (metadata.Comment === undefined) {
-    throw new Error('PNG のテキストチャンクに生成情報（Comment）がありません。アルファチャンネルのみの埋め込みには対応していません');
+    throw new Error('PNG に NovelAI の生成情報が見つかりませんでした');
   }
   let comment: Fields | undefined;
   try {
