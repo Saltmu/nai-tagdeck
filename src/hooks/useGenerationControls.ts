@@ -50,7 +50,7 @@ export function useGenerationControls({ generator, token, basePrompt, characterP
       })),
       settings: generation,
     });
-  }, [generating, generate, token, basePrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings]);
+  }, [generating, generate, token, basePrompt, missingPrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings]);
 
   // Ctrl+Enter（Mac は ⌘+Enter）でどこからでも生成する
   useEffect(() => {

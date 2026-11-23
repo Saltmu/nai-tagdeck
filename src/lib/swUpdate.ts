@@ -64,7 +64,7 @@ export function requestSwSkipWaiting(worker: SwWaitingWorker, reload: () => void
 }
 
 function announceInstalled(sw: SwUpdateClient, worker: SwWaitingWorker | null): void {
-  if (!worker || worker.state !== 'installed' || !sw.controller) return;
+  if (worker?.state !== 'installed' || !sw.controller) return;
   reportWaitingServiceWorker(worker);
 }
 

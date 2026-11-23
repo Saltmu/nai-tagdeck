@@ -8,6 +8,7 @@
     "build": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.node.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.node.json",
+    "lint": "biome lint .",
     "test": "vitest run",
     "eval:classification": "node scripts/eval-tag-classification.mjs",
     "deploy": "node scripts/deploy.mjs"
@@ -19,6 +20,7 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.8",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",

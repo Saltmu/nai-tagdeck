@@ -222,8 +222,10 @@ it('reuses existing image.url on Gallery download without confirmation dialog, r
 
   const notice = container.querySelector('.notice');
   expect(notice?.textContent).toContain('古い画像 2枚を削除しました');
+  const dismiss = notice?.querySelector('button');
+  expect(dismiss).toBeInstanceOf(HTMLButtonElement);
   await act(async () => {
-    (notice?.querySelector('button') as HTMLButtonElement).click();
+    if (dismiss instanceof HTMLButtonElement) dismiss.click();
   });
   expect(onDismissEviction).toHaveBeenCalledOnce();
 

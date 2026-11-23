@@ -181,7 +181,7 @@ export function TutorialApp({ initialSearch }: { initialSearch?: string }) {
         const hat = char?.tags.outfit.find((t) => t.tag.toLowerCase() === 'hat');
         if (hat && !hat.enabled) {
           advance();
-        } else if (char && hat && hat.enabled) {
+        } else if (char && hat?.enabled) {
           dispatch({ type: 'toggle', target: char.id, category: 'outfit', id: hat.id });
           notify('キャラの「hat」を OFF にしました');
         } else {

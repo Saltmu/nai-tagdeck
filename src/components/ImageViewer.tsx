@@ -88,6 +88,10 @@ function ZoomStage({ src, alt, hasPrev, hasNext, onPrev, onNext, onClose }: Stag
     return { x: clientX - r.left - r.width / 2, y: clientY - r.top - r.height / 2 };
   };
 
+  // center と zoomAt は描画ごとに作り直すが、中身は ref の最新値だけを読む。
+  // 依存に入れるとホイールのリスナーが毎描画で付け替わる。
+  // biome-ignore lint/correctness/useExhaustiveDependencies(center): ref の最新値を読む
+  // biome-ignore lint/correctness/useExhaustiveDependencies(zoomAt): ref の最新値を読む
   useEffect(() => {
     const el = stage.current;
     if (!el) return;

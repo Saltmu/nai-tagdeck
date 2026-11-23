@@ -31,7 +31,7 @@ export function QuickGenerate({ size, seed, onSizeChange, onClearSeed, generatin
   const activeIndex = sizes.indexOf(size);
 
   const onRadioKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const current = activeIndex >= 0 ? activeIndex : 0;
+    const current = Math.max(activeIndex, 0);
     let next: number | null = null;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (current + 1) % sizes.length;
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (current - 1 + sizes.length) % sizes.length;

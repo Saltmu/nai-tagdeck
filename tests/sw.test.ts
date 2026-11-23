@@ -139,10 +139,10 @@ function extractBuildOutputs(result: Awaited<ReturnType<typeof viteBuild>>) {
   const byName = new Map(outputs.map((item) => [item.fileName, item]));
   const htmlAsset = byName.get('index.html');
   const swAsset = byName.get('sw.js');
-  if (!htmlAsset || htmlAsset.type !== 'asset' || typeof htmlAsset.source !== 'string') {
+  if (htmlAsset?.type !== 'asset' || typeof htmlAsset.source !== 'string') {
     throw new Error('missing index.html asset in build output');
   }
-  if (!swAsset || swAsset.type !== 'asset' || typeof swAsset.source !== 'string') {
+  if (swAsset?.type !== 'asset' || typeof swAsset.source !== 'string') {
     throw new Error('missing sw.js asset in build output');
   }
   const cacheMatch = swAsset.source.match(/const CACHE = '([^']+)';/);
