@@ -15,7 +15,7 @@
 `POST https://image.novelai.net/ai/generate-image`
 
 - 認証: `Authorization: Bearer <token>`
-- 既定のレスポンス本体は ZIP（中身は `image_0.png`）。2026-11-23 の V5 実測では `200 OK`、`Content-Type: binary/octet-stream` だった。このツールは Accept を指定せず、ZIP を `extractImages()` で読む。
+- 既定のレスポンス本体は ZIP。本ツールの PNG リクエストでは `image_0.png` が入る。2026-11-23 の V5 実測では PNG と WebP のいずれも `200 OK`、`Content-Type: binary/octet-stream` だった。このツールは Accept を指定せず、ZIP を `extractImages()` で読む。
 - `Accept: application/json` を指定すると、同日の V5 実測では `200 OK`、`Content-Type: application/json` で `{ "images": [{ "image": "<base64>", "index": 0, "seed": 860023 }] }` が返った。base64 から PNG を復元した。OpenAPI は JSON 応答を 201 と記載している。
 - 規約: 生成リクエストは人の操作で開始すること。過大な負荷になる自動化は禁止。→ ボタン1回で1枚。自動の連続生成は作らない。
 - エラー時は `utils.JsonError`。`x-correlation-id` ヘッダー（英数字6文字）を付けると、500 エラーのときに問い合わせに使える。
@@ -97,4 +97,12 @@ Chrome の nai-tagdeck 本番オリジンから、`buildGenerateRequest()` 相�
 
 この固定条件では、ヒントを省略したときの差は同じリクエストを再生成したときと同程度だった。ヒントの影響として識別できる差は確認できなかった。Opus では `use_new_shared_trial` が `true`、`false`、省略のいずれでも生成でき、Anlas 残高は前後で一致した。
 
-公式 Web UI の値は過去に採取したリクエストから再現した。今回の公式 UI からの直接生成との比較、ほかのシードや設定への一般化、無料トライアルのアカウントでの `use_new_shared_trial` の意味と要否は未確認。今回の測定結果に基づく生成リクエストの変更は見送る。JSON に切り替える場合は、既存の ZIP 読み取り経路と対応範囲を改めて検討する。
+### 公式 Web UI からの直接生成との比較
+
+同日、公式 Web UI の V5 Full・アニメ・通常モードで、同じプロンプト、512×512、14 steps、Guidance 5、Euler、seed `860023` を指定して 1 枚生成した。品質プリセットは Light、UC は Heavy。実際の `POST /ai/generate-image` の本文で、冒頭の検証と同じ展開済みのプロンプト、`noise_schedule: "karras"`、`tag_hint_qt: 3`、`tag_hint_uc_preset: 2`、`use_new_shared_trial: true` を確認した。このリクエストの `image_format` は `"webp"` だった。
+
+公式 UI から取得した本文を nai-tagdeck 本番オリジンから再送した。変更なしと両ヒント省略をそれぞれ 2 回実行し、プリセット ID、展開済みプロンプト、シード、WebP 指定などは固定した。4 回とも HTTP 200 で ZIP 内の WebP を取得し、生成前後の Anlas 残高は一致した。
+
+公式 UI の画像と再送した 4 枚を Chrome でデコードして比較した。いずれも公式画像と RGBA の SHA-256 が異なり、変更なしの再送 2 枚同士でもハッシュが異なった。16×16 区画の RGB 平均をチャンネルごとに整数へ丸めて比べると、4 枚とも公式画像との差は平均 0.00781、最大 1（0〜255）。再送した 4 枚同士では、丸めた区画平均はすべて一致した。この入力において、両ヒントの省略による画素差を再生成による差から識別できなかった。
+
+比較したのはこのシードと設定の組み合わせ。無料トライアルでの `use_new_shared_trial` の意味と要否は、検証に使ったアカウントが Opus だったため未確認。生成リクエストは現行どおりとする。
