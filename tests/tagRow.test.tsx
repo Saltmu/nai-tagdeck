@@ -183,3 +183,171 @@ it('shows alias only as title tooltip by default, and renders inline alias or mo
   const actionOptions = [...container.querySelectorAll('.tag-edit-move option')].map((el) => el.textContent);
   expect(actionOptions).toEqual(['カテゴリ移動', 'キャラ2 / 外見', 'キャラ1 / 外見']);
 });
+
+const DRAG_EVENTS = ['pointermove', 'pointerup', 'pointercancel'] as const;
+
+function pointerEvent(type: string, clientY = 20): MouseEvent {
+  return new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientY });
+}
+
+/** window に付いた並べ替えドラッグのリスナーを種類ごとに追跡する。 */
+function trackDragListeners() {
+  const live = new Map<string, Set<EventListener>>();
+  const realAdd = window.addEventListener.bind(window);
+  const realRemove = window.removeEventListener.bind(window);
+  const remember = (type: string, listener: EventListenerOrEventListenerObject | null) => {
+    if (!DRAG_EVENTS.includes(type as (typeof DRAG_EVENTS)[number]) || typeof listener !== 'function') return null;
+    return listener;
+  };
+  const addSpy = vi.spyOn(window, 'addEventListener').mockImplementation((type, listener, options) => {
+    const fn = remember(type, listener);
+    if (fn) {
+      const set = live.get(type) ?? new Set<EventListener>();
+      set.add(fn);
+      live.set(type, set);
+    }
+    realAdd(type, listener, options);
+  });
+  const removeSpy = vi.spyOn(window, 'removeEventListener').mockImplementation((type, listener, options) => {
+    const fn = remember(type, listener);
+    if (fn) live.get(type)?.delete(fn);
+    realRemove(type, listener, options);
+  });
+  return {
+    liveCount() {
+      let count = 0;
+      for (const set of live.values()) count += set.size;
+      return count;
+    },
+    restore() {
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+    },
+  };
+}
+
+function renderDragRow(onDrag: (id: string, clientY: number) => void, sorting = true) {
+  return root.render(
+    <ul>
+      <TagRow
+        tag={tag}
+        sorting={sorting}
+        onDrag={onDrag}
+        onToggle={() => {}}
+        onWeight={() => {}}
+        onEdit={onEdit}
+        onRemove={onRemove}
+      />
+    </ul>,
+  );
+}
+
+async function startSortDrag() {
+  const area = container.querySelector<HTMLElement>('.drag-area');
+  expect(area).not.toBeNull();
+  await act(async () => {
+    area!.dispatchEvent(pointerEvent('pointerdown'));
+  });
+  expect(area!.classList.contains('is-dragging')).toBe(true);
+}
+
+it('drops window drag listeners when the row unmounts mid-drag', async () => {
+  const onDrag = vi.fn();
+  const listeners = trackDragListeners();
+  try {
+    function Harness({ show }: { show: boolean }) {
+      if (!show) return <ul />;
+      return (
+        <ul>
+          <TagRow
+            tag={tag}
+            sorting
+            onDrag={onDrag}
+            onToggle={() => {}}
+            onWeight={() => {}}
+            onEdit={onEdit}
+            onRemove={onRemove}
+          />
+        </ul>
+      );
+    }
+    await act(async () => root.render(<Harness show />));
+    await startSortDrag();
+    await act(async () => {
+      window.dispatchEvent(pointerEvent('pointermove', 40));
+    });
+    expect(onDrag).toHaveBeenCalledTimes(1);
+    expect(onDrag).toHaveBeenCalledWith('1', 40);
+    expect(listeners.liveCount()).toBe(3);
+
+    await act(async () => root.render(<Harness show={false} />));
+    expect(listeners.liveCount()).toBe(0);
+    await act(async () => {
+      window.dispatchEvent(pointerEvent('pointermove', 80));
+      window.dispatchEvent(pointerEvent('pointerup'));
+    });
+    expect(onDrag).toHaveBeenCalledTimes(1);
+  } finally {
+    listeners.restore();
+  }
+});
+
+it('drops window drag listeners when sorting ends mid-drag', async () => {
+  const onDrag = vi.fn();
+  const listeners = trackDragListeners();
+  try {
+    await act(async () => renderDragRow(onDrag, true));
+    await startSortDrag();
+    await act(async () => {
+      window.dispatchEvent(pointerEvent('pointermove', 30));
+    });
+    expect(onDrag).toHaveBeenCalledTimes(1);
+    expect(listeners.liveCount()).toBe(3);
+
+    await act(async () => renderDragRow(onDrag, false));
+    expect(container.querySelector('.drag-area')).toBeNull();
+    expect(listeners.liveCount()).toBe(0);
+    await act(async () => {
+      window.dispatchEvent(pointerEvent('pointermove', 90));
+    });
+    expect(onDrag).toHaveBeenCalledTimes(1);
+
+    await act(async () => renderDragRow(onDrag, true));
+    expect(container.querySelector('.drag-area')?.classList.contains('is-dragging')).toBe(false);
+    await act(async () => {
+      window.dispatchEvent(pointerEvent('pointermove', 100));
+    });
+    expect(onDrag).toHaveBeenCalledTimes(1);
+  } finally {
+    listeners.restore();
+  }
+});
+
+it('replaces window drag listeners when a new drag starts before the previous one ends', async () => {
+  const onDrag = vi.fn();
+  const listeners = trackDragListeners();
+  try {
+    await act(async () => renderDragRow(onDrag));
+    await startSortDrag();
+    expect(listeners.liveCount()).toBe(3);
+    await startSortDrag();
+    expect(listeners.liveCount()).toBe(3);
+    await act(async () => {
+      window.dispatchEvent(pointerEvent('pointermove', 55));
+    });
+    expect(onDrag).toHaveBeenCalledTimes(1);
+    expect(onDrag).toHaveBeenCalledWith('1', 55);
+
+    await act(async () => {
+      window.dispatchEvent(pointerEvent('pointerup'));
+    });
+    expect(listeners.liveCount()).toBe(0);
+    expect(container.querySelector('.drag-area')?.classList.contains('is-dragging')).toBe(false);
+    await act(async () => {
+      window.dispatchEvent(pointerEvent('pointermove', 70));
+    });
+    expect(onDrag).toHaveBeenCalledTimes(1);
+  } finally {
+    listeners.restore();
+  }
+});
