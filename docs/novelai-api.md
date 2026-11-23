@@ -1,7 +1,7 @@
 # NovelAI 画像生成 API メモ（フェーズ2用）
 
 調査日: 2026-10-05。対象モデル: **NovelAI Diffusion V5**（`nai-diffusion-5-full`）。
-未確認だった応答形式とヒント系フィールドは、2026-11-23 に OpenAPI（`https://image.novelai.net/docs/doc.json`）を取り直して照合した。この再確認では実生成をしていない。
+2026-11-23 に [OpenAPI](https://image.novelai.net/docs/doc.json) を再照合し、同日に実機で追加検証した。
 
 ## 出典
 
@@ -15,9 +15,8 @@
 `POST https://image.novelai.net/ai/generate-image`
 
 - 認証: `Authorization: Bearer <token>`
-- 既定のレスポンスは ZIP（中身は `image_0.png`）。2026-11-23 の OpenAPI は `produces` に `application/zip` と `application/json` を並べ、`Accept: application/json` のときは 201 で `image.ImageGenerationJsonResponse` を返すと書く:
-  `{ "images": [{ "image": "<base64>", "index": 0, "seed": 123 }] }`
-  （`image` は base64）。定義はモデル名で分かれていない。V5 でこの Accept を付けた実レスポンスは未取得。このツールは Accept を付けず、ZIP を `extractImages()` で読む。JSON で受け取れれば fflate は不要になる。
+- 既定のレスポンス本体は ZIP。本ツールの PNG リクエストでは `image_0.png` が入る。2026-11-23 の V5 実測では PNG と WebP のいずれも `200 OK`、`Content-Type: binary/octet-stream` だった。このツールは Accept を指定せず、ZIP を `extractImages()` で読む。
+- `Accept: application/json` を指定すると、同日の V5 実測では `200 OK`、`Content-Type: application/json` で `{ "images": [{ "image": "<base64>", "index": 0, "seed": 860023 }] }` が返った。base64 から PNG を復元した。OpenAPI は JSON 応答を 201 と記載している。
 - 規約: 生成リクエストは人の操作で開始すること。過大な負荷になる自動化は禁止。→ ボタン1回で1枚。自動の連続生成は作らない。
 - エラー時は `utils.JsonError`。`x-correlation-id` ヘッダー（英数字6文字）を付けると、500 エラーのときに問い合わせに使える。
 
@@ -30,7 +29,7 @@
 - アプリ内部の保存値は `mode: "anime" | "furry"`。アニメでは入力プロンプトをそのまま送り、ケモノでは先頭に `fur dataset, ` を付ける。すでに先頭にある場合は重ねない。
 - APIへ送るフィールドは `input` と `parameters.v4_prompt.caption.base_caption`（いずれも文字列）。同じ展開後のベースプロンプトを両方に入れる。モデルは `nai-diffusion-5-full` のまま、専用のモードフィールドは送らない。
 - モードは生成設定とバックアップに保存し、旧データで未指定の場合はアニメにする。編集画面のタグと辞書は変更せず、画像履歴には実際に送ったプロンプトを保持する。
-- リクエスト構築はテストで確認。今回のモード追加について、実際のAPIでの画像生成は未実施。
+- 2026-11-23 に `input` と `v4_prompt.caption.base_caption` の両方を `fur dataset, solo, fox, …` で始めて送信し、V5 から ZIP 内の PNG を取得した。PNG のメタデータにも同じ接頭辞を確認した。
 
 V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在しない。実装は `src/lib/novelai.ts` の `buildGenerateRequest()`。
 
@@ -59,7 +58,7 @@ V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在し�
 
 ## Anlas を消費しない条件（Opus）
 
-1,048,576 ピクセル（1024×1024 相当）以下・28 steps 以下・1 枚。832×1216 と 1216×832 は条件内。→ `isFreeGeneration()`。
+1,048,576 ピクセル（1024×1024 相当）以下・28 steps 以下・1 枚。832×1216 と 1216×832 は条件内。→ `isFreeGeneration()`。V5 には Opus の利用枠もあり、枠を使い切った状態で生成を続けると Anlas を使う場合がある。[NovelAI FAQ](https://docs.novelai.net/en/faq/)
 
 ## プロンプトの記法（V5）
 
@@ -77,10 +76,33 @@ V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在し�
 
 - このツールの `buildGenerateRequest()` + `requestImages()`（multipart、`nai-diffusion-5-full`、PNG）でブラウザから直接生成できた。CORS も問題なし。
 
-## まだ確認が必要なこと
+## V5 の実機検証（2026-11-23、#86）
 
-2026-11-23 の OpenAPI 照合で仕様上わかったことと、実生成がないため残っていることを分ける。
+Chrome の nai-tagdeck 本番オリジンから、`buildGenerateRequest()` 相当の multipart リクエストを `POST /ai/generate-image` に 1 回につき 1 枚ずつ送り、利用枠に余裕のある Opus アカウントで 15 枚生成した。生成ごとに `GET /user/subscription` の付与分・購入分の Anlas 残高が前後で一致した。
 
-- 応答形式: 仕様は ZIP と、`Accept: application/json` の JSON。このツールの ZIP 経路は 2026-10-05 に V5 で生成して確認済み。JSON を V5 で受け取った実レスポンスはない。生の画像バイトは `produces` にない。`extractImages()` は ZIP・JSON・画像バイトのどれでも読む。
-- `tag_hint_qt` / `tag_hint_uc_preset` を送らないと画素が変わるかは、同じシードで公式 UI と比べる実生成が必要。仕様に効果の説明はない。
-- `use_new_shared_trial` の意味は公式仕様にない。オンとオフで挙動が変わるかは未確認。
+共通設定は `nai-diffusion-5-full`、512×512、14 steps、Guidance 5、`karras`、seed `860023`、PNG、キャラクターなし。ベースプロンプトは `solo, fox, red scarf, snowy forest, very aesthetic, amazing quality, no text`、ネガティブは展開済みの `DEFAULT_NEGATIVE`。基準には 2026-10-05 の公式 UI リクエストで観測した `tag_hint_qt: 3`、`tag_hint_uc_preset: 2`、`use_new_shared_trial: true` を付けた。
+
+- **応答形式とケモノモード**。標準の ZIP と `Accept: application/json` のどちらでも PNG を取得した。JSON は `images` 1 件で、`index: 0` と要求した seed を返した。ヒント両方を省略し、プロンプトに `fur dataset, ` を付けた本ツールのケモノモードと同じ形のリクエストでも生成できた。
+- **ヒントと共有トライアル**。既定の `k_euler_ancestral` では全く同じ基準リクエストを繰り返しても、PNG をデコードした RGBA の SHA-256 が異なった。そこで `k_euler` に切り替え、`extra_noise_seed` も `860023` に固定して再比較した。下表はその基準画像に対する RGB の絶対差（各チャンネル 0〜255）の平均と、RGB が異なる画素数。各ケースとも HTTP 200 で PNG を取得した。[NovelAI のシード解説](https://docs.novelai.net/en/image/seed/)
+
+| 基準からの変更 | RGB の平均絶対差 | 差のある画素（全 262,144） |
+| --- | ---: | ---: |
+| 変更なし（再生成 1 回目） | 0.00016 | 127 |
+| 変更なし（再生成 2 回目） | 0.00021 | 166 |
+| `tag_hint_qt` のみ省略 | 0.00019 | 151 |
+| `tag_hint_uc_preset` のみ省略 | 0.00021 | 167 |
+| 両ヒントを省略 | 0.00020 | 161 |
+| `use_new_shared_trial: false` | 0.00024 | 186 |
+| `use_new_shared_trial` を省略 | 0.00020 | 159 |
+
+この固定条件では、ヒントを省略したときの差は同じリクエストを再生成したときと同程度だった。ヒントの影響として識別できる差は確認できなかった。Opus では `use_new_shared_trial` が `true`、`false`、省略のいずれでも生成でき、Anlas 残高は前後で一致した。
+
+### 公式 Web UI からの直接生成との比較
+
+同日、公式 Web UI の V5 Full・アニメ・通常モードで、同じプロンプト、512×512、14 steps、Guidance 5、Euler、seed `860023` を指定して 1 枚生成した。品質プリセットは Light、UC は Heavy。実際の `POST /ai/generate-image` の本文で、冒頭の検証と同じ展開済みのプロンプト、`noise_schedule: "karras"`、`tag_hint_qt: 3`、`tag_hint_uc_preset: 2`、`use_new_shared_trial: true` を確認した。このリクエストの `image_format` は `"webp"` だった。
+
+公式 UI から取得した本文を nai-tagdeck 本番オリジンから再送した。変更なしと両ヒント省略をそれぞれ 2 回実行し、プリセット ID、展開済みプロンプト、シード、WebP 指定などは固定した。4 回とも HTTP 200 で ZIP 内の WebP を取得し、生成前後の Anlas 残高は一致した。
+
+公式 UI の画像と再送した 4 枚を Chrome でデコードして比較した。いずれも公式画像と RGBA の SHA-256 が異なり、変更なしの再送 2 枚同士でもハッシュが異なった。16×16 区画の RGB 平均をチャンネルごとに整数へ丸めて比べると、4 枚とも公式画像との差は平均 0.00781、最大 1（0〜255）。再送した 4 枚同士では、丸めた区画平均はすべて一致した。この入力において、両ヒントの省略による画素差を再生成による差から識別できなかった。
+
+比較したのはこのシードと設定の組み合わせ。`use_new_shared_trial` の用途の特定と無料トライアルでの追加検証は #86 の対象外とする。生成リクエストは現行どおりとする。
