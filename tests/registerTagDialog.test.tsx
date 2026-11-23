@@ -257,11 +257,25 @@ it('opens from the negative pane with the negative category selected', async () 
 });
 
 it('uses the tag weight already set on the row', async () => {
-  await addTag('品質', '1.25::studio lighting::');
+  await addTag('品質', '1.23::studio lighting::');
   await openRegister('studio lighting');
-  expect(dialog().querySelector<HTMLInputElement>('input[type="number"]')?.value).toBe('1.25');
-  await click(dialog().querySelector('button[type="submit"]')!);
-  expect(api.getEntries()[0]).toMatchObject({ tag: 'studio lighting', category: 'quality', default_weight: 1.25 });
+  expect(dialog().querySelector<HTMLInputElement>('input[type="number"]')?.value).toBe('1.23');
+  await pressEnter(aliasInput());
+  expect(api.getEntries()[0]).toMatchObject({ tag: 'studio lighting', category: 'quality', default_weight: 1.23 });
+});
+
+it('does not register on Ctrl+Enter, Cmd+Enter, or a repeated Enter', async () => {
+  await addTag('エフェクト', 'sparkle');
+  await openRegister('sparkle');
+  await type(aliasInput(), 'きらめき');
+  await pressEnter(aliasInput(), { ctrlKey: true });
+  await pressEnter(aliasInput(), { metaKey: true });
+  await pressEnter(aliasInput(), { repeat: true });
+  expect(api.getEntries()).toEqual([]);
+  expect(container.querySelector('dialog.register-tag-dialog')).not.toBeNull();
+  expect(aliasInput().value).toBe('きらめき');
+  await pressEnter(aliasInput());
+  expect(api.getEntries()[0]).toMatchObject({ tag: 'sparkle', alias: 'きらめき' });
 });
 
 it('keeps the alias and dialog open when the tag is already registered or saving fails', async () => {

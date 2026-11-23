@@ -79,8 +79,17 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onCanc
 
   const onKeyDown = (e: KeyboardEvent<HTMLFormElement>) => {
     if (e.key !== 'Enter') return;
-    // 変換確定の Enter では登録しない。
-    if (e.nativeEvent.isComposing || e.keyCode === 229) {
+    // 変換確定、修飾キー、押しっぱなしの Enter では登録しない。
+    // Ctrl/Cmd+Enter は生成のショートカットで、ダイアログ表示中は生成自体も止める。
+    if (
+      e.nativeEvent.isComposing
+      || e.keyCode === 229
+      || e.repeat
+      || e.ctrlKey
+      || e.metaKey
+      || e.altKey
+      || e.shiftKey
+    ) {
       e.preventDefault();
       return;
     }
@@ -100,7 +109,8 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onCanc
       }}
     >
       <h2 id={id} className="app-dialog-title">辞書に登録</h2>
-      <form ref={form} className="register-tag-form" onSubmit={submit} onKeyDown={onKeyDown}>
+      {/* 編集画面の重みは 0.01 単位。number の step=0.05 では 1.23 などが送信前に弾かれる。 */}
+      <form ref={form} className="register-tag-form" noValidate onSubmit={submit} onKeyDown={onKeyDown}>
         <fieldset className="register-tag-fields" disabled={saving}>
           <div className="field field-tag">
             <span>タグ名</span>
