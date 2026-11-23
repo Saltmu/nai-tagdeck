@@ -165,6 +165,23 @@ it('トークン目安がしきい値以上でもコピーでき、警告を出�
   await act(async () => button('コピー', base).click());
   expect(onCopy).toHaveBeenCalledWith(long, 'プロンプト全体');
   expect(item('ネガティブ').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+
+  await render({
+    basePrompt: 'solo',
+    negativePrompt: long,
+    characterPrompts: [character({ id: 'c1', name: 'キャラ1', prompt: long, negative: long })],
+    characterNegative: long,
+  });
+  expect(item('ベース').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+  expect(item('キャラ1').querySelector('.preview-metrics')?.textContent).toBe(formatPromptMetrics(measurePrompt(long)));
+  expect(item('キャラ1').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+  expect(item('キャラ1').querySelector('.hint')).toBeNull();
+  expect(item('キャラ1のネガティブ').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+  const negative = [...container.querySelectorAll('.preview-item')].find((node) =>
+    node.querySelector('dt')?.childNodes[0]?.textContent?.trim() === 'ネガティブ',
+  );
+  expect(negative?.querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+  expect(button('コピー', item('キャラ1')).disabled).toBe(false);
 });
 
 it('共通ネガティブを渡さないときは、個別設定のないキャラのネガティブを出さない', async () => {

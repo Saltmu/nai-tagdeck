@@ -238,11 +238,13 @@ interface PromptCopyProps {
   copiedKey: string | null;
   failedKey: string | null;
   negative?: boolean;
+  /** 公式の 1471 はベースプロンプトの上限。ベースの行だけ警告する。 */
+  warnOnLimit?: boolean;
   hint?: string;
   onCopy: (key: string, text: string, label: string) => void;
 }
 
-function PromptCopy({ title, text, emptyText, copyKey, copyLabel, copiedKey, failedKey, negative, hint, onCopy }: PromptCopyProps) {
+function PromptCopy({ title, text, emptyText, copyKey, copyLabel, copiedKey, failedKey, negative, warnOnLimit = false, hint, onCopy }: PromptCopyProps) {
   const copied = copiedKey === copyKey;
   const failed = failedKey === copyKey;
   const ariaLabel = copied
@@ -254,7 +256,7 @@ function PromptCopy({ title, text, emptyText, copyKey, copyLabel, copiedKey, fai
     <div className={`preview-item${negative ? ' preview-negative' : ''}`}>
       <dt>
         {title}
-        <PromptMetrics text={text} />
+        <PromptMetrics text={text} warn={warnOnLimit} />
         <button
           type="button"
           className={`btn btn-small${failed ? ' btn-danger' : ''}`}
@@ -268,7 +270,7 @@ function PromptCopy({ title, text, emptyText, copyKey, copyLabel, copiedKey, fai
       <dd>
         <output className={`preview-text${text ? '' : ' is-empty'}`}>{text || emptyText}</output>
         {hint && <p className="hint">{hint}</p>}
-        <PromptMetricsWarning text={text} />
+        <PromptMetricsWarning text={text} warn={warnOnLimit} />
       </dd>
     </div>
   );
@@ -542,6 +544,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
                 copyLabel={baseLabel}
                 copiedKey={copiedKey}
                 failedKey={failedKey}
+                warnOnLimit
                 onCopy={copyPrompt}
               />
               {rows.map((c, i) => (

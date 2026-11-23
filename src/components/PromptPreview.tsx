@@ -10,10 +10,10 @@ import {
 } from '../lib/prompt';
 import type { WeightSyntax } from '../types';
 
-export function PromptMetrics({ text }: { text: string }) {
+export function PromptMetrics({ text, warn = false }: { text: string; warn?: boolean }) {
   const metrics = measurePrompt(text);
   if (metrics.chars === 0) return null;
-  const warning = promptTokenWarning(metrics.estimatedTokens);
+  const warning = warn ? promptTokenWarning(metrics.estimatedTokens) : null;
   return (
     <span className={warning ? 'preview-metrics is-warning' : 'preview-metrics'} title={warning ?? undefined}>
       {formatPromptMetrics(metrics)}
@@ -21,7 +21,8 @@ export function PromptMetrics({ text }: { text: string }) {
   );
 }
 
-export function PromptMetricsWarning({ text }: { text: string }) {
+export function PromptMetricsWarning({ text, warn = false }: { text: string; warn?: boolean }) {
+  if (!warn) return null;
   const warning = promptTokenWarning(measurePrompt(text).estimatedTokens);
   if (!warning) return null;
   return <p className="hint">{warning}</p>;
@@ -65,7 +66,7 @@ export function PromptPreview({
           <div className="preview-item">
             <dt>
               ベース
-              <PromptMetrics text={shownBase} />
+              <PromptMetrics text={shownBase} warn />
               <button
                 type="button"
                 className="btn btn-small"
@@ -79,7 +80,7 @@ export function PromptPreview({
               <output className={`preview-text${shownBase ? '' : ' is-empty'}`}>
                 {shownBase || 'ONのタグがありません'}
               </output>
-              <PromptMetricsWarning text={shownBase} />
+              <PromptMetricsWarning text={shownBase} warn />
             </dd>
           </div>
           {characterPrompts.map((c) => {

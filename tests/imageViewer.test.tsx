@@ -260,5 +260,25 @@ describe('ImageViewer prompts and parameters', () => {
     expect(byTitle('キャラ1のネガティブ').querySelector('.preview-metrics')).toBeNull();
     expect(byTitle('ネガティブ').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
     expect(container.querySelector('.viewer-prompt')?.textContent).toContain(PROMPT_TOKEN_ESTIMATE_NOTE);
+
+    await renderViewer(image({
+      prompt: 'solo',
+      characterPrompts: [long],
+      characterDetails: [{ prompt: long, negative: long }],
+      negativePrompt: long,
+    }));
+    const row = (title: string) => {
+      const found = [...container.querySelectorAll<HTMLElement>('.viewer-prompt .preview-item')].find((node) =>
+        node.querySelector('dt')?.childNodes[0]?.textContent?.trim() === title,
+      );
+      if (!found) throw new Error(`missing ${title}`);
+      return found;
+    };
+    expect(row('ベース').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+    expect(row('キャラ1').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+    expect(row('キャラ1').querySelector('.hint')).toBeNull();
+    expect(row('キャラ1のネガティブ').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+    expect(row('ネガティブ').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+    expect(row('キャラ1').querySelector('button')?.disabled).toBe(false);
   });
 });
