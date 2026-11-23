@@ -6,15 +6,23 @@ import { useDictionary, type Dictionary } from '../src/hooks/useDictionary';
 import type { DictEntry } from '../src/types';
 import { deleteEntry, listEntries, putEntries, putEntry, replaceAllEntries } from '../src/lib/db';
 import { resetAppData } from '../src/lib/reset';
+import { clearTabSyncConflict, receiveTabSyncMessage } from '../src/lib/tabSync';
 
-vi.mock('../src/lib/db', () => ({
-  clearAllData: vi.fn(),
-  listEntries: vi.fn(),
-  putEntry: vi.fn(),
-  putEntries: vi.fn(),
-  deleteEntry: vi.fn(),
-  replaceAllEntries: vi.fn(),
-}));
+vi.mock('../src/lib/db', () => {
+  class StaleWriteError extends Error {
+    readonly name = 'StaleWriteError';
+    constructor(readonly scope: string) { super(`stale ${scope}`); }
+  }
+  return {
+    clearAllData: vi.fn(),
+    listEntries: vi.fn(),
+    putEntry: vi.fn(),
+    putEntries: vi.fn(),
+    deleteEntry: vi.fn(),
+    replaceAllEntries: vi.fn(),
+    StaleWriteError,
+  };
+});
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -47,6 +55,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await act(async () => root.unmount());
+  clearTabSyncConflict();
 });
 
 describe('useDictionary', () => {
@@ -127,5 +136,35 @@ describe('useDictionary', () => {
       await dict.save(entry('2', 'ok-tag'));
     });
     expect(dict.entries.map((e) => e.tag)).toEqual(['ok-tag']);
+  });
+
+  it('refuses writes while another tab is newer and reloads without publishing', async () => {
+    const seen: unknown[] = [];
+    const other = new BroadcastChannel('nai-tagdeck:sync');
+    other.onmessage = (event) => seen.push(event.data);
+    vi.mocked(listEntries).mockResolvedValueOnce([]).mockResolvedValueOnce([entry('9', 'remote')]);
+    await act(async () => root.render(<Harness />));
+    receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'dictionary', seq: 1, at: 1 });
+    await expect(dict.save(entry('1', 'blocked'))).rejects.toMatchObject({ name: 'AbortError' });
+    expect(putEntry).not.toHaveBeenCalled();
+    expect(dict.entries).toEqual([]);
+
+    clearTabSyncConflict();
+    await act(async () => { await dict.reload(); });
+    expect(dict.entries.map((item) => item.tag)).toEqual(['remote']);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(seen).toEqual([]);
+    other.close();
+  });
+
+  it('publishes dictionary after a successful save', async () => {
+    const seen: unknown[] = [];
+    const other = new BroadcastChannel('nai-tagdeck:sync');
+    other.onmessage = (event) => seen.push(event.data);
+    await act(async () => root.render(<Harness />));
+    await act(async () => { await dict.save(entry('1', 'saved')); });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(seen).toContainEqual(expect.objectContaining({ type: 'updated', scope: 'dictionary' }));
+    other.close();
   });
 });

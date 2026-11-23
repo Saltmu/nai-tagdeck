@@ -71,8 +71,8 @@ function Harness({
     activeId,
     setActiveId,
     persistence: [
-      { status: 'idle', loaded: true, error: null },
-      { status: 'idle', loaded: true, error: null },
+      { status: 'idle', loaded: true, error: null, revision: 0 },
+      { status: 'idle', loaded: true, error: null, revision: 0 },
     ],
   };
   const dispatch = (action: WorkspaceAction) => history.dispatch(action);

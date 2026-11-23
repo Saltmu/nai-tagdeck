@@ -20,7 +20,7 @@ const generator: Generator = {
   cancel: vi.fn(),
   dismissError: vi.fn(),
 };
-const token: TokenState = { token: 'pst-test', storage: 'session', save: () => true, clear: () => {} };
+const token: TokenState = { token: 'pst-test', storage: 'session', save: () => true, clear: () => {}, resync: () => {} };
 
 let container: HTMLDivElement;
 let root: Root;

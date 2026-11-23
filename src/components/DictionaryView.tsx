@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react';
 import type { CategoryKey, DictEntry } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import { CATEGORIES, categoryLabel, isCategoryKey } from '../lib/categories';
@@ -11,10 +11,13 @@ import { newId } from '../lib/id';
 import { EntryForm } from './EntryForm';
 import { ImportPanel } from './ImportPanel';
 import { useDialogs } from './Dialogs';
+import { getTabSyncConflict, subscribeTabSyncConflict } from '../lib/tabSync';
 
 interface Props {
   dictionary: Dictionary;
   notify: (message: string) => void;
+  /** 他タブの内容を読み込んだ回数。この値が増えたときだけ下書きを閉じる。 */
+  reloadRevision: number;
 }
 
 const PAGE_SIZE = 300;
@@ -24,7 +27,7 @@ function blankEntry(category: CategoryKey): DictEntry {
   return { id: newId(), tag: '', category, alias: '', default_weight: 1, sort_order: 0, updated_at: '' };
 }
 
-export function DictionaryView({ dictionary, notify }: Props) {
+export function DictionaryView({ dictionary, notify, reloadRevision }: Props) {
   const dialogs = useDialogs();
   const { entries, loaded, save, saveMany, remove, importEntries, restoreInitial } = dictionary;
   const [query, setQuery] = useState('');
@@ -37,8 +40,13 @@ export function DictionaryView({ dictionary, notify }: Props) {
   const [savingEdit, setSavingEdit] = useState(false);
   const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ImportResult } | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const locked = useSyncExternalStore(subscribeTabSyncConflict, getTabSyncConflict, () => null) !== null;
   const listRef = useRef<HTMLElement>(null);
   const scrollToList = useRef(false);
+  useEffect(() => {
+    setEditingId(null);
+    setPendingImport(null);
+  }, [reloadRevision]);
 
   const filtered = useMemo(
     () => filterEntries(entries, query, filterCategory),
@@ -149,7 +157,12 @@ export function DictionaryView({ dictionary, notify }: Props) {
 
   const handleDelete = async (entry: DictEntry) => {
     if (!(await dialogs.confirm(`「${entry.tag}」を辞書から削除しますか？`, { okLabel: '削除', danger: true }))) return;
-    await remove(entry.id);
+    try {
+      await remove(entry.id);
+    } catch (e) {
+      notify(`削除できませんでした: ${String(e)}`);
+      return;
+    }
     notify(`「${entry.tag}」を削除しました`);
   };
 
@@ -187,9 +200,13 @@ export function DictionaryView({ dictionary, notify }: Props) {
 
   const handleImport = async (mode: ImportMode) => {
     if (!pendingImport) return;
-    const total = await importEntries(pendingImport.result.entries, mode);
-    setPendingImport(null);
-    notify(`読み込みました（辞書は ${total}件）`);
+    try {
+      const total = await importEntries(pendingImport.result.entries, mode);
+      setPendingImport(null);
+      notify(`読み込みました（辞書は ${total}件）`);
+    } catch (e) {
+      notify(`読み込めませんでした: ${String(e)}`);
+    }
   };
 
   const exportAs = (format: 'json' | 'csv') => {
@@ -276,6 +293,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
               type="file"
               className="visually-hidden"
               accept=".json,.csv,application/json,text/csv"
+              disabled={locked}
               onChange={handleFile}
             />
           </label>
@@ -290,6 +308,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
           existingCount={entries.length}
           onImport={handleImport}
           onCancel={() => setPendingImport(null)}
+          disabled={locked}
         />
       )}
 
@@ -351,7 +370,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
                     <button type="button" className="btn btn-small" onClick={() => setEditingId(entry.id)}>
                       編集
                     </button>
-                    <button type="button" className="btn btn-small btn-danger" onClick={() => handleDelete(entry)}>
+                    <button type="button" className="btn btn-small btn-danger" disabled={locked} onClick={() => handleDelete(entry)}>
                       削除
                     </button>
                   </div>

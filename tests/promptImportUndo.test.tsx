@@ -12,12 +12,19 @@ import { DEFAULT_SETTINGS } from '../src/lib/settings';
 import { normalizeWorkspace } from '../src/lib/workspace';
 import { caption, pngFixture } from './promptImportFixture';
 
-vi.mock('../src/lib/db', () => ({
-  getKV: vi.fn(),
-  listEntries: vi.fn(),
-  replaceAllEntries: vi.fn(),
-  setKV: vi.fn(),
-}));
+vi.mock('../src/lib/db', () => {
+  class StaleWriteError extends Error {
+    readonly name = 'StaleWriteError';
+    constructor(readonly scope: string) { super(`stale ${scope}`); }
+  }
+  return {
+    getKV: vi.fn(),
+    listEntries: vi.fn(),
+    replaceAllEntries: vi.fn(),
+    setKV: vi.fn(),
+    StaleWriteError,
+  };
+});
 vi.mock('../src/lib/novelai', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/novelai')>(),
   requestImages: vi.fn(),

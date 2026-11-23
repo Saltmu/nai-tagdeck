@@ -42,8 +42,8 @@ const mockPresets = (): PresetStore => ({
   activeId: null,
   setActiveId: () => {},
   persistence: [
-    { status: 'idle', loaded: true, error: null },
-    { status: 'idle', loaded: true, error: null },
+    { status: 'idle', loaded: true, error: null, revision: 0 },
+    { status: 'idle', loaded: true, error: null, revision: 0 },
   ],
 });
 
@@ -292,6 +292,7 @@ describe('Editor tablist', () => {
       remove: async () => {},
       importEntries: async () => 0,
       restoreInitial: async () => 0,
+      reload: async () => {},
     };
     await act(async () =>
       root.render(
@@ -345,6 +346,7 @@ describe('Editor tablist', () => {
       remove: async () => {},
       importEntries: async () => 0,
       restoreInitial: async () => 0,
+      reload: async () => {},
     };
     let initial = emptyWorkspace();
     for (const name of ['A', 'B', 'C']) {
@@ -469,6 +471,7 @@ describe('Editor tablist', () => {
       remove: async () => {},
       importEntries: async () => 0,
       restoreInitial: async () => 0,
+      reload: async () => {},
     };
     let initial = emptyWorkspace();
     for (let i = 0; i < 6; i++) {

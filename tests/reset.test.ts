@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearAllData, getKV, KV_KEYS, listEntries, putEntry, setKV, type KVKey } from '../src/lib/db';
 import { clearAppStorage, resetAppData } from '../src/lib/reset';
+import { getTabSyncConflict, receiveTabSyncMessage, resetTabSyncForTests, TAB_SYNC_STORAGE_KEY } from '../src/lib/tabSync';
 import { loadCategoryOpen, saveCategoryOpen } from '../src/lib/categoryOpen';
 import { loadToken, saveToken } from '../src/lib/token';
 import { normalizeGeneration } from '../src/lib/generation';
@@ -17,7 +18,10 @@ class MemoryStorage {
 }
 
 describe('全設定とデータの削除', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetTabSyncForTests();
+  });
 
   it('辞書とすべてのKVを削除し、削除後も保存が使える', async () => {
     await putEntry({ id: 'tag', tag: 'solo', category: 'subject', alias: '', default_weight: 1, sort_order: 0, updated_at: '' });
@@ -42,6 +46,7 @@ describe('全設定とデータの削除', () => {
     storage.setItem('nai-tagdeck.token', 'token');
     storage.setItem('nai-tagdeck:category-open:base', 'false');
     storage.setItem('nai-tagdeck:category-open:character', 'false');
+    storage.setItem(TAB_SYNC_STORAGE_KEY, 'notice');
     clearAppStorage(storage);
     expect(storage.length).toBe(1);
     expect(storage.getItem('other-app')).toBe('keep');
@@ -66,6 +71,47 @@ describe('全設定とデータの削除', () => {
     expect(normalizeGeneration(await getKV('generation')).seed).toBeNull();
     expect(normalizeWorkspace(await getKV('workspace')).base.quality).toEqual([]);
     expect(normalizeSettings(await getKV('settings')).characterNegativePrompt).not.toBe('custom');
+  });
+
+  it('全削除のあと、他タブへ reset を通知する', async () => {
+    const localStorage = new MemoryStorage();
+    const sessionStorage = new MemoryStorage();
+    vi.stubGlobal('window', { localStorage, sessionStorage });
+    const other = new BroadcastChannel('nai-tagdeck:sync');
+    const received = new Promise<MessageEvent>((resolve) => {
+      other.onmessage = (event) => resolve(event);
+    });
+    await resetAppData();
+    const event = await received;
+    expect(event.data).toMatchObject({ type: 'reset', scope: 'reset' });
+    other.close();
+  });
+
+  it('自分の全削除のあと、その前からあったロックを外す', async () => {
+    const localStorage = new MemoryStorage();
+    const sessionStorage = new MemoryStorage();
+    vi.stubGlobal('window', { localStorage, sessionStorage });
+    receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'workspace', seq: 1, at: 1 });
+    await resetAppData();
+    expect(getTabSyncConflict()).toBeNull();
+  });
+
+  it('全削除の途中で他タブの通知が来たら、ロックを残す', async () => {
+    const localStorage = new MemoryStorage();
+    const sessionStorage = new MemoryStorage();
+    vi.stubGlobal('window', { localStorage, sessionStorage });
+    const original = IDBDatabase.prototype.transaction;
+    IDBDatabase.prototype.transaction = function transaction(this: IDBDatabase, ...args: Parameters<IDBDatabase['transaction']>) {
+      const tx = original.apply(this, args);
+      receiveTabSyncMessage({ type: 'reset', senderId: 'other-tab', scope: 'reset', seq: 9, at: 9 });
+      return tx;
+    };
+    try {
+      await resetAppData();
+      expect(getTabSyncConflict()?.kind).toBe('reset');
+    } finally {
+      IDBDatabase.prototype.transaction = original;
+    }
   });
 
   it('ストレージの削除に失敗した場合は成功として扱わない', async () => {
