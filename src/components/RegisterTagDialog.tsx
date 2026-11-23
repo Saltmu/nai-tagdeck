@@ -31,6 +31,7 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onCanc
   const [weight, setWeight] = useState(initialWeight);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const element = dialog.current;
@@ -38,6 +39,13 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onCanc
     // タグ名は決まっているので、日本語名から入力できるようにする。
     aliasInput.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (saving || !error) return;
+    const target = returnFocus.current;
+    if (target && form.current?.contains(target)) target.focus();
+    else aliasInput.current?.focus();
+  }, [error, saving]);
 
   const close = () => {
     if (saving) return;
@@ -56,6 +64,8 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onCanc
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (saving) return;
+    const active = document.activeElement;
+    returnFocus.current = active instanceof HTMLElement && form.current?.contains(active) ? active : aliasInput.current;
     setSaving(true);
     setError(null);
     let result: string | null;
@@ -86,8 +96,12 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onCanc
       e.preventDefault();
       return;
     }
-    // カテゴリのセレクトは、Enter で一覧を開くブラウザの動作を残す。
-    if (!(e.target instanceof HTMLInputElement)) return;
+    // macOS の Chrome は、閉じたセレクト上の Enter でフォームを送信する。
+    // 一覧は Space や Alt+↓ のまま開き、Enter では登録しない。
+    if (!(e.target instanceof HTMLInputElement)) {
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
     form.current?.requestSubmit();
   };

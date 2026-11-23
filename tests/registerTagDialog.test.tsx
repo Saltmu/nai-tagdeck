@@ -301,9 +301,12 @@ it('keeps the alias and dialog open when the tag is already registered or saving
       updated_at: '',
     }]);
   });
-  await click(dialog().querySelector('button[type="submit"]')!);
+  const submit = dialog().querySelector<HTMLButtonElement>('button[type="submit"]')!;
+  submit.focus();
+  await click(submit);
   expect(dialog().querySelector('[role="alert"]')?.textContent).toBe('「smile」は 外見 に登録済みです');
   expect(aliasInput().value).toBe('笑顔');
+  expect(document.activeElement).toBe(submit);
   expect(api.notifications).toEqual([]);
 
   await chooseCategory('pose');
@@ -358,7 +361,7 @@ it('does not save while an IME composition is confirming, and Escape or cancel d
   select.focus();
   const selectEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
   await act(async () => select.dispatchEvent(selectEnter));
-  expect(selectEnter.defaultPrevented).toBe(false);
+  expect(selectEnter.defaultPrevented).toBe(true);
   expect(api.getEntries()).toEqual([]);
   expect(dialog().querySelector('select')?.value).toBe('pose');
 
