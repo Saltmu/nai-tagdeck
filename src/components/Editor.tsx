@@ -1,4 +1,4 @@
-import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type KeyboardEvent } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import {
@@ -89,9 +89,29 @@ export function Editor({
 
   const { save } = dictionary;
   const [registering, setRegistering] = useState<{ tag: WorkTag; category: CategoryKey } | null>(null);
+  const registerReturn = useRef<{ row: HTMLElement | null; section: HTMLElement | null } | null>(null);
   const register = useCallback((tag: WorkTag, category: CategoryKey) => {
+    const active = document.activeElement;
+    const row = active instanceof Element ? active.closest('li.tag-row') : null;
+    const section = active instanceof Element ? active.closest('section.category') : null;
+    registerReturn.current = {
+      row: row instanceof HTMLElement ? row : null,
+      section: section instanceof HTMLElement ? section : null,
+    };
     setRegistering({ tag, category });
   }, []);
+  const closeRegistration = useCallback((saved: boolean) => {
+    if (!saved) registerReturn.current = null;
+    setRegistering(null);
+  }, []);
+  useEffect(() => {
+    if (registering || !registerReturn.current) return;
+    const { row, section } = registerReturn.current;
+    registerReturn.current = null;
+    const edit = row?.isConnected ? row.querySelector<HTMLElement>('button[aria-label$=" を編集"]') : null;
+    const add = section?.querySelector<HTMLInputElement>('input[aria-label$="にタグを追加"]');
+    (edit ?? add)?.focus();
+  }, [registering]);
   const saveRegistration = useCallback(
     async (draft: RegisterTagDraft): Promise<string | null> => {
       const entry = {
@@ -452,7 +472,7 @@ export function Editor({
           tag={registering.tag.tag}
           category={registering.category}
           weight={registering.tag.weight}
-          onCancel={() => setRegistering(null)}
+          onClose={closeRegistration}
           onSave={saveRegistration}
         />
       )}

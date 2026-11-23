@@ -16,12 +16,12 @@ interface Props {
   tag: string;
   category: CategoryKey;
   weight: number;
-  onCancel: () => void;
+  onClose: (saved: boolean) => void;
   /** 保存に失敗したらエラー文を返す。成功は null。 */
   onSave: (draft: RegisterTagDraft) => Promise<string | null>;
 }
 
-export function RegisterTagDialog({ tag, category, weight: initialWeight, onCancel, onSave }: Props) {
+export function RegisterTagDialog({ tag, category, weight: initialWeight, onClose, onSave }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const aliasInput = useRef<HTMLInputElement>(null);
@@ -50,7 +50,7 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onCanc
   const close = () => {
     if (saving) return;
     dialog.current?.close();
-    onCancel();
+    onClose(false);
   };
 
   const readWeight = () => {
@@ -84,7 +84,7 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onCanc
       setError(result);
       return;
     }
-    onCancel();
+    onClose(true);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLFormElement>) => {
@@ -97,11 +97,12 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onCanc
       return;
     }
     // macOS の Chrome は、閉じたセレクト上の Enter でフォームを送信する。
-    // 一覧は Space や Alt+↓ のまま開き、Enter では登録しない。
-    if (!(e.target instanceof HTMLInputElement)) {
+    // 一覧は Space や Alt+↓ のまま開き、Enter では登録しない。ボタンの Enter はブラウザに任せる。
+    if (e.target instanceof HTMLSelectElement) {
       e.preventDefault();
       return;
     }
+    if (!(e.target instanceof HTMLInputElement)) return;
     e.preventDefault();
     form.current?.requestSubmit();
   };

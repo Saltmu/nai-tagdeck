@@ -165,6 +165,7 @@ function aliasInput(): HTMLInputElement {
 async function openRegister(tag: string) {
   const button = registerButton(tag);
   if (!button) throw new Error(`登録ボタンがありません: ${tag}`);
+  await act(async () => button.focus());
   await click(button);
   return dialog();
 }
@@ -226,6 +227,7 @@ it('registers a base tag with an alias, category, and weight without leaving the
   await pressEnter(aliasInput());
 
   expect(container.querySelector('dialog.register-tag-dialog')).toBeNull();
+  expect(document.activeElement?.getAttribute('aria-label')).toBe('custom flower を編集');
   expect(api.notifications).toEqual(['「custom flower」（花 はな）を辞書に登録しました']);
   const saved = api.getEntries().find((entry) => entry.tag === 'custom flower');
   expect(saved).toMatchObject({ category: 'background', alias: '花 はな', default_weight: 1.4, sort_order: 0 });
@@ -364,6 +366,19 @@ it('does not save while an IME composition is confirming, and Escape or cancel d
   expect(selectEnter.defaultPrevented).toBe(true);
   expect(api.getEntries()).toEqual([]);
   expect(dialog().querySelector('select')?.value).toBe('pose');
+
+  const cancel = [...dialog().querySelectorAll('button')].find((button) => button.textContent === 'キャンセル')!;
+  cancel.focus();
+  const cancelEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+  await act(async () => cancel.dispatchEvent(cancelEnter));
+  expect(cancelEnter.defaultPrevented).toBe(false);
+  expect(container.querySelector('dialog.register-tag-dialog')).not.toBeNull();
+
+  const submit = dialog().querySelector<HTMLButtonElement>('button[type="submit"]')!;
+  submit.focus();
+  const submitEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+  await act(async () => submit.dispatchEvent(submitEnter));
+  expect(submitEnter.defaultPrevented).toBe(false);
 
   const cancelEvent = new Event('cancel', { bubbles: true, cancelable: true });
   await act(async () => dialog().dispatchEvent(cancelEvent));
