@@ -111,10 +111,12 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       !isDefaultGeneration(generation),
     [workspace, dictionary.entries.length, presets.presets.length, token.token, settings, generation],
   );
+  // 初回案内は辞書の復元とワークスペース置換を同時に行う。Undo 付きの dispatch だと
+  // ワークスペースだけ読み込み前に戻り、辞書や選択中のプリセットと食い違う。
   const firstRun = useFirstRun({
     ready: firstRunReady,
     hasExistingData,
-    dictionary, workspace, dispatch, presets, notify: show, onOpenEditor: openEditor,
+    dictionary, workspace, dispatch: rawDispatch, presets, notify: show, onOpenEditor: openEditor,
   });
 
   const basePrompt = useMemo(
@@ -149,8 +151,10 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     [updateGeneration, show],
   );
 
+  // バックアップは辞書・プリセット・設定もまとめて置き換える。履歴に残すと Undo で
+  // ワークスペースだけ戻り、マージ済みの辞書や設定と不整合になる。履歴を通さない置換は履歴を捨てる。
   const { getBackup, importBackup } = useBackupTransfer({
-    dictionary, presets, workspace, dispatch, settings, updateSettings, generation, updateGeneration,
+    dictionary, presets, workspace, dispatch: rawDispatch, settings, updateSettings, generation, updateGeneration,
   });
   const openSettings = useCallback(() => setTab('settings'), []);
   const { blocker, startGenerate } = useGenerationControls({
