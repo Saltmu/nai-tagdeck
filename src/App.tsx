@@ -28,6 +28,10 @@ import { isDefaultSettings } from './lib/settings';
 import { isDefaultGeneration, normalizeGeneration, sizeOf, type GenerationSettings, type SizeKey } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { SwUpdateNotice } from './components/SwUpdateNotice';
+import { TabSyncNotice } from './components/TabSyncNotice';
+import { useTabSync } from './hooks/useTabSync';
+import { replaceAllEntries, setKV, type KVKey } from './lib/db';
+import { publishTabSync, scopesToWrite, type SyncScope } from './lib/tabSync';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
 import { importedBaseForMode, type PromptImport } from './lib/promptImport';
@@ -43,13 +47,20 @@ const TABS: Array<{ key: Tab; label: string; icon: ReactNode }> = [
   { key: 'settings', label: '設定', icon: <SettingsIcon /> },
 ];
 
+function isKvScope(scope: SyncScope): scope is KVKey {
+  return scope !== 'dictionary' && scope !== 'reset';
+}
+
 export default function App({ onResetAll }: { onResetAll: () => void }) {
   const dictionary = useDictionary();
-  const { workspace, dispatch: rawDispatch, loaded, persistence } = useWorkspace();
-  const [settings, updateSettings, settingsPersistence] = useSettings(loaded);
-  const [generation, updateGeneration, generationPersistence] = useGenerationSettings();
+  const [reloadRevision, setReloadRevision] = useState(0);
+  const reloadRevisionRef = useRef(0);
+  const kvWaiters = useRef(new Map<number, { resolve: () => void; reject: (error: Error) => void }>());
+  const { workspace, dispatch: rawDispatch, loaded, persistence } = useWorkspace(reloadRevision);
+  const [settings, updateSettings, settingsPersistence] = useSettings(loaded, reloadRevision);
+  const [generation, updateGeneration, generationPersistence] = useGenerationSettings(reloadRevision);
   const token = useToken();
-  const presets = usePresets();
+  const presets = usePresets(reloadRevision);
   const toastRef = useRef<ToastHandle>(null);
   const show = useCallback((message: string, durationMs?: number) => {
     toastRef.current?.show(message, durationMs);
@@ -81,6 +92,59 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   workspaceRef.current = workspace;
   presetsRef.current = presets;
   entriesRef.current = dictionary.entries;
+  const dictionaryRef = useRef(dictionary);
+  dictionaryRef.current = dictionary;
+  const kvStates = useMemo(
+    () => [persistence, settingsPersistence, generationPersistence, ...presets.persistence],
+    [persistence, settingsPersistence, generationPersistence, presets.persistence],
+  );
+  useEffect(() => {
+    if (kvWaiters.current.size === 0) return;
+    for (const [revision, waiter] of kvWaiters.current) {
+      const failed = kvStates.find((state) => state.revision === revision && state.status === 'error' && state.error);
+      if (failed?.error) {
+        kvWaiters.current.delete(revision);
+        waiter.reject(new Error(failed.error));
+        continue;
+      }
+      if (kvStates.every((state) => state.revision === revision && state.loaded && !state.error)) {
+        kvWaiters.current.delete(revision);
+        waiter.resolve();
+      }
+    }
+  }, [kvStates]);
+  const tabSync = useTabSync({
+    confirmOverwrite: () => dialogs.confirm('別のタブでの変更を上書きし、このタブの内容を保存しますか？', { okLabel: '上書きして保存' }),
+    resyncToken: () => token.resync(),
+    reloadStores: () => {
+      const next = reloadRevisionRef.current + 1;
+      reloadRevisionRef.current = next;
+      const kvReady = new Promise<void>((resolve, reject) => {
+        kvWaiters.current.set(next, { resolve, reject });
+      });
+      setReloadRevision(next);
+      return Promise.all([kvReady, dictionaryRef.current.reload()]).then(() => undefined);
+    },
+    saveLocal: async (conflict) => {
+      for (const scope of scopesToWrite(conflict)) {
+        if (scope === 'dictionary') {
+          await replaceAllEntries(entriesRef.current);
+          publishTabSync('updated', 'dictionary');
+          continue;
+        }
+        if (!isKvScope(scope)) continue;
+        const snapshots: Record<KVKey, unknown> = {
+          workspace: workspaceRef.current,
+          settings: settingsRef.current,
+          generation: generationRef.current,
+          presets: presetsRef.current.presets,
+          activePreset: presetsRef.current.activeId,
+        };
+        await setKV(scope, snapshots[scope]);
+        publishTabSync('updated', scope);
+      }
+    },
+  });
   const extrasSync = useMemo<UndoExtrasSync>(() => ({
     capture: () => ({
       characterNegativePrompt: settingsRef.current.characterNegativePrompt,
@@ -354,6 +418,13 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         />
       </header>
       <SwUpdateNotice />
+      <TabSyncNotice
+        conflict={tabSync.conflict}
+        busy={tabSync.busy}
+        error={tabSync.error}
+        onReload={tabSync.reloadLatest}
+        onPrefer={tabSync.preferLocal}
+      />
 
       {dictionary.error && (
         <p className="error-banner" role="alert">

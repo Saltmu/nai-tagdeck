@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePersistence, type PersistenceState } from '../src/hooks/usePersistence';
 import { clearAllData, getKV, setKV, type KVKey } from '../src/lib/db';
 import { resetAppData } from '../src/lib/reset';
+import { clearTabSyncConflict, receiveTabSyncMessage } from '../src/lib/tabSync';
 
 vi.mock('../src/lib/db', () => ({ clearAllData: vi.fn(), getKV: vi.fn(), setKV: vi.fn() }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -14,12 +15,12 @@ let value: unknown;
 let change: (value: unknown) => void;
 let renders = 0;
 
-function Harness({ storageKey = 'workspace', onLoad }: { storageKey?: KVKey; onLoad?: (raw: unknown, apply: (v: unknown) => void) => Promise<void> | void }) {
+function Harness({ storageKey = 'workspace', onLoad, reloadRevision = 0 }: { storageKey?: KVKey; onLoad?: (raw: unknown, apply: (v: unknown) => void) => Promise<void> | void; reloadRevision?: number }) {
   renders += 1;
   const [stored, setStored] = useState<unknown>('initial');
   change = setStored;
   value = stored;
-  state = usePersistence(storageKey, stored, (raw) => (onLoad ? onLoad(raw, setStored) : setStored(raw)), 20);
+  state = usePersistence(storageKey, stored, (raw) => (onLoad ? onLoad(raw, setStored) : setStored(raw)), 20, reloadRevision);
   return null;
 }
 
@@ -33,6 +34,7 @@ beforeEach(() => {
 afterEach(async () => {
   Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
   await act(async () => root.unmount());
+  clearTabSyncConflict();
   vi.useRealTimers();
 });
 const tick = async () => { await act(async () => { await vi.advanceTimersByTimeAsync(30); }); };
@@ -209,5 +211,62 @@ describe('persistent state', () => {
     await act(async () => change('new edit'));
     await tick();
     expect(setKV).toHaveBeenLastCalledWith('workspace', 'new edit');
+  });
+
+  it('stops debounced writes, visibility flushes, and pagehide while another tab is newer', async () => {
+    vi.mocked(getKV).mockResolvedValue('saved');
+    await act(async () => root.render(<Harness />));
+    await act(async () => change('dirty'));
+    receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'workspace', seq: 1, at: 1 });
+
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    await tick();
+    expect(setKV).not.toHaveBeenCalled();
+
+    clearTabSyncConflict();
+    await act(async () => change('after unlock'));
+    await tick();
+    expect(setKV).toHaveBeenCalledExactlyOnceWith('workspace', 'after unlock');
+  });
+
+  it('drops a queued write when another tab updates before it runs', async () => {
+    let finishWrite!: () => void;
+    vi.mocked(getKV).mockResolvedValue('saved');
+    vi.mocked(setKV).mockImplementationOnce(() => new Promise<void>((resolve) => { finishWrite = resolve; }));
+    await act(async () => root.render(<Harness />));
+    await act(async () => change('first edit'));
+    await tick();
+    await act(async () => change('queued edit'));
+    receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'settings', seq: 2, at: 2 });
+    await act(async () => finishWrite());
+    await tick();
+    await act(async () => window.dispatchEvent(new Event('pagehide')));
+    expect(setKV).toHaveBeenCalledExactlyOnceWith('workspace', 'first edit');
+  });
+
+  it('applies a newer stored value on reload without writing it back', async () => {
+    vi.mocked(getKV).mockResolvedValueOnce('saved').mockResolvedValueOnce('remote');
+    await act(async () => root.render(<Harness />));
+    expect(value).toBe('saved');
+    expect(state.revision).toBe(0);
+    await act(async () => root.render(<Harness reloadRevision={1} />));
+    expect(value).toBe('remote');
+    expect(state.revision).toBe(1);
+    expect(state.loaded).toBe(true);
+    await tick();
+    expect(setKV).not.toHaveBeenCalled();
+  });
+
+  it('resets to the onLoad value when a reload finds the key deleted', async () => {
+    vi.mocked(getKV).mockResolvedValueOnce('saved').mockResolvedValueOnce(undefined);
+    await act(async () => root.render(<Harness />));
+    await act(async () => root.render(<Harness reloadRevision={1} />));
+    expect(value).toBeUndefined();
+    await tick();
+    expect(setKV).not.toHaveBeenCalled();
   });
 });

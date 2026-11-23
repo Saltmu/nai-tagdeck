@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearAllData, getKV, KV_KEYS, listEntries, putEntry, setKV, type KVKey } from '../src/lib/db';
 import { clearAppStorage, resetAppData } from '../src/lib/reset';
+import { TAB_SYNC_STORAGE_KEY } from '../src/lib/tabSync';
 import { loadCategoryOpen, saveCategoryOpen } from '../src/lib/categoryOpen';
 import { loadToken, saveToken } from '../src/lib/token';
 import { normalizeGeneration } from '../src/lib/generation';
@@ -42,6 +43,7 @@ describe('全設定とデータの削除', () => {
     storage.setItem('nai-tagdeck.token', 'token');
     storage.setItem('nai-tagdeck:category-open:base', 'false');
     storage.setItem('nai-tagdeck:category-open:character', 'false');
+    storage.setItem(TAB_SYNC_STORAGE_KEY, 'notice');
     clearAppStorage(storage);
     expect(storage.length).toBe(1);
     expect(storage.getItem('other-app')).toBe('keep');
@@ -66,6 +68,20 @@ describe('全設定とデータの削除', () => {
     expect(normalizeGeneration(await getKV('generation')).seed).toBeNull();
     expect(normalizeWorkspace(await getKV('workspace')).base.quality).toEqual([]);
     expect(normalizeSettings(await getKV('settings')).characterNegativePrompt).not.toBe('custom');
+  });
+
+  it('全削除のあと、他タブへ reset を通知する', async () => {
+    const localStorage = new MemoryStorage();
+    const sessionStorage = new MemoryStorage();
+    vi.stubGlobal('window', { localStorage, sessionStorage });
+    const other = new BroadcastChannel('nai-tagdeck:sync');
+    const received = new Promise<MessageEvent>((resolve) => {
+      other.onmessage = (event) => resolve(event);
+    });
+    await resetAppData();
+    const event = await received;
+    expect(event.data).toMatchObject({ type: 'reset', scope: 'reset' });
+    other.close();
   });
 
   it('ストレージの削除に失敗した場合は成功として扱わない', async () => {

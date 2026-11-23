@@ -1,5 +1,6 @@
-/* ---- service worker update ---- */
-.sw-update {
+/* ---- service worker update / other-tab sync ---- */
+.sw-update,
+.tab-sync {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -10,7 +11,8 @@
   border-bottom: 1px solid var(--border);
 }
 
-.sw-update p {
+.sw-update p,
+.tab-sync p {
   flex: 1 1 12rem;
   margin: 0;
 }

@@ -1,4 +1,5 @@
 import { clearAllData } from './db';
+import { publishTabSync } from './tabSync';
 
 let pendingWrites = new AbortController();
 
@@ -24,4 +25,5 @@ export async function resetAppData(): Promise<void> {
   clearAppStorage(window.localStorage);
   clearAppStorage(window.sessionStorage);
   await clearAllData();
+  publishTabSync('reset', 'reset');
 }

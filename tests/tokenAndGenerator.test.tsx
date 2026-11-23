@@ -153,7 +153,7 @@ describe('TokenSettings', () => {
   it('不正な文字を含むトークンは保存せずエラーを表示する', async () => {
     const save = vi.fn().mockReturnValue(true);
     const notify = vi.fn();
-    const token: TokenState = { token: null, storage: 'session', save, clear: vi.fn() };
+    const token: TokenState = { token: null, storage: 'session', save, clear: vi.fn(), resync: vi.fn() };
 
     await act(async () => {
       root.render(

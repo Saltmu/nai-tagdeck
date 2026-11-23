@@ -7,9 +7,13 @@ import { DEFAULT_SETTINGS, legacyNegativePrompt, normalizeSettings } from '../li
 import { DEFAULT_GENERATION, normalizeGeneration, type GenerationSettings } from '../lib/generation';
 import { usePersistence, type PersistenceState } from './usePersistence';
 
-export function useWorkspace(): { workspace: Workspace; dispatch: Dispatch<WorkspaceAction>; loaded: boolean; persistence: PersistenceState } {
+export function useWorkspace(reloadRevision = 0): { workspace: Workspace; dispatch: Dispatch<WorkspaceAction>; loaded: boolean; persistence: PersistenceState } {
   const [workspace, dispatch] = useReducer(workspaceReducer, undefined, emptyWorkspace);
   const persistence = usePersistence('workspace', workspace, async (raw, isCurrent) => {
+    if (raw === undefined) {
+      dispatch({ type: 'replace', workspace: emptyWorkspace() });
+      return;
+    }
     if (hasNegative(raw)) {
       dispatch({ type: 'replace', workspace: normalizeWorkspace(raw) });
       return;
@@ -20,20 +24,22 @@ export function useWorkspace(): { workspace: Workspace; dispatch: Dispatch<Works
     const migrated = migrateNegative(raw, settings);
     await setKV('workspace', migrated);
     if (isCurrent()) dispatch({ type: 'replace', workspace: migrated });
-  });
+  }, 300, reloadRevision);
   return { workspace, dispatch, loaded: persistence.loaded, persistence };
 }
 
-export function useGenerationSettings(): [GenerationSettings, (patch: Partial<GenerationSettings>) => void, PersistenceState] {
+export function useGenerationSettings(reloadRevision = 0): [GenerationSettings, (patch: Partial<GenerationSettings>) => void, PersistenceState] {
   const [settings, setSettings] = useState<GenerationSettings>(DEFAULT_GENERATION);
-  const persistence = usePersistence('generation', settings, (raw) => setSettings(normalizeGeneration(raw)));
+  const persistence = usePersistence('generation', settings, (raw) => {
+    setSettings(raw === undefined ? DEFAULT_GENERATION : normalizeGeneration(raw));
+  }, 300, reloadRevision);
   const update = useCallback((patch: Partial<GenerationSettings>) => {
     setSettings((prev) => normalizeGeneration({ ...prev, ...patch }));
   }, []);
   return [settings, update, persistence];
 }
 
-export function useSettings(workspaceLoaded = true): [Settings, (patch: Partial<Settings>) => void, PersistenceState] {
+export function useSettings(workspaceLoaded = true, reloadRevision = 0): [Settings, (patch: Partial<Settings>) => void, PersistenceState] {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [legacyNegative, setLegacyNegative] = useState<string | null>(null);
   const stored = useMemo(
@@ -41,9 +47,14 @@ export function useSettings(workspaceLoaded = true): [Settings, (patch: Partial<
     [settings, legacyNegative, workspaceLoaded],
   );
   const persistence = usePersistence('settings', stored, (raw) => {
+    if (raw === undefined) {
+      setLegacyNegative(null);
+      setSettings(DEFAULT_SETTINGS);
+      return;
+    }
     setLegacyNegative(legacyNegativePrompt(raw));
     setSettings(normalizeSettings(raw));
-  });
+  }, 300, reloadRevision);
   const update = useCallback((patch: Partial<Settings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
   }, []);

@@ -24,7 +24,7 @@ beforeEach(() => {
   root = createRoot(document.createElement('div'));
   args = {
     ready: true, hasExistingData: false, workspace: emptyWorkspace(), dispatch: vi.fn(),
-    dictionary: { loaded: true, entries: [], error: null, save: vi.fn(), saveMany: vi.fn(), remove: vi.fn(), importEntries: vi.fn(), restoreInitial: vi.fn().mockResolvedValue(10) },
+    dictionary: { loaded: true, entries: [], error: null, save: vi.fn(), saveMany: vi.fn(), remove: vi.fn(), importEntries: vi.fn(), restoreInitial: vi.fn().mockResolvedValue(10), reload: vi.fn() },
     presets: { presets: [], persistence: [], activeId: null, setActiveId: vi.fn(), setPresets: vi.fn() },
     notify: vi.fn(), onOpenEditor: vi.fn(),
   };
