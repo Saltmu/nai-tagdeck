@@ -103,15 +103,22 @@ export async function extractStealthMetadata(
   return metadata;
 }
 
+const BITMAP_OPTION_VARIANTS: ReadonlyArray<ImageBitmapOptions | undefined> = [
+  { premultiplyAlpha: 'none', colorSpaceConversion: 'none', imageOrientation: 'none' },
+  { imageOrientation: 'none' },
+  undefined,
+];
+
 async function decodeImageBitmap(blob: Blob): Promise<ImageBitmap> {
-  try {
-    return await createImageBitmap(blob, {
-      premultiplyAlpha: 'none',
-      colorSpaceConversion: 'none',
-    });
-  } catch {
-    return await createImageBitmap(blob);
+  let lastError: unknown;
+  for (const options of BITMAP_OPTION_VARIANTS) {
+    try {
+      return options ? await createImageBitmap(blob, options) : await createImageBitmap(blob);
+    } catch (error) {
+      lastError = error;
+    }
   }
+  throw lastError;
 }
 
 /** ブラウザの Canvas 2D を使って PNG の RGBA ピクセルを取り出し、Stealth PNG メタデータを読み取る。 */
@@ -127,8 +134,11 @@ export async function readStealthPngMetadata(blob: Blob): Promise<PngMetadata | 
       throw new Error('PNG の画像データを展開できませんでした', { cause: error });
     }
     const { width, height } = bitmap;
-    if (width <= 0 || height <= 0 || width * height > MAX_STEALTH_PIXELS || width * height < MIN_STEALTH_PIXELS) {
+    if (width <= 0 || height <= 0 || width * height < MIN_STEALTH_PIXELS) {
       return undefined;
+    }
+    if (width * height > MAX_STEALTH_PIXELS) {
+      throw new Error('画像サイズが大きすぎるため、Stealth PNG のメタデータを読み取れません');
     }
     canvas = document.createElement('canvas');
     canvas.width = width;

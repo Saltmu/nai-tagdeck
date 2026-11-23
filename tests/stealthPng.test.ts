@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { gzipSync } from 'node:zlib';
+import { deflateSync, gzipSync, inflateSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readPngMetadata } from '../src/lib/pngMetadata';
-import { MAX_TEXT_BYTES } from '../src/lib/pngShared';
+import { MAX_TEXT_BYTES, uncompress } from '../src/lib/pngShared';
 import { readPromptImport } from '../src/lib/promptImport';
 import { MAX_STEALTH_PIXELS, extractStealthMetadata, readStealthPngMetadata } from '../src/lib/stealthPng';
 import { caption, pngFixture } from './promptImportFixture';
@@ -84,16 +84,79 @@ function encodeStealthRgba(
   return rgba;
 }
 
+function makeRgbaPngWithExif(width: number, height: number, rgba: Uint8Array | Uint8ClampedArray): Uint8Array<ArrayBuffer> {
+  const rawScanlines = new Uint8Array(height * (1 + width * 4));
+  const rowBytes = width * 4;
+  for (let y = 0; y < height; y++) {
+    rawScanlines[y * (1 + rowBytes)] = 0;
+    rawScanlines.set(rgba.subarray(y * rowBytes, (y + 1) * rowBytes), y * (1 + rowBytes) + 1);
+  }
+  const idat = makeChunk('IDAT', deflateSync(rawScanlines));
+  // Minimal TIFF/EXIF header specifying Orientation = 6 (90 deg CW).
+  const exif = makeChunk('eXIf', Uint8Array.from([
+    0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08,
+    0x00, 0x01,
+    0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x06, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+  ]));
+  return makePng({ width, height, colorType: 6, extraChunks: [exif, idat] });
+}
+
+function decodeRgbaFromPng(pngBytes: Uint8Array, applyExifRotation: boolean) {
+  const view = new DataView(pngBytes.buffer, pngBytes.byteOffset, pngBytes.byteLength);
+  let width = 0;
+  let height = 0;
+  let hasExif = false;
+  const idatChunks: Uint8Array[] = [];
+  for (let offset = 8; offset + 12 <= pngBytes.length;) {
+    const length = view.getUint32(offset);
+    const type = String.fromCharCode(...pngBytes.subarray(offset + 4, offset + 8));
+    const data = pngBytes.subarray(offset + 8, offset + 8 + length);
+    if (type === 'IHDR') {
+      width = view.getUint32(offset + 8);
+      height = view.getUint32(offset + 12);
+    } else if (type === 'eXIf') {
+      hasExif = true;
+    } else if (type === 'IDAT') {
+      idatChunks.push(data);
+    }
+    offset += 12 + length;
+  }
+  const scanlines = inflateSync(Buffer.concat(idatChunks));
+  const rowBytes = width * 4;
+  const raw = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    raw.set(scanlines.subarray(y * (1 + rowBytes) + 1, (y + 1) * (1 + rowBytes)), y * rowBytes);
+  }
+  if (!applyExifRotation || !hasExif) return { width, height, rgba: raw };
+  // Rotate 90 deg CW (Orientation = 6) to simulate browser EXIF orientation when imageOrientation !== 'none'.
+  const rotated = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const src = (y * width + x) * 4;
+      const nx = height - 1 - y;
+      const ny = x;
+      const dst = (ny * height + nx) * 4;
+      rotated.set(raw.subarray(src, src + 4), dst);
+    }
+  }
+  return { width: height, height: width, rgba: rotated };
+}
+
 function stubCanvasAndBitmap(
   rgba: Uint8ClampedArray,
   width: number,
   height: number,
-  options: { rejectWithOptions?: boolean } = {},
+  options: { rejectOptionCount?: number } = {},
 ) {
   const close = vi.fn();
   const bitmap = { width, height, close } as unknown as ImageBitmap;
-  const createBitmap = vi.fn(async (_blob: Blob, init?: ImageBitmapOptions) => {
-    if (options.rejectWithOptions && init) throw new TypeError('unsupported options');
+  let calls = 0;
+  const createBitmap = vi.fn(async (_blob: Blob, _init?: ImageBitmapOptions) => {
+    calls += 1;
+    if (options.rejectOptionCount && calls <= options.rejectOptionCount) {
+      throw new TypeError('unsupported options');
+    }
     return bitmap;
   });
   vi.stubGlobal('createImageBitmap', createBitmap);
@@ -208,22 +271,86 @@ describe('Stealth PNG decoding', () => {
     await expect(extractStealthMetadata(new Uint8ClampedArray(4), 2, 2)).rejects.toThrow('ピクセルデータ');
   });
 
-  it('falls back to createImageBitmap without options and cleans up bitmap and canvas', async () => {
+  it('feeds bounded chunks during decompression and aborts before reading the whole bomb', async () => {
+    // 4 MiB with periodic pseudo-random bytes produces >100 KiB of gzip data so feeding stops early.
+    const huge = Buffer.alloc(4 * 1024 * 1024, 0x20);
+    for (let pos = 0; pos < huge.length; pos += 8) {
+      huge[pos] = ((pos * 2654435761) >>> 24) & 0xff;
+    }
+    const compressed = new Uint8Array(gzipSync(huge));
+    expect(compressed.length).toBeGreaterThan(64 * 1024);
+    const subarraySpy = vi.spyOn(compressed, 'subarray');
+
+    await expect(uncompress(compressed, 'gzip')).rejects.toThrow('大きすぎます');
+    const chunkSizes = subarraySpy.mock.calls.map(([start = 0, end = compressed.length]) => end - start);
+    expect(chunkSizes.every((len) => len <= 512)).toBe(true);
+    const pulledBytes = chunkSizes.reduce((sum, len) => sum + len, 0);
+    expect(pulledBytes).toBeLessThan(compressed.length);
+  });
+
+  it('falls back to imageOrientation:none then no-options createImageBitmap and cleans up bitmap and canvas', async () => {
     const payload = Buffer.from(JSON.stringify({ Software: 'NovelAI', Comment: '{"prompt":"a"}' }));
     const rgba = encodeStealthRgba(40, 40, 'stealth_pnginfo', payload);
-    const { createBitmap, close, canvas } = stubCanvasAndBitmap(rgba, 40, 40, { rejectWithOptions: true });
+    const { createBitmap, close, canvas } = stubCanvasAndBitmap(rgba, 40, 40, { rejectOptionCount: 1 });
 
     const metadata = await readStealthPngMetadata(new Blob([new Uint8Array(0)], { type: 'image/png' }));
     expect(metadata).toEqual({ Software: 'NovelAI', Comment: '{"prompt":"a"}' });
     expect(createBitmap).toHaveBeenCalledTimes(2);
-    expect(createBitmap.mock.calls[0]?.[1]).toEqual({ premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
-    expect(createBitmap.mock.calls[1]?.[1]).toBeUndefined();
+    expect(createBitmap.mock.calls[0]?.[1]).toEqual({
+      premultiplyAlpha: 'none',
+      colorSpaceConversion: 'none',
+      imageOrientation: 'none',
+    });
+    expect(createBitmap.mock.calls[1]?.[1]).toEqual({ imageOrientation: 'none' });
     expect(close).toHaveBeenCalledOnce();
     expect(canvas.width).toBe(0);
     expect(canvas.height).toBe(0);
+
+    const fallback = stubCanvasAndBitmap(rgba, 40, 40, { rejectOptionCount: 2 });
+    const metadata2 = await readStealthPngMetadata(new Blob([new Uint8Array(0)], { type: 'image/png' }));
+    expect(metadata2).toEqual({ Software: 'NovelAI', Comment: '{"prompt":"a"}' });
+    expect(fallback.createBitmap).toHaveBeenCalledTimes(3);
+    expect(fallback.createBitmap.mock.calls[2]?.[1]).toBeUndefined();
   });
 
-  it('skips pixel decoding when Comment text chunk exists, alpha is absent, or dimensions exceed limit', async () => {
+  it('preserves stored pixel order via imageOrientation:none on a real EXIF-oriented RGBA PNG fixture', async () => {
+    const stealthJson = JSON.stringify({
+      Software: 'NovelAI',
+      Comment: JSON.stringify({ prompt: 'exif safe tag' }),
+    });
+    const width = 40;
+    const height = 60;
+    const rgba = encodeStealthRgba(width, height, 'stealth_pngcomp', gzipSync(Buffer.from(stealthJson)));
+    const realPng = makeRgbaPngWithExif(width, height, rgba);
+
+    const close = vi.fn();
+    let decoded!: ReturnType<typeof decodeRgbaFromPng>;
+    vi.stubGlobal('createImageBitmap', vi.fn(async (blob: Blob, init?: ImageBitmapOptions) => {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      decoded = decodeRgbaFromPng(bytes, init?.imageOrientation !== 'none');
+      return { width: decoded.width, height: decoded.height, close } as unknown as ImageBitmap;
+    }));
+    const originalCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+      if (tagName === 'canvas') {
+        return {
+          width: 0,
+          height: 0,
+          getContext: () => ({
+            drawImage: vi.fn(),
+            getImageData: () => ({ data: decoded.rgba, width: decoded.width, height: decoded.height }),
+          }),
+        } as unknown as HTMLCanvasElement;
+      }
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+
+    const imported = await readPromptImport(new Blob([realPng], { type: 'image/png' }), []);
+    expect(imported.base.unclassified.map((t) => t.tag)).toEqual(['exif safe tag']);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('skips pixel decoding when Comment text chunk exists or alpha is absent, and reports pixel-limit errors explicitly', async () => {
     const createBitmap = vi.fn();
     vi.stubGlobal('createImageBitmap', createBitmap);
 
@@ -240,7 +367,7 @@ describe('Stealth PNG decoding', () => {
     expect(createBitmap).not.toHaveBeenCalled();
 
     const tooLarge = makePng({ width: 8000, height: Math.ceil(MAX_STEALTH_PIXELS / 8000) + 1, colorType: 6 });
-    await expect(readPromptImport(new Blob([tooLarge]), [])).rejects.toThrow('NovelAI の生成情報が見つかりませんでした');
+    await expect(readPromptImport(new Blob([tooLarge]), [])).rejects.toThrow('画像サイズが大きすぎるため');
     expect(createBitmap).not.toHaveBeenCalled();
   });
 

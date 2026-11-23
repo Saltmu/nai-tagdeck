@@ -41,12 +41,9 @@ async function decodeText(type: string, data: Uint8Array<ArrayBuffer>, start: nu
   return latin1(bytes);
 }
 
-function canContainStealthMetadata(ihdr: IhdrInfo | undefined, hasTrns: boolean): boolean {
+function hasAlphaChannel(ihdr: IhdrInfo | undefined, hasTrns: boolean): ihdr is IhdrInfo {
   if (!ihdr || ihdr.width <= 0 || ihdr.height <= 0) return false;
-  const hasAlpha = ihdr.colorType === 4 || ihdr.colorType === 6 || hasTrns;
-  if (!hasAlpha) return false;
-  const pixels = ihdr.width * ihdr.height;
-  return pixels >= MIN_STEALTH_PIXELS && pixels <= MAX_STEALTH_PIXELS;
+  return ihdr.colorType === 4 || ihdr.colorType === 6 || hasTrns;
 }
 
 export async function readPngMetadata(blob: Blob): Promise<PngMetadata> {
@@ -81,9 +78,15 @@ export async function readPngMetadata(blob: Blob): Promise<PngMetadata> {
     }
     if (type === 'IEND' && length === 0) {
       if (metadata.Comment !== undefined) return metadata;
-      if (canContainStealthMetadata(ihdr, hasTrns)) {
-        const stealth = await readStealthPngMetadata(blob);
-        if (stealth) return { ...metadata, ...stealth };
+      if (hasAlphaChannel(ihdr, hasTrns)) {
+        const pixels = ihdr.width * ihdr.height;
+        if (pixels > MAX_STEALTH_PIXELS) {
+          throw new Error('画像サイズが大きすぎるため、Stealth PNG のメタデータを読み取れません');
+        }
+        if (pixels >= MIN_STEALTH_PIXELS) {
+          const stealth = await readStealthPngMetadata(blob);
+          if (stealth) return { ...metadata, ...stealth };
+        }
       }
       return metadata;
     }
