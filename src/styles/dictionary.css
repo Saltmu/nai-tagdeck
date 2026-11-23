@@ -28,10 +28,26 @@
   outline-offset: 2px;
 }
 
+.dict-list-card {
+  scroll-margin-top: calc(var(--header-height) + 0.5rem);
+}
+
+.dict-list-card:focus {
+  outline: none;
+}
+
 .dict-count {
   margin: 0 0 0.25rem;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.dict-pager {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 .dict-list {
