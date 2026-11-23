@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { clearAllData, getKV, listEntries, putEntry, readSyncEpoch, replaceAllEntries, replaceKV, setKV, StaleWriteError } from '../src/lib/db';
+import { clearAllData, getKV, listEntries, putEntry, readSyncEpoch, readSyncGuard, replaceAllEntries, replaceKV, setKV, StaleWriteError } from '../src/lib/db';
 import type { DictEntry } from '../src/types';
 
 interface Guard {
@@ -83,6 +83,21 @@ describe('sync guard', () => {
     await readSyncEpoch();
     await expect(setKV('workspace', { tag: 'revived' })).rejects.toBeInstanceOf(StaleWriteError);
     expect(await getKV('workspace')).toBeUndefined();
+  });
+
+  it('reports a missed reset as a reset rather than one store', async () => {
+    await setKV('workspace', { tag: 'local' });
+    await bumpGuard((guard) => { guard.epoch += 1; });
+    await expect(setKV('workspace', { tag: 'stale' })).rejects.toMatchObject({ name: 'StaleWriteError', scope: 'reset' });
+    expect(await getKV('workspace')).toEqual({ tag: 'local' });
+  });
+
+  it('refuses a confirmed overwrite when that store was saved again', async () => {
+    await setKV('workspace', { tag: 'local' });
+    const guard = await readSyncGuard();
+    await bumpGuard((current) => { current.seqs.workspace = (current.seqs.workspace ?? 0) + 1; });
+    await expect(replaceKV('workspace', { tag: 'preferred' }, guard.epoch, guard.seqs.workspace ?? 0)).rejects.toMatchObject({ scope: 'workspace' });
+    expect(await getKV('workspace')).toEqual({ tag: 'local' });
   });
 
   it('writes a confirmed snapshot for the same reset generation and refuses an older one', async () => {

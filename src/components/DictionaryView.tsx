@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, type ChangeEvent } from 'react';
 import type { CategoryKey, DictEntry } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import { CATEGORIES, categoryLabel, isCategoryKey } from '../lib/categories';
@@ -11,6 +11,7 @@ import { newId } from '../lib/id';
 import { EntryForm } from './EntryForm';
 import { ImportPanel } from './ImportPanel';
 import { useDialogs } from './Dialogs';
+import { getTabSyncConflict, subscribeTabSyncConflict } from '../lib/tabSync';
 
 interface Props {
   dictionary: Dictionary;
@@ -32,6 +33,11 @@ export function DictionaryView({ dictionary, notify }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ImportResult } | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const locked = useSyncExternalStore(subscribeTabSyncConflict, getTabSyncConflict, () => null) !== null;
+  useEffect(() => {
+    setEditingId(null);
+    setPendingImport(null);
+  }, [entries]);
 
   const filtered = useMemo(
     () => filterEntries(entries, query, filterCategory),
@@ -54,7 +60,12 @@ export function DictionaryView({ dictionary, notify }: Props) {
 
   const handleDelete = async (entry: DictEntry) => {
     if (!(await dialogs.confirm(`「${entry.tag}」を辞書から削除しますか？`, { okLabel: '削除', danger: true }))) return;
-    await remove(entry.id);
+    try {
+      await remove(entry.id);
+    } catch (e) {
+      notify(`削除できませんでした: ${String(e)}`);
+      return;
+    }
     notify(`「${entry.tag}」を削除しました`);
   };
 
@@ -92,9 +103,13 @@ export function DictionaryView({ dictionary, notify }: Props) {
 
   const handleImport = async (mode: ImportMode) => {
     if (!pendingImport) return;
-    const total = await importEntries(pendingImport.result.entries, mode);
-    setPendingImport(null);
-    notify(`読み込みました（辞書は ${total}件）`);
+    try {
+      const total = await importEntries(pendingImport.result.entries, mode);
+      setPendingImport(null);
+      notify(`読み込みました（辞書は ${total}件）`);
+    } catch (e) {
+      notify(`読み込めませんでした: ${String(e)}`);
+    }
   };
 
   const exportAs = (format: 'json' | 'csv') => {
@@ -161,6 +176,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
               type="file"
               className="visually-hidden"
               accept=".json,.csv,application/json,text/csv"
+              disabled={locked}
               onChange={handleFile}
             />
           </label>
@@ -175,6 +191,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
           existingCount={entries.length}
           onImport={handleImport}
           onCancel={() => setPendingImport(null)}
+          disabled={locked}
         />
       )}
 
@@ -235,7 +252,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
                     <button type="button" className="btn btn-small" onClick={() => setEditingId(entry.id)}>
                       編集
                     </button>
-                    <button type="button" className="btn btn-small btn-danger" onClick={() => handleDelete(entry)}>
+                    <button type="button" className="btn btn-small btn-danger" disabled={locked} onClick={() => handleDelete(entry)}>
                       削除
                     </button>
                   </div>

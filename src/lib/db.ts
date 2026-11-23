@@ -60,7 +60,7 @@ export class StaleWriteError extends Error {
 const SYNC_GUARD_KEY = 'syncGuard';
 const DICTIONARY_SEQ = 'dictionary';
 
-interface SyncGuard {
+export interface SyncGuard {
   seqs: Partial<Record<string, number>>;
   epoch: number;
 }
@@ -83,10 +83,15 @@ function remember(scope: string, seq: number, epoch: number): void {
   seen.set(scope, { seq, epoch });
 }
 
-function isStale(scope: string, guard: SyncGuard): boolean {
+function staleScope(scope: string, guard: SyncGuard, epoch?: number, expectedSeq?: number): string | null {
+  if (epoch !== undefined && guard.epoch !== epoch) return 'reset';
+  if (expectedSeq !== undefined && (guard.seqs[scope] ?? 0) !== expectedSeq) return scope;
+  if (epoch !== undefined || expectedSeq !== undefined) return null;
   const prior = seen.get(scope);
-  if (!prior) return false;
-  return prior.seq !== (guard.seqs[scope] ?? 0) || prior.epoch !== guard.epoch;
+  if (!prior) return null;
+  if (prior.epoch !== guard.epoch) return 'reset';
+  if (prior.seq !== (guard.seqs[scope] ?? 0)) return scope;
+  return null;
 }
 
 type GuardStore = { get: (key: string) => Promise<unknown> };
@@ -117,6 +122,7 @@ async function writeDictionary(
   mutate: (store: { put: (value: DictEntry) => Promise<unknown>; delete: (key: string) => Promise<unknown>; clear: () => Promise<unknown> }, guard: SyncGuard) => Promise<void>,
   scope = DICTIONARY_SEQ,
   epoch?: number,
+  expectedSeq?: number,
 ): Promise<void> {
   const db = await open();
   if (!hasTransaction(db)) {
@@ -125,13 +131,10 @@ async function writeDictionary(
   const tx = db.transaction(['dictionary', 'kv'], 'readwrite');
   const kv = tx.objectStore('kv');
   const guard = await readGuard(kv);
-  if (epoch !== undefined && guard.epoch !== epoch) {
+  const stale = staleScope(scope, guard, epoch, expectedSeq);
+  if (stale) {
     await tx.done;
-    throw new StaleWriteError('reset');
-  }
-  if (epoch === undefined && isStale(scope, guard)) {
-    await tx.done;
-    throw new StaleWriteError(scope);
+    throw new StaleWriteError(stale);
   }
   await mutate(tx.objectStore('dictionary'), guard);
   guard.seqs[scope] = (guard.seqs[scope] ?? 0) + 1;
@@ -184,13 +187,13 @@ export async function deleteEntry(id: string): Promise<void> {
   await writeDictionary(async (store) => { await store.delete(id); });
 }
 
-export async function replaceAllEntries(entries: readonly DictEntry[], epoch?: number): Promise<void> {
+export async function replaceAllEntries(entries: readonly DictEntry[], epoch?: number, expectedSeq?: number): Promise<void> {
   const db = await open();
   if (!hasTransaction(db)) return;
   await writeDictionary(async (store) => {
     await store.clear();
     await Promise.all(entries.map((entry) => store.put(entry)));
-  }, DICTIONARY_SEQ, epoch);
+  }, DICTIONARY_SEQ, epoch, expectedSeq);
 }
 
 export async function getKV<T>(key: KVKey): Promise<T | undefined> {
@@ -204,7 +207,7 @@ export async function getKV<T>(key: KVKey): Promise<T | undefined> {
   return value as T | undefined;
 }
 
-async function writeKV(key: KVKey, value: unknown, epoch?: number): Promise<void> {
+async function writeKV(key: KVKey, value: unknown, epoch?: number, expectedSeq?: number): Promise<void> {
   const db = await open();
   if (!hasTransaction(db)) {
     await db.put('kv', value, key);
@@ -212,13 +215,10 @@ async function writeKV(key: KVKey, value: unknown, epoch?: number): Promise<void
   }
   const tx = db.transaction('kv', 'readwrite');
   const guard = await readGuard(tx.store);
-  if (epoch !== undefined && guard.epoch !== epoch) {
+  const stale = staleScope(key, guard, epoch, expectedSeq);
+  if (stale) {
     await tx.done;
-    throw new StaleWriteError('reset');
-  }
-  if (epoch === undefined && isStale(key, guard)) {
-    await tx.done;
-    throw new StaleWriteError(key);
+    throw new StaleWriteError(stale);
   }
   guard.seqs[key] = (guard.seqs[key] ?? 0) + 1;
   await tx.store.put(value, key);
@@ -231,18 +231,27 @@ export async function setKV(key: KVKey, value: unknown): Promise<void> {
   await writeKV(key, value);
 }
 
-/** 確認済みの世代のときだけ、このタブの内容でそのキーを上書きする。 */
-export async function replaceKV(key: KVKey, value: unknown, epoch: number): Promise<void> {
-  await writeKV(key, value, epoch);
+/** 確認済みの世代と版のときだけ、このタブの内容でそのキーを上書きする。 */
+export async function replaceKV(key: KVKey, value: unknown, epoch: number, expectedSeq?: number): Promise<void> {
+  await writeKV(key, value, epoch, expectedSeq);
 }
 
-export async function readSyncEpoch(): Promise<number> {
+async function readGuardSnapshot(): Promise<SyncGuard> {
   const db = await open();
-  if (!hasTransaction(db)) return normalizeGuard(await db.get('kv', SYNC_GUARD_KEY)).epoch;
+  if (!hasTransaction(db)) return normalizeGuard(await db.get('kv', SYNC_GUARD_KEY));
   const tx = db.transaction('kv', 'readonly');
   const guard = await readGuard(tx.store);
   await tx.done;
-  return guard.epoch;
+  return guard;
+}
+
+export async function readSyncEpoch(): Promise<number> {
+  return (await readGuardSnapshot()).epoch;
+}
+
+/** 画面の基準は進めず、いま保存されている世代と範囲ごとの版を返す。 */
+export async function readSyncGuard(): Promise<SyncGuard> {
+  return readGuardSnapshot();
 }
 
 /** 辞書と全保存設定を1つのトランザクションで削除する。 */

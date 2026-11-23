@@ -23,6 +23,7 @@ vi.mock('../src/lib/db', () => {
     replaceAllEntries: vi.fn(),
     replaceKV: vi.fn(),
     readSyncEpoch: vi.fn(async () => 0),
+    readSyncGuard: vi.fn(async () => ({ seqs: {}, epoch: 0 })),
     putEntry: vi.fn(),
     putEntries: vi.fn(),
     deleteEntry: vi.fn(),
@@ -255,8 +256,8 @@ describe('App tab sync', () => {
       base: expect.objectContaining({
         quality: expect.arrayContaining([expect.objectContaining({ tag: 'tab-sync-remote' })]),
       }),
-    }), 0);
-    expect(replaceAllEntries).toHaveBeenCalledWith([], 0);
+    }), 0, 0);
+    expect(replaceAllEntries).toHaveBeenCalledWith([], 0, 0);
     expect(container.textContent).not.toContain('このタブの自動保存を停止しています');
   });
 
