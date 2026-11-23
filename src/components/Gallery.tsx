@@ -273,9 +273,7 @@ export function Gallery({
                   title={img.downloaded ? 'PNGを再ダウンロード（DL操作済み）' : 'PNGをダウンロード'}
                   onClick={() => downloadImage(img)}
                 >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5" />
-                  </svg>
+                  <DownloadIcon />
                 </button>
               </div>
             </li>

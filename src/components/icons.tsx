@@ -97,6 +97,15 @@ export function NextIcon() {
   );
 }
 
+/** 上向き山形。ドックの開閉に使う。 */
+export function ChevronUpIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M4.5 12.5L10 7l5.5 5.5" {...stroke} />
+    </svg>
+  );
+}
+
 /** 保存（下向き矢印とトレイ）。 */
 export function DownloadIcon() {
   return (
