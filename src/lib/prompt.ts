@@ -56,10 +56,13 @@ export function prefixFurryDataset(prompt: string): string {
   return trimmed ? `fur dataset, ${trimmed}` : 'fur dataset';
 }
 
-/** この目安以上で、後半が反映されにくくなる注意を出す。送信やコピーは止めない。 */
-export const PROMPT_TOKEN_WARN_THRESHOLD = 450;
-/** 案内文に出す、プロンプト長の目安上限。 */
-export const PROMPT_TOKEN_LIMIT_GUIDE = 512;
+/**
+ * V5 Full のベースプロンプトは約 1471 有効トークン（公式モデル説明、2026-11-23 確認）。
+ * この目安以上で注意を出す。送信やコピーは止めない。
+ * https://docs.novelai.net/image/models.html
+ */
+export const PROMPT_TOKEN_LIMIT_GUIDE = 1471;
+export const PROMPT_TOKEN_WARN_THRESHOLD = PROMPT_TOKEN_LIMIT_GUIDE;
 export const PROMPT_TOKEN_ESTIMATE_NOTE = 'トークン数は英語タグ基準のおおよその目安です';
 
 export interface PromptMetrics {
@@ -71,12 +74,16 @@ export interface PromptMetrics {
 
 const ASCII_WORD = /[A-Za-z0-9']/;
 
+function isIgnoredSpace(char: string): boolean {
+  return /\s/u.test(char);
+}
+
 function isNonAscii(char: string): boolean {
-  return char.charCodeAt(0) > 0x7f;
+  return char.charCodeAt(0) > 0x7f && !isIgnoredSpace(char);
 }
 
 /**
- * 実トークナイザは同梱しない。空白は数えず、次の単位を足す。
+ * 実トークナイザは同梱しない。半角・全角の空白は数えず、次の単位を足す。
  * 英数字語（`'` を含む）は 4 文字ごとに 1、非 ASCII の連続は 1 文字を 1.5、
  * `::` とその他の記号は 1。
  */
@@ -88,7 +95,7 @@ export function measurePrompt(text: string): PromptMetrics {
   let index = 0;
   while (index < trimmed.length) {
     const char = trimmed[index] ?? '';
-    if (/\s/.test(char)) {
+    if (isIgnoredSpace(char)) {
       index += 1;
       continue;
     }
@@ -123,7 +130,7 @@ export function formatPromptMetrics(metrics: PromptMetrics): string {
 
 export function promptTokenWarning(estimatedTokens: number): string | null {
   if (estimatedTokens < PROMPT_TOKEN_WARN_THRESHOLD) return null;
-  return `プロンプトが長いため後半が反映されにくくなる場合があります（目安 ${PROMPT_TOKEN_LIMIT_GUIDE} トークン）`;
+  return `プロンプトが長いため後半が反映されにくくなる場合があります（V5 Full のベースは約 ${PROMPT_TOKEN_LIMIT_GUIDE} トークン）`;
 }
 
 export function buildCategoryPrompt(tags: readonly WorkTag[], syntax: WeightSyntax): string {

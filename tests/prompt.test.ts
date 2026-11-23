@@ -223,6 +223,8 @@ describe('measurePrompt', () => {
   it('前後の空白を除いた文字数にし、空白はトークンに数えない', () => {
     expect(measurePrompt('  solo  ')).toEqual({ chars: 4, estimatedTokens: 1 });
     expect(measurePrompt('blue eyes')).toEqual({ chars: 9, estimatedTokens: 2 });
+    expect(measurePrompt('青　髪')).toEqual({ chars: 3, estimatedTokens: 4 });
+    expect(measurePrompt('青 髪')).toEqual(measurePrompt('青　髪'));
   });
 
   it('英数字語は 4 文字ごとに 1、短い語は 1 にする', () => {
@@ -248,8 +250,9 @@ describe('measurePrompt', () => {
     expect(promptTokenWarning(measurePrompt(below).estimatedTokens)).toBeNull();
     expect(measurePrompt(at).estimatedTokens).toBe(PROMPT_TOKEN_WARN_THRESHOLD);
     expect(promptTokenWarning(PROMPT_TOKEN_WARN_THRESHOLD)).toBe(
-      `プロンプトが長いため後半が反映されにくくなる場合があります（目安 ${PROMPT_TOKEN_LIMIT_GUIDE} トークン）`,
+      `プロンプトが長いため後半が反映されにくくなる場合があります（V5 Full のベースは約 ${PROMPT_TOKEN_LIMIT_GUIDE} トークン）`,
     );
+    expect(PROMPT_TOKEN_LIMIT_GUIDE).toBe(1471);
     expect(formatPromptMetrics({ chars: 185, estimatedTokens: 42 })).toBe('約 42トークン · 185文字');
   });
 });
