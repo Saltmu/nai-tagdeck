@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import type { CategoryKey, DictEntry } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import { CATEGORIES, categoryLabel, isCategoryKey } from '../lib/categories';
@@ -37,9 +37,19 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
   const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ImportResult } | null>(null);
   const [restoring, setRestoring] = useState(false);
   const writeDisabled = !loaded || locked;
+  const reloadCountRef = useRef(reloadCount);
+  reloadCountRef.current = reloadCount;
+  const mountedRef = useRef(true);
+  const fileReadSeqRef = useRef(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (reloadCount === 0) return;
+    fileReadSeqRef.current += 1;
     setEditingId(null);
     setPendingImport(null);
   }, [reloadCount]);
@@ -102,7 +112,12 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
     const file = e.target.files?.[0];
     e.target.value = ''; // 同じファイルを選び直せるように
     if (!file) return;
+    const startedReloadCount = reloadCountRef.current;
+    const readSeq = ++fileReadSeqRef.current;
     const text = await file.text();
+    if (!mountedRef.current || reloadCountRef.current !== startedReloadCount || fileReadSeqRef.current !== readSeq) {
+      return;
+    }
     setPendingImport({ fileName: file.name, result: parseImportFile(file.name, text) });
   };
 

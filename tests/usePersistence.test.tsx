@@ -269,4 +269,46 @@ describe('persistent state', () => {
     expect(onStaleWrite).toHaveBeenCalledWith('updated');
     expect(state.error).toBeNull();
   });
+
+  it('clears a previous autosave error when a preferred save commits the value', async () => {
+    let committed: SyncBridge['committed'] = null;
+    const makeBridge = (): SyncBridge => ({
+      locked: false,
+      isLocked: () => false,
+      onStaleWrite: vi.fn(),
+      onPersisted: vi.fn(),
+      snapshot: {
+        revision: 1,
+        data: {
+          dictionary: [],
+          kv: { workspace: 'saved', settings: undefined, generation: undefined, presets: undefined, activePreset: undefined },
+          meta: { rev: 1, epoch: 0 },
+        },
+      },
+      loadError: null,
+      committed,
+    });
+    function SyncHarness({ bridge }: { bridge: SyncBridge }) {
+      const [stored, setStored] = useState<unknown>('initial');
+      change = setStored;
+      value = stored;
+      state = usePersistence('workspace', stored, (raw) => setStored(raw), 20, bridge);
+      return null;
+    }
+
+    vi.mocked(setKV).mockRejectedValueOnce(new Error('quota'));
+    await act(async () => root.render(<SyncHarness bridge={makeBridge()} />));
+    await act(async () => change('failed-edit'));
+    await tick();
+    expect(state.status).toBe('error');
+    expect(state.error).toContain('quota');
+
+    committed = {
+      revision: 1,
+      kv: { workspace: 'failed-edit', settings: undefined, generation: undefined, presets: undefined, activePreset: undefined },
+    };
+    await act(async () => root.render(<SyncHarness bridge={makeBridge()} />));
+    expect(state.status).toBe('idle');
+    expect(state.error).toBeNull();
+  });
 });

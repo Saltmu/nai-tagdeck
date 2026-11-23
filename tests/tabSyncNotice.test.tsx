@@ -450,4 +450,127 @@ describe('multi-tab sync notice & conflict resolution', () => {
     const saved = await readAllAppData();
     expect((saved.kv.presets as Array<{ name: string }>).map((p) => p.name)).toEqual(['別タブのプリセット']);
   });
+
+  it('cancels a pending backup file read when Settings unmounts before file.text resolves', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'masterpiece' });
+    await writeFromOtherTab({ workspace: initialWs }, false);
+    await mountApp();
+    await click(button('設定'));
+
+    let releaseFileText!: (text: string) => void;
+    const backupJson = JSON.stringify({
+      app: 'nai-tagdeck',
+      kind: 'backup',
+      version: 1,
+      dictionary: [],
+      presets: [],
+      workspace: emptyWorkspace(),
+      settings: { weightSyntax: 'numeric', characterNegativePrompt: 'lowres, aliasing, ' },
+      generation: { mode: 'anime', size: 'portrait', steps: 28, scale: 5, sampler: 'k_euler_ancestral', noiseSchedule: 'karras', seed: null, cfgRescale: 0, dynamicThresholding: false },
+    });
+    const file = new File([backupJson], 'backup.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', {
+      value: () => new Promise<string>((resolve) => { releaseFileText = resolve; }),
+    });
+
+    const input = container.querySelector<HTMLInputElement>('.backup-actions input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // file.text() 完了前に編集タブへ移動して SettingsView / BackupCard をアンマウントする
+    await click(button('編集'));
+    await act(async () => { releaseFileText(backupJson); });
+    await flush(50);
+
+    expect(container.querySelector('dialog[open]')).toBeNull();
+  });
+
+  it('discards a dictionary file read started before reloading latest data', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'masterpiece' });
+    await writeFromOtherTab({
+      workspace: initialWs,
+      dictionary: [{ id: 'd1', tag: 'smile', category: 'appearance', alias: '笑顔', default_weight: 1, sort_order: 0, updated_at: '2026-01-01' }],
+    }, false);
+    await mountApp();
+    await click(button('辞書'));
+
+    let releaseFileText!: (text: string) => void;
+    const dictJson = JSON.stringify({ app: 'nai-tagdeck', version: 1, entries: [{ tag: 'old-import', category: 'quality' }] });
+    const file = new File([dictJson], 'dict.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', {
+      value: () => new Promise<string>((resolve) => { releaseFileText = resolve; }),
+    });
+
+    const input = container.querySelector<HTMLInputElement>('.dict-toolbar input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    await act(async () => {
+      await writeFromOtherTab({
+        dictionary: [{ id: 'd2', tag: 'fresh-tag', category: 'quality', alias: '', default_weight: 1, sort_order: 0, updated_at: '2026-01-02' }],
+      }, true);
+    });
+    await click(button('最新のデータを読み込む'));
+    await flush(80);
+
+    // 再読み込み前に開始された file.text() が完了しても ImportPanel は開かない
+    await act(async () => { releaseFileText(dictJson); });
+    await flush(50);
+
+    expect(container.querySelector('.import-panel')).toBeNull();
+    expect(container.textContent).toContain('fresh-tag');
+  });
+
+  it('keeps existing screen intact if legacy workspace migration fails during reload, and migrates before unlocking on success', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'keep-me' });
+    await writeFromOtherTab({
+      workspace: initialWs,
+      dictionary: [{ id: 'd1', tag: 'old-dict', category: 'quality', alias: '', default_weight: 1, sort_order: 0, updated_at: '2026-01-01' }],
+    }, false);
+    await mountApp();
+
+    // 別タブが旧形式（negative なし）workspace と新辞書を保存した状態を再現
+    const db = await openDB('nai-tagdeck', DB_VERSION);
+    try {
+      const tx = db.transaction(['dictionary', 'kv', 'meta'], 'readwrite');
+      const raw = (await tx.objectStore('meta').get('sync')) as { rev?: number; epoch?: number } | undefined;
+      await tx.objectStore('kv').put({ base: { quality: [{ id: 'q1', tag: 'legacy-tag', enabled: true, weight: 1 }] }, characters: [] }, 'workspace');
+      await tx.objectStore('kv').put({ weightSyntax: 'numeric', negativePrompt: 'legacy-neg' }, 'settings');
+      await tx.objectStore('dictionary').clear();
+      await tx.objectStore('dictionary').put({ id: 'd2', tag: 'new-dict', category: 'quality', alias: '', default_weight: 1, sort_order: 0, updated_at: '2026-01-02' });
+      await tx.objectStore('meta').put({ rev: (raw?.rev ?? 0) + 1, epoch: raw?.epoch ?? 0 }, 'sync');
+      await tx.done;
+    } finally {
+      db.close();
+    }
+    await act(async () => {
+      const peer = new FakeBroadcastChannel('nai-tagdeck:sync');
+      peer.postMessage({ type: 'updated', senderId: 'other-tab', seq: Date.now(), at: Date.now() });
+      peer.close();
+    });
+
+    // 1 回目: 移行保存に失敗 → 辞書も含め部分反映されず元の画面を維持
+    const setKvSpy = vi.spyOn(dbModule, 'setKV').mockRejectedValueOnce(new Error('migration failed'));
+    await click(button('最新のデータを読み込む'));
+    await flush(80);
+    setKvSpy.mockRestore();
+
+    expect(container.querySelector('.tab-sync')?.textContent).toContain('migration failed');
+    expect(container.querySelector('output.preview-text')?.textContent).toContain('keep-me');
+    await click(button('辞書'));
+    expect(container.textContent).toContain('old-dict');
+    expect(container.textContent).not.toContain('new-dict');
+
+    // 2 回目: 移行保存成功 → workspace 移行と辞書が揃って反映されロック解除
+    await click(button('最新のデータを読み込む'));
+    await flush(80);
+    expect(container.querySelector('.tab-sync')).toBeNull();
+    expect(container.textContent).toContain('new-dict');
+    await click(button('編集'));
+    expect(container.querySelector('output.preview-text')?.textContent).toContain('legacy-tag');
+  });
 });

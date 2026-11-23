@@ -110,13 +110,16 @@ export function usePersistence<T>(
     return () => { active = false; };
   }, [hasSync, key, snapshotRevision, resetSignal]);
 
-  // 優先保存（replaceAllAppData）が完了したら、コミット済みの値を保存基準に合わせる
+  // 優先保存（replaceAllAppData）が完了したら、コミット済みの値を保存基準に合わせ過去の保存エラーも消す
   useEffect(() => {
     const latestCommitted = committedRef.current;
     if (!latestCommitted || committedRevision === 0) return;
     const tracker = synced.current;
     if (tracker && tracker.key === key) {
       tracker.value = latestCommitted.kv[key] as T;
+    }
+    if (stateRef.current.loaded && (stateRef.current.status !== 'idle' || stateRef.current.error !== null)) {
+      setState((prev) => ({ ...prev, loaded: true, status: 'idle', error: null }));
     }
     onSavedRef.current?.();
   }, [committedRevision, key]);

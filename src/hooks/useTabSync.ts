@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { migrateNegative } from '../lib/backup';
 import * as db from '../lib/db';
 import type { AppDataReplacement, AppDataSnapshot, KVKey } from '../lib/db';
 import { getDataResetSignal } from '../lib/reset';
 import { isStaleWriteError, publishTabSync, subscribeTabSync, type TabSyncType } from '../lib/tabSync';
+import { hasNegative } from '../lib/workspace';
 
 const DEFAULT_KV_KEYS: readonly KVKey[] = ['workspace', 'settings', 'generation', 'presets', 'activePreset'];
 
@@ -16,6 +18,22 @@ async function loadAllSnapshot(): Promise<AppDataSnapshot> {
   ]);
   const kv = Object.fromEntries(keys.map((key, i) => [key, values[i]])) as Record<KVKey, unknown>;
   return { dictionary, kv, meta: { rev: 0, epoch: 0 } };
+}
+
+/**
+ * 旧形式（negative を持たない）workspace を画面反映前に移行・保存する。
+ * 反映前に完了させることで、再読み込み時の部分反映やアンロック後の遅延上書きを防ぐ。
+ */
+async function migrateLegacyWorkspaceInSnapshot(data: AppDataSnapshot): Promise<AppDataSnapshot> {
+  const rawWorkspace = data.kv.workspace;
+  if (rawWorkspace === undefined || hasNegative(rawWorkspace)) return data;
+  const migrated = migrateNegative(rawWorkspace, data.kv.settings);
+  await db.setKV('workspace', migrated);
+  publishTabSync('updated');
+  return {
+    ...data,
+    kv: { ...data.kv, workspace: migrated },
+  };
 }
 
 export interface SyncSnapshot {
@@ -105,7 +123,9 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
     let active = true;
     const isCurrent = () => active && !resetSignal.aborted;
     loadAllSnapshot()
-      .then((data) => {
+      .then(async (raw) => {
+        if (!isCurrent()) return;
+        const data = await migrateLegacyWorkspaceInSnapshot(raw);
         if (!isCurrent()) return;
         lastLoadedEpochRef.current = data.meta.epoch;
         const rev = ++snapshotRevRef.current;
@@ -114,10 +134,14 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
       })
       .catch((caught: unknown) => {
         if (!isCurrent()) return;
+        if (isStaleWriteError(caught)) {
+          noteConflict(caught.reason);
+          return;
+        }
         setLoadError(`保存データを読み込めません: ${String(caught)}`);
       });
     return () => { active = false; };
-  }, [resetSignal]);
+  }, [noteConflict, resetSignal]);
 
   // 他タブからの更新・全削除通知および DB ブロック状態を購読する
   useEffect(() => subscribeTabSync((message) => {
@@ -142,7 +166,9 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
     const startNoticeSeq = noticeSeqRef.current;
     void (async () => {
       try {
-        const data = await loadAllSnapshot();
+        const raw = await loadAllSnapshot();
+        if (resetSignal.aborted) return;
+        const data = await migrateLegacyWorkspaceInSnapshot(raw);
         if (resetSignal.aborted) return;
         const epochChanged = lastLoadedEpochRef.current !== null && data.meta.epoch !== lastLoadedEpochRef.current;
         lastLoadedEpochRef.current = data.meta.epoch;
@@ -154,13 +180,18 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
         if (current === 'reset' || epochChanged) portsRef.current.resyncToken();
         if (noticeSeqRef.current === startNoticeSeq) clearConflict();
       } catch (caught) {
-        setError(`最新のデータを読み込めません: ${String(caught)}`);
+        if (isStaleWriteError(caught)) {
+          noteConflict(caught.reason);
+          setError('読み込みの途中で別のタブが更新したため、もう一度読み込んでください。');
+        } else {
+          setError(`最新のデータを読み込めません: ${String(caught)}`);
+        }
       } finally {
         busyRef.current = false;
         setBusy(false);
       }
     })();
-  }, [clearConflict, resetSignal]);
+  }, [clearConflict, noteConflict, resetSignal]);
 
   const preferLocal = useCallback(() => {
     if (!conflictRef.current || busyRef.current) return;
