@@ -72,6 +72,7 @@ npm run dev
 | コマンド | 用途 |
 | --- | --- |
 | `npm test` | Vitest でテストを実行 |
+| `npm run lint` | Biome で静的チェックを実行 |
 | `npm run typecheck` | TypeScript の型チェック |
 | `npm run build` | 型チェック後、公開用の静的ファイルを `dist/` に出力 |
 | `npm run preview` | ビルド後の `dist/` をローカルで確認 |

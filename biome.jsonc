@@ -1,0 +1,72 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": true
+  },
+  // 既存の字下げや引用符は変えない。この設定は静的チェックだけを行う。
+  "formatter": {
+    "enabled": false
+  },
+  "assist": {
+    "enabled": false
+  },
+  "linter": {
+    "enabled": true,
+    "domains": {
+      "react": "recommended"
+    },
+    "rules": {
+      "preset": "recommended",
+      "a11y": {
+        // 既存のロール・フォーカス・クリック操作はこの導入では変えない。
+        "recommended": false
+      },
+      "correctness": {
+        "useExhaustiveDependencies": {
+          "level": "error",
+          "options": {
+            // 値を読まず、再実行のきっかけにしている依存がある。
+            "reportUnnecessaryDependencies": false
+          }
+        }
+      },
+      "style": {
+        // 非 null 断言は既存コード全体で使っている。
+        "noNonNullAssertion": "off",
+        // 既存の CSS は詳細度の並びで上書きしている。
+        "noDescendingSpecificity": "off",
+        // 文字列連結と Math.pow の書き換えは既存の式を変えない。
+        "useTemplate": "off",
+        "useExponentiationOperator": "off"
+      },
+      "complexity": {
+        // 既存の CSS は !important で狭い画面の上書きをしている。
+        "noImportantStyles": "off",
+        // findIndex の等値比較は既存のままにする。
+        "useIndexOf": "off"
+      },
+      "suspicious": {
+        // 分割テキストや並び順そのものを識別子にしている箇所がある。
+        "noArrayIndexKey": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["tests/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            // テスト関数の中で一度だけ描画する Harness。
+            "noComponentHookFactories": "off"
+          }
+        }
+      }
+    }
+  ]
+}

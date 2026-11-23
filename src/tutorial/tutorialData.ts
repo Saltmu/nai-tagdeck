@@ -189,7 +189,7 @@ export function stepIndexByScene(scene: TutorialSceneId): number {
   const chapter = TUTORIAL_CHAPTERS.find((c) => c.id === scene);
   if (!chapter) return 0;
   const idx = TUTORIAL_STEPS.findIndex((s) => s.id === chapter.firstStepId);
-  return idx >= 0 ? idx : 0;
+  return Math.max(idx, 0);
 }
 
 export interface InitialTutorialLocation {
