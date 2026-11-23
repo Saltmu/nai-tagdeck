@@ -312,7 +312,11 @@ export const TagRow = memo(function TagRow({
               className="icon-btn"
               aria-label={`${tag.tag} を辞書に登録`}
               title="このタグを辞書に登録"
-              onClick={() => onRegister(tag)}
+              onClick={(event) => {
+                // Safari はポインタのクリックでボタンへフォーカスしない。行を特定できるよう先に合わせる。
+                event.currentTarget.focus();
+                onRegister(tag);
+              }}
             >
               <BookPlusIcon />
             </button>
