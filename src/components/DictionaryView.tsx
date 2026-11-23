@@ -17,7 +17,7 @@ interface Props {
   notify: (message: string) => void;
 }
 
-const MAX_SHOWN = 300;
+const PAGE_SIZE = 300;
 const NEW = '__new__';
 
 function blankEntry(category: CategoryKey): DictEntry {
@@ -29,6 +29,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
   const { entries, loaded, save, saveMany, remove, importEntries, restoreInitial } = dictionary;
   const [query, setQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<CategoryKey | 'all'>('all');
+  const [pageIndex, setPageIndex] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ImportResult } | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -37,7 +38,11 @@ export function DictionaryView({ dictionary, notify }: Props) {
     () => filterEntries(entries, query, filterCategory),
     [entries, filterCategory, query],
   );
-  const shown = filtered.slice(0, MAX_SHOWN);
+  const pageCount = Math.ceil(filtered.length / PAGE_SIZE);
+  const page = pageCount === 0 ? 0 : Math.min(pageIndex, pageCount - 1);
+  const pageStart = page * PAGE_SIZE;
+  const shown = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+  const hasPager = filtered.length > PAGE_SIZE;
 
   const handleSave = async (entry: DictEntry): Promise<string | null> => {
     const dup = findDuplicate(entries, entry);
@@ -126,12 +131,18 @@ export function DictionaryView({ dictionary, notify }: Props) {
             placeholder="タグ・日本語名で絞り込み"
             aria-label="辞書を絞り込む"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPageIndex(0);
+            }}
           />
           <select
             aria-label="カテゴリで絞り込む"
             value={filterCategory}
-            onChange={(e) => setFilterCategory(isCategoryKey(e.target.value) ? e.target.value : 'all')}
+            onChange={(e) => {
+              setFilterCategory(isCategoryKey(e.target.value) ? e.target.value : 'all');
+              setPageIndex(0);
+            }}
           >
             <option value="all">すべてのカテゴリ</option>
             {CATEGORIES.map((c) => (
@@ -206,7 +217,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
         <section className="card dict-list-card" aria-label="辞書の一覧">
           <p className="dict-count">
             {filtered.length}件 / 全{entries.length}件
-            {filtered.length > MAX_SHOWN && `（先頭 ${MAX_SHOWN}件を表示。絞り込んでください）`}
+            {hasPager && `（${pageStart + 1}〜${pageStart + shown.length}件目）`}
           </p>
           <ul className="dict-list">
             {shown.map((entry) =>
@@ -243,6 +254,26 @@ export function DictionaryView({ dictionary, notify }: Props) {
               ),
             )}
           </ul>
+          {hasPager && (
+            <nav className="dict-pager" aria-label="一覧のページ">
+              <button
+                type="button"
+                className="btn"
+                disabled={page === 0}
+                onClick={() => setPageIndex(page - 1)}
+              >
+                前を表示
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={page >= pageCount - 1}
+                onClick={() => setPageIndex(page + 1)}
+              >
+                さらに表示
+              </button>
+            </nav>
+          )}
         </section>
       )}
     </div>

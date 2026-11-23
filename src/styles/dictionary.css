@@ -34,6 +34,14 @@
   font-size: 0.85rem;
 }
 
+.dict-pager {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
 .dict-list {
   list-style: none;
   margin: 0;
