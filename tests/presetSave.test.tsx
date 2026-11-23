@@ -59,6 +59,7 @@ function Harness({
       if (extras.generation) setGeneration((current) => ({ ...current, ...extras.generation }));
     },
   }), []);
+  const [fileDrops, setFileDrops] = useState(0);
   const history = useTagUndo(workspace, rawDispatch, { activeId, setActiveId }, extrasSync);
   const store: PresetStore = {
     presets,
@@ -73,6 +74,7 @@ function Harness({
   const dispatch = (action: WorkspaceAction) => history.dispatch(action);
   return (
     <DialogProvider>
+      <div className="drop-probe" data-drops={fileDrops} onDrop={() => setFileDrops((count) => count + 1)}>
       <PresetBar
         store={store}
         workspace={workspace}
@@ -81,6 +83,7 @@ function Harness({
         generation={generation}
         characterNegativePrompt={characterNegativePrompt}
       />
+      </div>
       <button type="button" onClick={() => setGeneration((current) => ({ ...current, mode: current.mode === 'furry' ? 'anime' : 'furry' }))}>
         モード切替
       </button>
@@ -248,4 +251,18 @@ it('overwrites generation on a generation preset and can remove it by saving the
   await act(async () => { search.focus(); });
   const option = container.querySelector('[role="option"]')!;
   expect(option.querySelector('.preset-mode-chip')).toBeNull();
+});
+
+it('does not open a PNG import when a file is dropped on the save dialog', async () => {
+  const workspace = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'solo' });
+  await renderHarness({ workspace });
+  await click(button('新しいプリセットとして保存'));
+  const dialog = saveDialog();
+  if (!dialog) throw new Error('保存ダイアログがありません');
+  const event = new Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
+  await act(async () => { dialog.dispatchEvent(event); });
+  expect(event.defaultPrevented).toBe(true);
+  expect(container.querySelector('.drop-probe')?.getAttribute('data-drops')).toBe('0');
+  expect(saveDialog()).toBe(dialog);
 });

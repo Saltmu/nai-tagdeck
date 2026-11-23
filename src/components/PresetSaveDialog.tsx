@@ -1,4 +1,11 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type DragEvent } from 'react';
+
+/** エディタの PNG ドロップまで届かせない。保存中の作業内容が入れ替わるのを防ぐ。 */
+function stopFileDrag(event: DragEvent<HTMLDialogElement>) {
+  if (!event.dataTransfer?.types.includes('Files')) return;
+  event.preventDefault();
+  event.stopPropagation();
+}
 
 interface Props {
   initialName: string;
@@ -45,6 +52,10 @@ export function PresetSaveDialog({ initialName, includeGeneration, summary, onCa
       className="app-dialog"
       aria-labelledby={`${id}-title`}
       onClose={() => finish(null)}
+      onDragEnter={stopFileDrag}
+      onDragOver={stopFileDrag}
+      onDragLeave={stopFileDrag}
+      onDrop={stopFileDrag}
     >
       <form
         method="dialog"
