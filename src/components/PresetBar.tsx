@@ -35,6 +35,8 @@ interface Props {
   characterNegativePrompt: string;
   /** 生成設定と共通キャラネガティブを IndexedDB から読み終えている。失敗時は false。 */
   settingsReady?: boolean;
+  /** 作業状態の読み込みと旧データの移行が終わっている。失敗時は false。 */
+  workspaceReady?: boolean;
   onPickPng?: () => void;
 }
 
@@ -46,6 +48,7 @@ export function PresetBar({
   generation,
   characterNegativePrompt,
   settingsReady = true,
+  workspaceReady = true,
   onPickPng,
 }: Props) {
   const id = useId();
@@ -54,9 +57,11 @@ export function PresetBar({
   const generationRef = useRef(generation);
   const characterNegativeRef = useRef(characterNegativePrompt);
   const settingsReadyRef = useRef(settingsReady);
+  const workspaceReadyRef = useRef(workspaceReady);
   generationRef.current = generation;
   characterNegativeRef.current = characterNegativePrompt;
   settingsReadyRef.current = settingsReady;
+  workspaceReadyRef.current = workspaceReady;
   const active = presets.find((p) => p.id === activeId) ?? null;
   const [saveOpen, setSaveOpen] = useState(false);
   const dirty = active
@@ -81,12 +86,16 @@ export function PresetBar({
   const load = async (presetId: string) => {
     const preset = presets.find((p) => p.id === presetId);
     if (!preset || preset.id === active?.id) return;
-    if (!(await confirmDiscard(`「${preset.name}」を読み込みますか？`, '読み込む'))) return;
     const affectsSettings = preset.generation !== undefined || preset.characterNegativePrompt !== undefined;
     if (affectsSettings && !settingsReadyRef.current) {
       notify('生成設定を読み込めていないため、このプリセットは読み込めません');
       return;
     }
+    if (affectsSettings && !workspaceReadyRef.current) {
+      notify('作業状態を読み込めていないため、このプリセットは読み込めません');
+      return;
+    }
+    if (!(await confirmDiscard(`「${preset.name}」を読み込みますか？`, '読み込む'))) return;
     dispatch(
       { type: 'replace', workspace: presetToWorkspace(preset.workspace, workspace) },
       presetLoadExtras(preset, {

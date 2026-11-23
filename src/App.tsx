@@ -400,6 +400,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onCharacterNegativeChange={handleCharacterNegativeChange}
               generation={generation}
               settingsReady={settingsReady}
+              workspaceReady={loaded}
               canvasSize={sizeOf(generation.size)}
               shown={tab === 'editor'}
             />

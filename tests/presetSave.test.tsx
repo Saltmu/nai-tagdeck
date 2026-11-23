@@ -33,6 +33,7 @@ function Harness({
   initialGeneration,
   initialNegative,
   settingsReady = true,
+  workspaceReady = true,
 }: {
   initialWorkspace: Workspace;
   initialPresets: Preset[];
@@ -40,6 +41,7 @@ function Harness({
   initialGeneration: GenerationSettings;
   initialNegative: string;
   settingsReady?: boolean;
+  workspaceReady?: boolean;
 }) {
   const [workspace, rawDispatch] = useReducer(workspaceReducer, initialWorkspace);
   const [presets, setPresets] = useState(initialPresets);
@@ -85,6 +87,7 @@ function Harness({
         generation={generation}
         characterNegativePrompt={characterNegativePrompt}
         settingsReady={settingsReady}
+        workspaceReady={workspaceReady}
       />
       </div>
       <button type="button" onClick={() => setGeneration((current) => ({ ...current, mode: current.mode === 'furry' ? 'anime' : 'furry' }))}>
@@ -107,6 +110,7 @@ async function renderHarness(props: {
   generation?: GenerationSettings;
   negative?: string;
   settingsReady?: boolean;
+  workspaceReady?: boolean;
 }) {
   await act(async () => root.render(
     <Harness
@@ -116,6 +120,7 @@ async function renderHarness(props: {
       initialGeneration={props.generation ?? { ...DEFAULT_GENERATION, mode: 'furry', seed: 7 }}
       initialNegative={props.negative ?? 'lowres'}
       settingsReady={props.settingsReady}
+      workspaceReady={props.workspaceReady}
     />,
   ));
 }
@@ -412,4 +417,52 @@ it('does not load a generation preset before settings are read', async () => {
   expect(container.querySelector('.toast')?.textContent).toBe('「ケモノ用」を読み込みました（生成設定も反映）');
   expect(state().dataset).toMatchObject({ mode: 'furry', negative: 'lowres' });
   expect(container.querySelector<HTMLInputElement>('.preset-search input')!.value).toBe('ケモノ用');
+});
+
+it('does not overwrite the current preset when the destination cannot be loaded yet', async () => {
+  const workspace = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'solo' });
+  const current = createPreset('タグのみ', workspace);
+  const generationPreset = createPreset('ケモノ用', workspaceReducer(workspace, { type: 'add', target: 'base', category: 'quality', tag: 'hat' }), {
+    generation: { ...DEFAULT_GENERATION, mode: 'furry' },
+    characterNegativePrompt: 'lowres',
+  });
+  await renderHarness({
+    workspace: workspaceReducer(workspace, { type: 'add', target: 'base', category: 'quality', tag: 'bow' }),
+    presets: [current, generationPreset],
+    activeId: current.id,
+    generation: { ...DEFAULT_GENERATION, mode: 'anime' },
+    negative: 'blurry',
+    settingsReady: false,
+  });
+  expect(container.textContent).toContain('変更あり');
+  const search = container.querySelector<HTMLInputElement>('.preset-search input')!;
+  await act(async () => { search.focus(); });
+  await click(optionNamed('ケモノ用'));
+  expect(container.querySelector('.toast')?.textContent).toBe('生成設定を読み込めていないため、このプリセットは読み込めません');
+  expect(container.textContent).not.toContain('変更を反映してから読み込む');
+  expect(container.querySelector<HTMLInputElement>('.preset-search input')!.value).toBe('タグのみ');
+  expect(container.textContent).toContain('変更あり');
+});
+
+it('does not load a generation preset before the workspace has been restored', async () => {
+  const workspace = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'solo' });
+  const current = createPreset('タグのみ', workspace);
+  const generationPreset = createPreset('ケモノ用', workspace, {
+    generation: { ...DEFAULT_GENERATION, mode: 'furry' },
+    characterNegativePrompt: 'lowres',
+  });
+  await renderHarness({
+    workspace,
+    presets: [current, generationPreset],
+    activeId: current.id,
+    generation: { ...DEFAULT_GENERATION, mode: 'anime' },
+    negative: 'blurry',
+    workspaceReady: false,
+  });
+  const search = container.querySelector<HTMLInputElement>('.preset-search input')!;
+  await act(async () => { search.focus(); });
+  await click(optionNamed('ケモノ用'));
+  expect(container.querySelector('.toast')?.textContent).toBe('作業状態を読み込めていないため、このプリセットは読み込めません');
+  expect(state().dataset).toMatchObject({ mode: 'anime', negative: 'blurry' });
+  expect(container.querySelector<HTMLInputElement>('.preset-search input')!.value).toBe('タグのみ');
 });
