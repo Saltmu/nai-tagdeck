@@ -3,7 +3,14 @@ import { act, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PromptPreview } from '../src/components/PromptPreview';
-import type { CharacterPrompt } from '../src/lib/prompt';
+import {
+  PROMPT_TOKEN_ESTIMATE_NOTE,
+  PROMPT_TOKEN_LIMIT_GUIDE,
+  PROMPT_TOKEN_WARN_THRESHOLD,
+  formatPromptMetrics,
+  measurePrompt,
+  type CharacterPrompt,
+} from '../src/lib/prompt';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -110,6 +117,54 @@ it('個別ネガティブと共通ネガティブ、設定した座標を確認�
   expect(onCopy).toHaveBeenCalledWith('blurry', 'キャラ1のネガティブ');
   await act(async () => button('コピー', item('キャラ2のネガティブ')).click());
   expect(onCopy).toHaveBeenCalledWith('lowres, aliasing, ', 'キャラ2のネガティブ');
+});
+
+it('各プロンプトの文字数とトークン目安を出し、空のときは出さない', async () => {
+  await render({
+    mode: 'furry',
+    basePrompt: 'solo, forest',
+    negativePrompt: '',
+    characterPrompts: [
+      character({ id: 'c1', name: 'キャラ1', prompt: 'wolf', negative: 'blurry' }),
+      character({ id: 'c2', name: 'キャラ2', prompt: 'cat', negative: '' }),
+    ],
+    characterNegative: 'lowres',
+  });
+
+  const shownBase = 'fur dataset, solo, forest';
+  const base = item('ベース');
+  expect(base.querySelector('output')?.textContent).toBe(shownBase);
+  expect(base.querySelector('.preview-metrics')?.textContent).toBe(formatPromptMetrics(measurePrompt(shownBase)));
+  expect(base.querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
+  expect(item('キャラ1').querySelector('.preview-metrics')?.textContent).toBe(formatPromptMetrics(measurePrompt('wolf')));
+  expect(item('キャラ1のネガティブ').querySelector('.preview-metrics')?.textContent).toBe(
+    formatPromptMetrics(measurePrompt('blurry')),
+  );
+  expect(item('キャラ2のネガティブ').querySelector('.preview-metrics')).toBeNull();
+  const negative = [...container.querySelectorAll('.preview-item')].find((node) =>
+    node.querySelector('dt')?.childNodes[0]?.textContent?.trim() === 'ネガティブ',
+  );
+  expect(negative?.querySelector('.preview-metrics')).toBeNull();
+  expect(container.textContent).toContain(PROMPT_TOKEN_ESTIMATE_NOTE);
+
+  await render({ mode: 'furry', basePrompt: '', characterPrompts: [] });
+  expect(item('ベース').querySelector('.preview-metrics')).toBeNull();
+  expect(item('ベース').querySelector('output')?.textContent).toBe('ONのタグがありません');
+});
+
+it('トークン目安がしきい値以上でもコピーでき、警告を出す', async () => {
+  const long = Array.from({ length: PROMPT_TOKEN_WARN_THRESHOLD }, () => 'a').join(' ');
+  await render({ basePrompt: long, negativePrompt: 'lowres', characterPrompts: [] });
+  const base = item('ベース');
+  const metrics = base.querySelector('.preview-metrics');
+  expect(metrics?.classList.contains('is-warning')).toBe(true);
+  expect(metrics?.getAttribute('title')).toContain(String(PROMPT_TOKEN_LIMIT_GUIDE));
+  expect(base.querySelector('.hint')?.textContent).toContain(String(PROMPT_TOKEN_LIMIT_GUIDE));
+  expect(base.querySelector('output')?.textContent).toBe(long);
+  expect(button('コピー', base).disabled).toBe(false);
+  await act(async () => button('コピー', base).click());
+  expect(onCopy).toHaveBeenCalledWith(long, 'プロンプト全体');
+  expect(item('ネガティブ').querySelector('.preview-metrics')?.classList.contains('is-warning')).toBe(false);
 });
 
 it('共通ネガティブを渡さないときは、個別設定のないキャラのネガティブを出さない', async () => {

@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PROMPT_TOKEN_LIMIT_GUIDE,
+  PROMPT_TOKEN_WARN_THRESHOLD,
   buildCategoryPrompt,
   buildCharacterPrompts,
   buildPrompt,
   clampWeight,
+  formatPromptMetrics,
   formatTag,
+  measurePrompt,
   parseTagList,
   prefixFurryDataset,
+  promptTokenWarning,
 } from '../src/lib/prompt';
 import { emptyGroups, newCharacter } from '../src/lib/workspace';
 import type { WorkTag } from '../src/types';
@@ -206,5 +211,45 @@ describe('parseTagList', () => {
       { tag: 'a', weight: 1.1 },
       { tag: 'b', weight: 1 },
     ]);
+  });
+});
+
+describe('measurePrompt', () => {
+  it('空と空白だけは 0 にする', () => {
+    expect(measurePrompt('')).toEqual({ chars: 0, estimatedTokens: 0 });
+    expect(measurePrompt('   \n\t  ')).toEqual({ chars: 0, estimatedTokens: 0 });
+  });
+
+  it('前後の空白を除いた文字数にし、空白はトークンに数えない', () => {
+    expect(measurePrompt('  solo  ')).toEqual({ chars: 4, estimatedTokens: 1 });
+    expect(measurePrompt('blue eyes')).toEqual({ chars: 9, estimatedTokens: 2 });
+  });
+
+  it('英数字語は 4 文字ごとに 1、短い語は 1 にする', () => {
+    expect(measurePrompt('abcd')).toEqual({ chars: 4, estimatedTokens: 1 });
+    expect(measurePrompt('abcde')).toEqual({ chars: 5, estimatedTokens: 2 });
+    expect(measurePrompt("don't")).toEqual({ chars: 5, estimatedTokens: 2 });
+    expect(measurePrompt('1girl')).toEqual({ chars: 5, estimatedTokens: 2 });
+  });
+
+  it('非 ASCII の連続は 1.5 倍の切り上げ、:: とその他の記号は 1 にする', () => {
+    expect(measurePrompt('青い髪')).toEqual({ chars: 3, estimatedTokens: 5 });
+    expect(measurePrompt('::')).toEqual({ chars: 2, estimatedTokens: 1 });
+    expect(measurePrompt(':::')).toEqual({ chars: 3, estimatedTokens: 2 });
+    expect(measurePrompt('{tag}')).toEqual({ chars: 5, estimatedTokens: 3 });
+    expect(measurePrompt('a_b')).toEqual({ chars: 3, estimatedTokens: 3 });
+    expect(measurePrompt('1.2::blue eyes::')).toEqual({ chars: 16, estimatedTokens: 7 });
+  });
+
+  it('しきい値以上だけ警告文を返し、表示用の文言を組み立てる', () => {
+    const below = Array.from({ length: PROMPT_TOKEN_WARN_THRESHOLD - 1 }, () => 'a').join(' ');
+    const at = Array.from({ length: PROMPT_TOKEN_WARN_THRESHOLD }, () => 'a').join(' ');
+    expect(measurePrompt(below).estimatedTokens).toBe(PROMPT_TOKEN_WARN_THRESHOLD - 1);
+    expect(promptTokenWarning(measurePrompt(below).estimatedTokens)).toBeNull();
+    expect(measurePrompt(at).estimatedTokens).toBe(PROMPT_TOKEN_WARN_THRESHOLD);
+    expect(promptTokenWarning(PROMPT_TOKEN_WARN_THRESHOLD)).toBe(
+      `プロンプトが長いため後半が反映されにくくなる場合があります（目安 ${PROMPT_TOKEN_LIMIT_GUIDE} トークン）`,
+    );
+    expect(formatPromptMetrics({ chars: 185, estimatedTokens: 42 })).toBe('約 42トークン · 185文字');
   });
 });

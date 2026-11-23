@@ -1,7 +1,31 @@
 import { Fragment } from 'react';
 import type { GenerationMode } from '../lib/novelai';
-import { prefixFurryDataset, type CharacterPrompt } from '../lib/prompt';
+import {
+  PROMPT_TOKEN_ESTIMATE_NOTE,
+  formatPromptMetrics,
+  measurePrompt,
+  prefixFurryDataset,
+  promptTokenWarning,
+  type CharacterPrompt,
+} from '../lib/prompt';
 import type { WeightSyntax } from '../types';
+
+export function PromptMetrics({ text }: { text: string }) {
+  const metrics = measurePrompt(text);
+  if (metrics.chars === 0) return null;
+  const warning = promptTokenWarning(metrics.estimatedTokens);
+  return (
+    <span className={warning ? 'preview-metrics is-warning' : 'preview-metrics'} title={warning ?? undefined}>
+      {formatPromptMetrics(metrics)}
+    </span>
+  );
+}
+
+export function PromptMetricsWarning({ text }: { text: string }) {
+  const warning = promptTokenWarning(measurePrompt(text).estimatedTokens);
+  if (!warning) return null;
+  return <p className="hint">{warning}</p>;
+}
 
 interface Props {
   basePrompt: string;
@@ -41,6 +65,7 @@ export function PromptPreview({
           <div className="preview-item">
             <dt>
               ベース
+              <PromptMetrics text={shownBase} />
               <button
                 type="button"
                 className="btn btn-small"
@@ -54,6 +79,7 @@ export function PromptPreview({
               <output className={`preview-text${shownBase ? '' : ' is-empty'}`}>
                 {shownBase || 'ONのタグがありません'}
               </output>
+              <PromptMetricsWarning text={shownBase} />
             </dd>
           </div>
           {characterPrompts.map((c) => {
@@ -64,6 +90,7 @@ export function PromptPreview({
                 <div className="preview-item">
                   <dt>
                     {c.name}
+                    <PromptMetrics text={c.prompt} />
                     <button type="button" className="btn btn-small" onClick={() => onCopy(c.prompt, c.name)}>
                       コピー
                     </button>
@@ -73,12 +100,14 @@ export function PromptPreview({
                     {c.center && (
                       <p className="hint">位置　横 {c.center.x}、縦 {c.center.y}</p>
                     )}
+                    <PromptMetricsWarning text={c.prompt} />
                   </dd>
                 </div>
                 {showNegative && (
                   <div className="preview-item preview-negative">
                     <dt>
                       {c.name}のネガティブ
+                      <PromptMetrics text={negative ?? ''} />
                       <button
                         type="button"
                         className="btn btn-small"
@@ -92,6 +121,7 @@ export function PromptPreview({
                       <output className={`preview-text${negative ? '' : ' is-empty'}`}>
                         {negative || 'ネガティブなし'}
                       </output>
+                      <PromptMetricsWarning text={negative ?? ''} />
                     </dd>
                   </div>
                 )}
@@ -101,6 +131,7 @@ export function PromptPreview({
           <div className="preview-item preview-negative">
             <dt>
               ネガティブ
+              <PromptMetrics text={negativePrompt} />
               <button
                 type="button"
                 className="btn btn-small"
@@ -114,12 +145,14 @@ export function PromptPreview({
               <output className={`preview-text${negativePrompt ? '' : ' is-empty'}`}>
                 {negativePrompt || 'ネガティブなし（編集の「ネガティブ」タブで追加できます）'}
               </output>
+              <PromptMetricsWarning text={negativePrompt} />
             </dd>
           </div>
         </dl>
         {syntax === 'brace' && (
           <p className="hint">マイナスや 0 の重みは括弧で表せないため、そのタグだけ数値の記法で出力します。</p>
         )}
+        <p className="hint">{PROMPT_TOKEN_ESTIMATE_NOTE}</p>
       </div>
     </div>
   );
