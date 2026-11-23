@@ -36,7 +36,9 @@ export function useDictionary(): Dictionary {
       assertTabSyncWritable();
       return task();
     }).catch((error: unknown) => {
-      if (error instanceof StaleWriteError) lockTabSyncFromStaleWrite('dictionary');
+      if (error instanceof StaleWriteError) {
+        lockTabSyncFromStaleWrite('dictionary', error.scope === 'reset' ? 'reset' : 'updated');
+      }
       throw error;
     });
     writes.current = run.then(() => undefined, () => undefined);

@@ -289,4 +289,20 @@ describe('App tab sync', () => {
     expect(container.textContent).toContain('tab-sync-local');
     expect(container.textContent).not.toContain('tab-sync-should-stay');
   });
+
+  it('does not overwrite a store that failed to load', async () => {
+    vi.mocked(getKV).mockImplementation(async (key) => {
+      if (key === 'presets') throw new Error('preset read failed');
+      return key === 'workspace' ? workspaceValue : undefined;
+    });
+    await act(async () => root.render(<DialogProvider><App onResetAll={() => {}} /></DialogProvider>));
+    await act(async () => {
+      receiveTabSyncMessage({ type: 'reset', senderId: 'other-tab', scope: 'reset', seq: 5, at: 5 });
+    });
+    await act(async () => button('このタブの内容を優先して保存する').click());
+    const dialog = container.querySelector('dialog');
+    await act(async () => button('上書きして保存', dialog!).click());
+    expect(replaceKV).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('読み込みが終わっていないデータがあるため、保存を中止しました');
+  });
 });

@@ -9,6 +9,7 @@ import {
   receiveTabSyncMessage,
   lockTabSyncFromStaleWrite,
   resetTabSyncForTests,
+  orderedScopesToSave,
   scopesToSave,
   scopesToWrite,
   setScopeDirty,
@@ -51,6 +52,16 @@ describe('tab sync', () => {
   it('locks when a write sees a newer stored revision', () => {
     lockTabSyncFromStaleWrite('generation');
     expect(getTabSyncConflict()).toEqual({ kind: 'updated', scopes: ['generation'] });
+  });
+
+  it('treats a missed reset as a reset conflict and writes workspace before settings', () => {
+    lockTabSyncFromStaleWrite('settings', 'reset');
+    setScopeDirty('workspace', true);
+    const conflict = getTabSyncConflict();
+    expect(conflict?.kind).toBe('reset');
+    const ordered = orderedScopesToSave(conflict!, true);
+    expect(ordered[0]).toBe('workspace');
+    expect(ordered.indexOf('workspace')).toBeLessThan(ordered.indexOf('settings'));
   });
 
   it('ignores malformed messages', () => {

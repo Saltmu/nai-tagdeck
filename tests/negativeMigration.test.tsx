@@ -2,6 +2,7 @@
 import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { readReloadSnapshot } from '../src/hooks/usePersistence';
 import { useSettings, useWorkspace } from '../src/hooks/useWorkspace';
 import { clearAllData, getKV, setKV, StaleWriteError } from '../src/lib/db';
 import { resetAppData } from '../src/lib/reset';
@@ -12,7 +13,14 @@ vi.mock('../src/lib/db', () => {
     readonly name = 'StaleWriteError';
     constructor(readonly scope: string) { super(`stale ${scope}`); }
   }
-  return { clearAllData: vi.fn(), getKV: vi.fn(), setKV: vi.fn(), StaleWriteError };
+  return {
+    clearAllData: vi.fn(),
+    getKV: vi.fn(),
+    setKV: vi.fn(),
+    listEntries: vi.fn(async () => []),
+    KV_KEYS: ['workspace', 'settings', 'generation', 'presets', 'activePreset'],
+    StaleWriteError,
+  };
 });
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root;
@@ -107,7 +115,7 @@ it('keeps a legacy migration in memory when another tab is newer', async () => {
     expect(current.migrationHeld).toBe(true);
     expect(current.workspace.negative.map((tag) => tag.tag)).toEqual(['lowres']);
     expect(setKV).not.toHaveBeenCalledWith('workspace', expect.anything());
-    clearTabSyncConflict();
+    await act(async () => { clearTabSyncConflict(); });
     await act(async () => updateSettings({ weightSyntax: 'brace' }));
     await act(async () => { await vi.advanceTimersByTimeAsync(350); });
     expect(setKV).not.toHaveBeenCalledWith('workspace', expect.anything());
@@ -118,6 +126,20 @@ it('keeps a legacy migration in memory when another tab is newer', async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('migrates a reloaded legacy workspace from the settings already in the snapshot', async () => {
+  stored({ workspace: { base: { quality: [{ tag: 'masterpiece' }] } }, settings: { negativePrompt: 'lowres' } });
+  await readReloadSnapshot(1);
+  const settingsReads = vi.mocked(getKV).mock.calls.filter(([key]) => key === 'settings').length;
+  function RevisionHarness() {
+    current = useWorkspace(1);
+    return null;
+  }
+  await act(async () => root.render(<RevisionHarness />));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  expect(vi.mocked(getKV).mock.calls.filter(([key]) => key === 'settings').length).toBe(settingsReads);
+  expect(current.workspace.negative.map((tag) => tag.tag)).toEqual(['lowres']);
 });
 
 it('locks instead of failing when the migrated workspace write is already stale', async () => {

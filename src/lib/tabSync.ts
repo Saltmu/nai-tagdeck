@@ -133,14 +133,33 @@ export function clearTabSyncConflict(): void {
   if (!conflict) return;
   conflict = null;
   notifyConflict();
+  lockClearCount += 1;
+  for (const listener of lockClearListeners) listener();
 }
 
 /** 版が古い書き込みを拒否したとき、通知を待たずに自動保存を止める。 */
-export function lockTabSyncFromStaleWrite(scope: SyncScope): void {
-  noteConflict({ type: 'updated', senderId: `stale:${tabId}`, scope, seq: ++seq, at: Date.now() });
+export function lockTabSyncFromStaleWrite(scope: SyncScope, kind: 'updated' | 'reset' = 'updated'): void {
+  noteConflict({
+    type: kind,
+    senderId: `stale:${tabId}`,
+    scope: kind === 'reset' ? 'reset' : scope,
+    seq: ++seq,
+    at: Date.now(),
+  });
 }
 
 const dirtyScopes = new Set<SyncScope>();
+let lockClearCount = 0;
+const lockClearListeners = new Set<() => void>();
+
+export function getLockClearCount(): number {
+  return lockClearCount;
+}
+
+export function subscribeLockClears(listener: () => void): () => void {
+  lockClearListeners.add(listener);
+  return () => { lockClearListeners.delete(listener); };
+}
 
 export function setScopeDirty(scope: SyncScope, dirty: boolean): void {
   if (dirty) dirtyScopes.add(scope);
@@ -152,6 +171,14 @@ export function scopesToSave(current: TabSyncConflict): SyncScope[] {
   const scopes = new Set(scopesToWrite(current));
   for (const scope of dirtyScopes) scopes.add(scope);
   return [...scopes];
+}
+
+/** 移行中は workspace を設定より先に書く。途中で失敗しても旧ネガティブを消さない。 */
+export function orderedScopesToSave(current: TabSyncConflict, workspaceFirst: boolean): SyncScope[] {
+  const scopes = scopesToSave(current);
+  if (!workspaceFirst) return scopes;
+  const rank = (scope: SyncScope) => (scope === 'workspace' ? 0 : scope === 'settings' ? 2 : 1);
+  return [...scopes].sort((a, b) => rank(a) - rank(b));
 }
 
 /** ロック中の辞書書き込みを、リセット時と同じ中断として返す。 */
@@ -211,6 +238,7 @@ export function resetTabSyncForTests(options?: { preferStorage?: boolean }): voi
   conflictListeners.clear();
   conflict = null;
   dirtyScopes.clear();
+  lockClearCount = 0;
   epoch = 0;
   seq = 0;
   preferStorage = options?.preferStorage ?? false;

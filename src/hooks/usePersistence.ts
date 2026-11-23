@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getKV, KV_KEYS, listEntries, setKV, StaleWriteError, type KVKey } from '../lib/db';
 import type { DictEntry } from '../types';
 import { getDataResetSignal } from '../lib/reset';
-import { isTabSyncLocked, lockTabSyncFromStaleWrite, publishTabSync, setScopeDirty, startTabSync } from '../lib/tabSync';
+import { isTabSyncLocked, lockTabSyncFromStaleWrite, publishTabSync, setScopeDirty, startTabSync, subscribeTabSyncConflict } from '../lib/tabSync';
 
 export interface PersistenceState {
   loaded: boolean;
@@ -24,6 +24,20 @@ export function subscribePersisted(listener: (key: KVKey) => void): () => void {
 
 export function notePersisted(key: KVKey): void {
   for (const listener of persistedListeners) listener(key);
+}
+
+const baselineAppliers = new Map<KVKey, (value: unknown) => void>();
+
+function registerBaseline(key: KVKey, apply: (value: unknown) => void): () => void {
+  baselineAppliers.set(key, apply);
+  return () => {
+    if (baselineAppliers.get(key) === apply) baselineAppliers.delete(key);
+  };
+}
+
+/** 明示して保存した値を、自動保存の基準にする。 */
+export function adoptPersistedValue(key: KVKey, value: unknown): void {
+  baselineAppliers.get(key)?.(value);
 }
 
 const kvSnapshots = new Map<KVKey, { revision: number; raw: unknown }>();
@@ -68,6 +82,19 @@ export function usePersistence<T>(
   const [resetSignal] = useState(getDataResetSignal);
   const writes = useRef(Promise.resolve());
   const synced = useRef<{ key: string; value: T; inFlight: number; latestGen: number } | null>(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const [lockTick, setLockTick] = useState(0);
+  useEffect(() => subscribeTabSyncConflict(() => {
+    if (!isTabSyncLocked()) setLockTick((tick) => tick + 1);
+  }), []);
+  useEffect(() => registerBaseline(key, (committed) => {
+    const tracker = synced.current;
+    if (!tracker || tracker.key !== key) return;
+    tracker.value = committed as T;
+    if (Object.is(valueRef.current, committed)) setScopeDirty(key, false);
+    else setScopeDirty(key, true);
+  }), [key]);
   const current = state.key === key ? state : INITIAL;
   const stateRef = useRef(current);
   stateRef.current = current;
@@ -141,7 +168,7 @@ export function usePersistence<T>(
         } catch (error) {
           if (error instanceof StaleWriteError) {
             setScopeDirty(key, true);
-            lockTabSyncFromStaleWrite(key);
+            lockTabSyncFromStaleWrite(key, error.scope === 'reset' ? 'reset' : 'updated');
             return;
           }
           if (active) setState({ key, loaded: true, status: 'error', error: `変更を保存できません (${key}): ${String(error)}`, revision: stateRef.current.revision });
@@ -166,7 +193,7 @@ export function usePersistence<T>(
       window.removeEventListener('pagehide', onPageHide);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [key, value, current.loaded, delayMs, resetSignal]);
+  }, [key, value, current.loaded, delayMs, resetSignal, lockTick]);
 
   return current;
 }

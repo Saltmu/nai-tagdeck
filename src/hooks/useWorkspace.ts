@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useReducer, useState, type Dispatch } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState, useSyncExternalStore, type Dispatch } from 'react';
 import type { Settings, Workspace } from '../types';
 import { emptyWorkspace, hasNegative, normalizeWorkspace, workspaceReducer, type WorkspaceAction } from '../lib/workspace';
 import { migrateNegative } from '../lib/backup';
 import { getKV, setKV, StaleWriteError } from '../lib/db';
-import { isTabSyncLocked, lockTabSyncFromStaleWrite, setScopeDirty } from '../lib/tabSync';
-import { subscribePersisted, usePersistence, type PersistenceState } from './usePersistence';
+import { getLockClearCount, isTabSyncLocked, lockTabSyncFromStaleWrite, setScopeDirty, subscribeLockClears } from '../lib/tabSync';
+import { readCachedKV, subscribePersisted, usePersistence, type PersistenceState } from './usePersistence';
 import { DEFAULT_SETTINGS, legacyNegativePrompt, normalizeSettings } from '../lib/settings';
 import { DEFAULT_GENERATION, normalizeGeneration, type GenerationSettings } from '../lib/generation';
 
@@ -12,6 +12,7 @@ import { DEFAULT_GENERATION, normalizeGeneration, type GenerationSettings } from
 export function useWorkspace(reloadRevision = 0): { workspace: Workspace; dispatch: Dispatch<WorkspaceAction>; loaded: boolean; migrationHeld: boolean; persistence: PersistenceState } {
   const [workspace, dispatch] = useReducer(workspaceReducer, undefined, emptyWorkspace);
   const [migrationHeld, setMigrationHeld] = useState(false);
+  const lockClears = useSyncExternalStore(subscribeLockClears, getLockClearCount, () => 0);
   const persistence = usePersistence('workspace', workspace, async (raw, isCurrent) => {
     if (raw === undefined) {
       setMigrationHeld(false);
@@ -24,7 +25,8 @@ export function useWorkspace(reloadRevision = 0): { workspace: Workspace; dispat
       return;
     }
     // ネガティブ対応前のデータ: 設定に残っている文字列のネガティブを移し、移行済みデータを保存する
-    const settings = await getKV<unknown>('settings');
+    const cachedSettings = readCachedKV('settings', reloadRevision);
+    const settings = cachedSettings.hit ? cachedSettings.raw : await getKV<unknown>('settings');
     if (!isCurrent()) return;
     const migrated = migrateNegative(raw, settings);
     let held = isTabSyncLocked();
@@ -33,7 +35,7 @@ export function useWorkspace(reloadRevision = 0): { workspace: Workspace; dispat
         await setKV('workspace', migrated);
       } catch (error) {
         if (!(error instanceof StaleWriteError)) throw error;
-        lockTabSyncFromStaleWrite('workspace');
+        lockTabSyncFromStaleWrite('workspace', error instanceof StaleWriteError && error.scope === 'reset' ? 'reset' : 'updated');
         held = true;
       }
     }
@@ -46,7 +48,7 @@ export function useWorkspace(reloadRevision = 0): { workspace: Workspace; dispat
   }), []);
   useEffect(() => {
     if (migrationHeld) setScopeDirty('workspace', true);
-  }, [migrationHeld, persistence.loaded, persistence.revision]);
+  }, [migrationHeld, persistence.loaded, persistence.revision, lockClears]);
   return { workspace, dispatch, loaded: persistence.loaded, migrationHeld, persistence };
 }
 

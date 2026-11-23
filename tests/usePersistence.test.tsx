@@ -2,7 +2,7 @@
 import { act, StrictMode, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { usePersistence, type PersistenceState } from '../src/hooks/usePersistence';
+import { adoptPersistedValue, usePersistence, type PersistenceState } from '../src/hooks/usePersistence';
 import { clearAllData, getKV, setKV, StaleWriteError, type KVKey } from '../src/lib/db';
 import { resetAppData } from '../src/lib/reset';
 import { clearTabSyncConflict, getTabSyncConflict, receiveTabSyncMessage, scopesToSave } from '../src/lib/tabSync';
@@ -233,7 +233,7 @@ describe('persistent state', () => {
     await tick();
     expect(setKV).not.toHaveBeenCalled();
 
-    clearTabSyncConflict();
+    await act(async () => { clearTabSyncConflict(); });
     await act(async () => change('after unlock'));
     await tick();
     expect(setKV).toHaveBeenCalledExactlyOnceWith('workspace', 'after unlock');
@@ -267,6 +267,42 @@ describe('persistent state', () => {
     await tick();
     expect(setKV).toHaveBeenCalledExactlyOnceWith('workspace', 'A');
     expect(scopesToSave(getTabSyncConflict()!)).toContain('workspace');
+  });
+
+  it('writes the edit that was skipped once the lock clears', async () => {
+    vi.mocked(getKV).mockResolvedValue('saved');
+    await act(async () => root.render(<Harness />));
+    receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'settings', seq: 5, at: 5 });
+    await act(async () => change('during lock'));
+    await tick();
+    expect(setKV).not.toHaveBeenCalled();
+    await act(async () => { clearTabSyncConflict(); });
+    await tick();
+    expect(setKV).toHaveBeenCalledExactlyOnceWith('workspace', 'during lock');
+  });
+
+  it('treats a reset generation mismatch as a reset conflict', async () => {
+    vi.mocked(getKV).mockResolvedValue('saved');
+    vi.mocked(setKV).mockRejectedValueOnce(new StaleWriteError('reset'));
+    await act(async () => root.render(<Harness />));
+    await act(async () => change('edited'));
+    await tick();
+    expect(state.status).toBe('idle');
+    expect(getTabSyncConflict()?.kind).toBe('reset');
+  });
+
+  it('saves an undo after an explicit overwrite moves the baseline', async () => {
+    vi.mocked(getKV).mockResolvedValue('saved');
+    await act(async () => root.render(<Harness />));
+    await act(async () => change('edited'));
+    await tick();
+    receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'settings', seq: 8, at: 8 });
+    await act(async () => change('edited-again'));
+    adoptPersistedValue('workspace', 'edited-again');
+    await act(async () => { clearTabSyncConflict(); });
+    await act(async () => change('edited'));
+    await tick();
+    expect(setKV).toHaveBeenLastCalledWith('workspace', 'edited');
   });
 
   it('drops a queued write when another tab updates before it runs', async () => {

@@ -31,8 +31,8 @@ import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { TabSyncNotice } from './components/TabSyncNotice';
 import { useTabSync } from './hooks/useTabSync';
 import { readSyncEpoch, replaceAllEntries, replaceKV, type KVKey } from './lib/db';
-import { notePersisted, readReloadSnapshot } from './hooks/usePersistence';
-import { publishTabSync, scopesToSave, setScopeDirty, type SyncScope } from './lib/tabSync';
+import { adoptPersistedValue, notePersisted, readReloadSnapshot } from './hooks/usePersistence';
+import { orderedScopesToSave, publishTabSync, setScopeDirty, type SyncScope } from './lib/tabSync';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
 import { importedBaseForMode, type PromptImport } from './lib/promptImport';
@@ -136,7 +136,28 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         presets: presetsRef.current.presets,
         activePreset: presetsRef.current.activeId,
       };
-      for (const scope of scopesToSave(conflict)) {
+      const states: Record<KVKey, { loaded: boolean; error: string | null }> = {
+        workspace: persistence,
+        settings: settingsPersistence,
+        generation: generationPersistence,
+        presets: presets.persistence[0] ?? { loaded: false, error: 'プリセットを読み込めません' },
+        activePreset: presets.persistence[1] ?? { loaded: false, error: 'プリセットを読み込めません' },
+      };
+      const scopes = orderedScopesToSave(conflict, migrationHeld);
+      for (const scope of scopes) {
+        if (scope === 'dictionary') {
+          if (!dictionaryRef.current.loaded || dictionaryRef.current.error) {
+            throw new Error('読み込みが終わっていないデータがあるため、保存を中止しました');
+          }
+          continue;
+        }
+        if (!isKvScope(scope)) continue;
+        const state = states[scope];
+        if (!state?.loaded || state.error) {
+          throw new Error('読み込みが終わっていないデータがあるため、保存を中止しました');
+        }
+      }
+      for (const scope of scopes) {
         if ((await readSyncEpoch()) !== epoch) {
           throw new Error('別のタブでデータが削除されました');
         }
@@ -148,7 +169,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         }
         if (!isKvScope(scope)) continue;
         await replaceKV(scope, snapshots[scope], epoch);
-        setScopeDirty(scope, false);
+        adoptPersistedValue(scope, snapshots[scope]);
         notePersisted(scope);
         publishTabSync('updated', scope);
       }
