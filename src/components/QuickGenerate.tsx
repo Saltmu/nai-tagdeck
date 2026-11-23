@@ -1,13 +1,20 @@
 import { type KeyboardEvent, useRef } from 'react';
 import { SIZE_PRESETS, type SizeKey } from '../lib/generation';
-import { SizeIcon, SparkleIcon } from './icons';
+import { LockIcon, SizeIcon, SparkleIcon } from './icons';
 
-/** ヘッダーに出す標準サイズ（その他のサイズは生成パネルで選ぶ）。 */
+/** ヘッダーに常時出すサイズ。tall / wide は選ばれている間だけ 4 つ目に足す。 */
 const QUICK_SIZES: readonly SizeKey[] = ['portrait', 'landscape', 'square'];
+
+function headerSizes(size: SizeKey): SizeKey[] {
+  return size === 'tall' || size === 'wide' ? [...QUICK_SIZES, size] : [...QUICK_SIZES];
+}
 
 interface Props {
   size: SizeKey;
+  /** null ならランダム。固定中だけ解除ボタンを出す。 */
+  seed: number | null;
   onSizeChange: (size: SizeKey) => void;
+  onClearSeed: () => void;
   generating: boolean;
   /** 生成できない理由。押したときに案内する。 */
   blocker: string | null;
@@ -15,27 +22,33 @@ interface Props {
 }
 
 /** どのタブからでも、サイズを選んですぐ生成できるようにする。 */
-export function QuickGenerate({ size, onSizeChange, generating, blocker, onGenerate }: Props) {
+export function QuickGenerate({ size, seed, onSizeChange, onClearSeed, generating, blocker, onGenerate }: Props) {
   const radioRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const activeIndex = QUICK_SIZES.indexOf(size);
+  const generateRef = useRef<HTMLButtonElement>(null);
+  // 解除ボタンで Enter を押し続けたとき、フォーカス先の生成ボタンが連打を受け取らないようにする
+  const suppressGenerateRepeat = useRef(false);
+  const sizes = headerSizes(size);
+  const activeIndex = sizes.indexOf(size);
 
   const onRadioKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const current = activeIndex >= 0 ? activeIndex : 0;
     let next: number | null = null;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (current + 1) % QUICK_SIZES.length;
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (current - 1 + QUICK_SIZES.length) % QUICK_SIZES.length;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (current + 1) % sizes.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (current - 1 + sizes.length) % sizes.length;
     else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = QUICK_SIZES.length - 1;
+    else if (e.key === 'End') next = sizes.length - 1;
     if (next === null) return;
     e.preventDefault();
-    onSizeChange(QUICK_SIZES[next]!);
+    onSizeChange(sizes[next]!);
     radioRefs.current[next]?.focus();
   };
+
+  const seedLabel = seed === null ? null : `シード ${seed} を解除してランダムに戻す`;
 
   return (
     <div className="quick-generate">
       <div className="size-toggle" role="radiogroup" aria-label="画像サイズ" onKeyDown={onRadioKeyDown}>
-        {QUICK_SIZES.map((key, i) => {
+        {sizes.map((key, i) => {
           const preset = SIZE_PRESETS.find((s) => s.key === key)!;
           const isTabbable = activeIndex >= 0 ? i === activeIndex : i === 0;
           return (
@@ -56,9 +69,37 @@ export function QuickGenerate({ size, onSizeChange, generating, blocker, onGener
           );
         })}
       </div>
+      {seedLabel !== null && (
+        <button
+          type="button"
+          className="btn seed-lock"
+          aria-label={seedLabel}
+          title={seedLabel}
+          onClick={() => {
+            suppressGenerateRepeat.current = true;
+            generateRef.current?.focus();
+            onClearSeed();
+          }}
+        >
+          <LockIcon />
+          <span className="seed-lock-extra">
+            <span className="seed-lock-value">{seed}</span>
+            <span aria-hidden="true">×</span>
+          </span>
+        </button>
+      )}
       <button
+        ref={generateRef}
         type="button"
         className={`btn btn-primary generate-btn${blocker ? ' is-blocked' : ''}`}
+        onKeyDown={(e) => {
+          if (suppressGenerateRepeat.current && e.repeat && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+          }
+        }}
+        onKeyUp={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') suppressGenerateRepeat.current = false;
+        }}
         aria-busy={generating}
         aria-label={generating ? '生成中' : '生成する（Ctrl+Enter）'}
         title={blocker ?? '生成する（Ctrl+Enter）'}

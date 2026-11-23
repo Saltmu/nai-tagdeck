@@ -5,6 +5,10 @@ export const GENERATION_MODES = [
   { value: 'furry', label: 'ケモノ' },
 ] as const;
 
+export function modeLabel(mode: string): string {
+  return GENERATION_MODES.find((m) => m.value === mode)?.label ?? mode;
+}
+
 /** どれも Anlas を消費しない範囲（1024×1024 相当以下）のサイズだけを用意する。 */
 export const SIZE_PRESETS = [
   { key: 'portrait', label: '縦 832×1216', width: 832, height: 1216 },
@@ -25,6 +29,10 @@ export const SAMPLERS = [
   { value: 'k_dpmpp_2m', label: 'DPM++ 2M' },
   { value: 'k_dpmpp_sde', label: 'DPM++ SDE' },
 ] as const;
+
+export function samplerLabel(sampler: string): string {
+  return SAMPLERS.find((s) => s.value === sampler)?.label ?? sampler;
+}
 
 export const NOISE_SCHEDULES = ['karras', 'exponential', 'polyexponential'] as const;
 

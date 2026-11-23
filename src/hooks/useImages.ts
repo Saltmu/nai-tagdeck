@@ -1,5 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { GenerationMode } from '../lib/novelai';
 import { newId } from '../lib/id';
+
+/** 生成時に送ったキャラクター。座標は use_coords で送ったときだけ持つ。 */
+export interface GeneratedCharacterDetail {
+  prompt: string;
+  negative: string;
+  center?: { x: number; y: number };
+}
+
+/** 生成時に送った正規化済みのパラメータ。シードは GeneratedImage.seed に置く。 */
+export interface GeneratedImageParams {
+  mode: GenerationMode;
+  steps: number;
+  scale: number;
+  sampler: string;
+  noiseSchedule: string;
+  cfgRescale: number;
+  dynamicThresholding: boolean;
+}
 import {
   applyImageRetention,
   createThumbnailUrl,
@@ -18,6 +37,12 @@ export interface GeneratedImage {
   height: number;
   prompt: string;
   characterPrompts: string[];
+  /** 送った全体ネガティブ。古い履歴には無い。 */
+  negativePrompt?: string;
+  /** 送った各キャラの正・負プロンプトと座標。古い履歴には無い。 */
+  characterDetails?: GeneratedCharacterDetail[];
+  /** 送った生成パラメータ。古い履歴には無い。 */
+  params?: GeneratedImageParams;
   createdAt: number;
   downloaded: boolean;
   pinned: boolean;

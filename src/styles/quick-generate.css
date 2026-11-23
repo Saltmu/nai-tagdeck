@@ -45,6 +45,42 @@
   box-shadow: var(--shadow);
 }
 
+/* サイズ切替・生成ボタンと同じ 40px。固定ヘッダーの高さを変えない。 */
+.seed-lock {
+  position: relative;
+  flex: none;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 0.55rem;
+  gap: 0.3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.seed-lock-extra {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+@media (max-width: 767px) {
+  .seed-lock {
+    width: 40px;
+    padding: 0;
+  }
+
+  .seed-lock-extra {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
 .generate-btn {
   gap: 0.3rem;
   padding: 0.4rem 0.75rem;

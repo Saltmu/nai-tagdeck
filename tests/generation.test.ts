@@ -13,7 +13,9 @@ import {
 import {
   DEFAULT_GENERATION,
   SIZE_PRESETS,
+  modeLabel,
   normalizeGeneration,
+  samplerLabel,
   toParams,
 } from '../src/lib/generation';
 import { isFreeGeneration } from '../src/lib/novelai';
@@ -284,6 +286,15 @@ describe('generation settings', () => {
       cfgRescale: 0,
       dynamicThresholding: false,
     });
+  });
+
+  it('モードとサンプラーの表示名を生成パネルと揃える', () => {
+    expect(modeLabel('anime')).toBe('アニメ');
+    expect(modeLabel('furry')).toBe('ケモノ');
+    expect(modeLabel('unknown')).toBe('unknown');
+    expect(samplerLabel('k_euler_ancestral')).toBe('Euler Ancestral');
+    expect(samplerLabel('k_euler')).toBe('Euler');
+    expect(samplerLabel('custom')).toBe('custom');
   });
 
   it('送信用のパラメータにする', () => {

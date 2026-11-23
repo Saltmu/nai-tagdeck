@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import type { GeneratedImage } from '../hooks/useImages';
-import { timeStamp } from '../lib/browser';
-import { CheckIcon, CloseIcon, CopyIcon, DownloadIcon, NextIcon, PinIcon, PrevIcon, TrashIcon } from './icons';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import type { GeneratedCharacterDetail, GeneratedImage } from '../hooks/useImages';
+import { copyText, timeStamp } from '../lib/browser';
+import { modeLabel, samplerLabel } from '../lib/generation';
+import { CheckIcon, CloseIcon, DownloadIcon, LockIcon, NextIcon, PinIcon, PrevIcon, TrashIcon } from './icons';
 
 interface Props {
   image: GeneratedImage;
@@ -220,16 +221,81 @@ function ZoomStage({ src, alt, hasPrev, hasNext, onPrev, onNext, onClose }: Stag
   );
 }
 
+const COPY_MS = 1500;
+
+interface PromptCopyProps {
+  title: string;
+  text: string;
+  emptyText: string;
+  copyKey: string;
+  copyLabel: string;
+  copiedKey: string | null;
+  failedKey: string | null;
+  negative?: boolean;
+  hint?: string;
+  onCopy: (key: string, text: string, label: string) => void;
+}
+
+function PromptCopy({ title, text, emptyText, copyKey, copyLabel, copiedKey, failedKey, negative, hint, onCopy }: PromptCopyProps) {
+  const copied = copiedKey === copyKey;
+  const failed = failedKey === copyKey;
+  const ariaLabel = copied
+    ? `${copyLabel}をコピー済み`
+    : failed
+      ? `${copyLabel}をコピーできませんでした`
+      : `${copyLabel}をコピー`;
+  return (
+    <div className={`preview-item${negative ? ' preview-negative' : ''}`}>
+      <dt>
+        {title}
+        <button
+          type="button"
+          className={`btn btn-small${failed ? ' btn-danger' : ''}`}
+          disabled={!text}
+          aria-label={ariaLabel}
+          onClick={() => onCopy(copyKey, text, copyLabel)}
+        >
+          {copied ? (<><CheckIcon />コピー済み</>) : failed ? 'コピーできませんでした' : 'コピー'}
+        </button>
+      </dt>
+      <dd>
+        <output className={`preview-text${text ? '' : ' is-empty'}`}>{text || emptyText}</output>
+        {hint && <p className="hint">{hint}</p>}
+      </dd>
+    </div>
+  );
+}
+
+function characterRows(image: GeneratedImage): Array<GeneratedCharacterDetail & { title: string; showNegative: boolean }> {
+  if (image.characterDetails) {
+    return image.characterDetails.map((c, i) => ({ ...c, title: `キャラ${i + 1}`, showNegative: true }));
+  }
+  return image.characterPrompts.map((prompt, i) => ({
+    prompt,
+    negative: '',
+    title: `キャラ${i + 1}`,
+    showNegative: false,
+  }));
+}
+
 export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload, onTogglePin, onImportPrompt }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [seedCopied, setSeedCopied] = useState(false);
+  const [seedApplied, setSeedApplied] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [failedKey, setFailedKey] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState('');
+  const imageIdRef = useRef(image.id);
+  imageIdRef.current = image.id;
   // 削除は1回目で確認状態にし、2回目で実行する。連打で消えないよう、確認状態になってから
   // REMOVE_ARM_MS の間は押せない。押せるようになってからしばらく押さなければ元に戻す
   const [removeArmed, setRemoveArmed] = useState(false);
   const [removeReady, setRemoveReady] = useState(false);
 
   useEffect(() => {
-    setSeedCopied(false);
+    setSeedApplied(false);
+    setCopiedKey(null);
+    setFailedKey(null);
+    setCopyStatus('');
     setRemoveArmed(false);
   }, [image]);
   useEffect(() => {
@@ -243,11 +309,20 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
     };
   }, [removeArmed]);
   useEffect(() => {
-    if (!seedCopied) return;
-    const t = setTimeout(() => setSeedCopied(false), 1500);
+    if (!seedApplied) return;
+    const t = setTimeout(() => setSeedApplied(false), COPY_MS);
     return () => clearTimeout(t);
-  }, [seedCopied]);
-
+  }, [seedApplied]);
+  useEffect(() => {
+    if (!copiedKey) return;
+    const t = setTimeout(() => setCopiedKey(null), COPY_MS);
+    return () => clearTimeout(t);
+  }, [copiedKey]);
+  useEffect(() => {
+    if (!failedKey) return;
+    const t = setTimeout(() => setFailedKey(null), COPY_MS);
+    return () => clearTimeout(t);
+  }, [failedKey]);
   useEffect(() => {
     const d = dialog.current;
     if (d && !d.open) d.showModal();
@@ -271,6 +346,22 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
       });
     };
   }, []);
+
+  const copyPrompt = async (key: string, text: string, label: string) => {
+    const sourceId = image.id;
+    let ok = false;
+    try {
+      ok = await copyText(text, dialog.current ?? document.body);
+    } catch {
+      ok = false;
+    }
+    if (imageIdRef.current !== sourceId) return;
+    setCopyStatus(ok ? `${label}をコピーしました` : 'コピーできませんでした');
+    setCopiedKey(ok ? key : null);
+    setFailedKey(ok ? null : key);
+  };
+  const rows = characterRows(image);
+  const baseLabel = rows.length > 0 ? 'ベース' : 'プロンプト全体';
 
   return (
     <dialog
@@ -303,7 +394,7 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
           onNext={onNext}
           onClose={() => dialog.current?.close()}
         />
-        <div className="viewer-side">
+        <div className="viewer-side" tabIndex={0} aria-label="生成画像の詳細">
           <div className="viewer-toolbar">
             <button type="button" className="icon-btn" disabled={!hasPrev} onClick={onPrev} aria-label="新しい画像へ" title="新しい画像へ">
               <PrevIcon />
@@ -373,15 +464,16 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
                 {image.seed}
                 <button
                   type="button"
-                  className="icon-btn viewer-seed-copy"
-                  aria-label="このシードを次の生成で使う"
-                  title="このシードを次の生成で使う"
+                  className="btn btn-small viewer-seed-apply"
+                  aria-label={seedApplied ? '設定済み' : 'このシードを次の生成で使う'}
+                  title={seedApplied ? '設定済み' : 'このシードを次の生成で使う'}
                   onClick={() => {
                     onUseSeed(image.seed);
-                    setSeedCopied(true);
+                    setSeedApplied(true);
                   }}
                 >
-                  {seedCopied ? <CheckIcon /> : <CopyIcon />}
+                  {seedApplied ? <CheckIcon /> : <LockIcon />}
+                  <span>{seedApplied ? '設定済み' : '次に使う'}</span>
                 </button>
               </dd>
             </div>
@@ -395,19 +487,99 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
               <dt>生成</dt>
               <dd>{new Date(image.createdAt).toLocaleTimeString()}</dd>
             </div>
+            {image.params && (
+              <>
+                <div>
+                  <dt>モード</dt>
+                  <dd>{modeLabel(image.params.mode)}</dd>
+                </div>
+                <div>
+                  <dt>ステップ</dt>
+                  <dd>{image.params.steps}</dd>
+                </div>
+                <div>
+                  <dt>スケール</dt>
+                  <dd>{image.params.scale}</dd>
+                </div>
+                <div>
+                  <dt>サンプラー</dt>
+                  <dd>{samplerLabel(image.params.sampler)}</dd>
+                </div>
+                <div>
+                  <dt>ノイズスケジュール</dt>
+                  <dd>{image.params.noiseSchedule}</dd>
+                </div>
+                <div>
+                  <dt>CFG リスケール</dt>
+                  <dd>{image.params.cfgRescale}</dd>
+                </div>
+                <div>
+                  <dt>ダイナミックしきい値</dt>
+                  <dd>{image.params.dynamicThresholding ? 'オン' : 'オフ'}</dd>
+                </div>
+              </>
+            )}
           </dl>
           {onImportPrompt && (
             <button type="button" className="btn btn-small" onClick={onImportPrompt}>プロンプトを読み込む</button>
           )}
           <details className="viewer-prompt">
             <summary>プロンプト</summary>
-            <p>{image.prompt}</p>
-            {image.characterPrompts.map((c, i) => (
-              <p key={i}>
-                <strong>キャラ{i + 1}:</strong> {c}
-              </p>
-            ))}
+            <dl className="preview-list">
+              <PromptCopy
+                title="ベース"
+                text={image.prompt}
+                emptyText="ONのタグがありません"
+                copyKey="base"
+                copyLabel={baseLabel}
+                copiedKey={copiedKey}
+                failedKey={failedKey}
+                onCopy={copyPrompt}
+              />
+              {rows.map((c, i) => (
+                <Fragment key={i}>
+                  <PromptCopy
+                    title={c.title}
+                    text={c.prompt}
+                    emptyText="プロンプトなし"
+                    copyKey={`char-${i}`}
+                    copyLabel={c.title}
+                    copiedKey={copiedKey}
+                    failedKey={failedKey}
+                    hint={c.center ? `位置　横 ${c.center.x}、縦 ${c.center.y}` : undefined}
+                    onCopy={copyPrompt}
+                  />
+                  {c.showNegative && (
+                    <PromptCopy
+                      title={`${c.title}のネガティブ`}
+                      text={c.negative}
+                      emptyText="ネガティブなし"
+                      copyKey={`char-neg-${i}`}
+                      copyLabel={`${c.title}のネガティブ`}
+                      copiedKey={copiedKey}
+                      failedKey={failedKey}
+                      negative
+                      onCopy={copyPrompt}
+                    />
+                  )}
+                </Fragment>
+              ))}
+              {image.negativePrompt !== undefined && (
+                <PromptCopy
+                  title="ネガティブ"
+                  text={image.negativePrompt}
+                  emptyText="ネガティブなし"
+                  copyKey="negative"
+                  copyLabel="ネガティブ"
+                  copiedKey={copiedKey}
+                  failedKey={failedKey}
+                  negative
+                  onCopy={copyPrompt}
+                />
+              )}
+            </dl>
           </details>
+          <p className="viewer-copy-status visually-hidden" role="status" aria-live="polite">{copyStatus}</p>
         </div>
       </div>
     </dialog>

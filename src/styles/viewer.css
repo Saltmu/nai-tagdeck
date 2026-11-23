@@ -60,6 +60,32 @@
   overflow: auto;
 }
 
+/* プロンプト本文はここで折り返し、スクロールはフォーカスできる .viewer-side に任せる */
+.viewer-prompt .preview-text {
+  max-height: none;
+  overflow: visible;
+}
+
+/* 失敗表示は押したボタン自身に出す。長い文言は見出し行の中で折り返す */
+.viewer-prompt .preview-item dt {
+  flex-wrap: wrap;
+}
+
+.viewer-copy-status {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+/* 縦積みのとき、プロンプトを開いても画像が潰れないよう下段をスクロールに収める */
+@media (max-width: 899px) {
+  .viewer-side {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 45%;
+  }
+}
+
 .viewer-meta {
   display: flex;
   flex-wrap: wrap;
@@ -84,29 +110,19 @@
   cursor: pointer;
 }
 
-.viewer-prompt p {
-  margin: 0.4rem 0 0;
-  font-family: ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
-  font-size: 0.8rem;
-  overflow-wrap: anywhere;
-}
-
 .viewer-seed {
   display: flex;
   align-items: center;
   gap: 0.3rem;
 }
 
-.viewer-seed-copy {
-  width: 28px;
-  height: 28px;
-  padding: 4px;
+.viewer-seed-apply {
+  gap: 0.25rem;
 }
 
-.viewer-seed-copy .icon {
-  margin: auto;
-  width: 18px;
-  height: 18px;
+.viewer-seed-apply .icon {
+  width: 16px;
+  height: 16px;
 }
 
 .viewer-toolbar {

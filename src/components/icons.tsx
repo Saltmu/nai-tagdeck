@@ -151,6 +151,16 @@ export function SearchIcon() {
   );
 }
 
+/** 固定（錠）。 */
+export function LockIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <rect x="4.5" y="9" width="11" height="8" rx="1.5" {...stroke} />
+      <path d="M7 9V6.8a3 3 0 0 1 6 0V9" {...stroke} />
+    </svg>
+  );
+}
+
 /** 閉じる（×）。 */
 export function CloseIcon() {
   return (

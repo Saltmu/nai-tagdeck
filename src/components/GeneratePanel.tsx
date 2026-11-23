@@ -6,6 +6,8 @@ import {
   GENERATION_MODES,
   NOISE_SCHEDULES,
   SAMPLERS,
+  modeLabel,
+  samplerLabel,
   SCALE_MAX,
   SCALE_MIN,
   SEED_MAX,
@@ -65,7 +67,7 @@ export function GeneratePanel({
             onChange={(e) => onGenerationChange({ mode: e.target.value === 'furry' ? 'furry' : 'anime' })}
           >
             {GENERATION_MODES.map((mode) => (
-              <option key={mode.value} value={mode.value}>{mode.label}</option>
+              <option key={mode.value} value={mode.value}>{modeLabel(mode.value)}</option>
             ))}
           </select>
         </label>
@@ -114,7 +116,7 @@ export function GeneratePanel({
           >
             {SAMPLERS.map((s) => (
               <option key={s.value} value={s.value}>
-                {s.label}
+                {samplerLabel(s.value)}
               </option>
             ))}
           </select>
