@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DictionaryView } from '../src/components/DictionaryView';
 import { DialogProvider } from '../src/components/Dialogs';
 import type { Dictionary } from '../src/hooks/useDictionary';
@@ -13,6 +13,10 @@ const PAGE_SIZE = 300;
 
 let container: HTMLDivElement;
 let root: Root;
+let scrollIntoView: ReturnType<typeof vi.spyOn>;
+const dialogPrototype = HTMLDialogElement.prototype;
+const dialogMethods = ['showModal', 'close'] as const;
+const originalDialogMethods = dialogMethods.map((name) => Object.getOwnPropertyDescriptor(dialogPrototype, name));
 
 function entry(tag: string, category: CategoryKey = 'quality'): DictEntry {
   return { id: tag, tag, category, alias: '', default_weight: 1, sort_order: 0, updated_at: '' };
@@ -76,14 +80,30 @@ async function click(label: string) {
 }
 
 beforeEach(() => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    writable: true,
+    value: () => {},
+  });
+  scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+  Object.defineProperties(dialogPrototype, {
+    showModal: { configurable: true, value: function (this: HTMLDialogElement) { this.open = true; } },
+    close: { configurable: true, value: function (this: HTMLDialogElement) { this.open = false; } },
+  });
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
 });
 
 afterEach(async () => {
-  await act(async () => root.unmount());
-  container.remove();
+  if (root) await act(async () => root.unmount());
+  container?.remove();
+  scrollIntoView?.mockRestore();
+  for (const [name, descriptor] of originalDialogMethods.entries()) {
+    const method = dialogMethods[name]!;
+    if (descriptor) Object.defineProperty(dialogPrototype, method, descriptor);
+    else Reflect.deleteProperty(dialogPrototype, method);
+  }
 });
 
 it('shows the next page without rendering more than one page, and reaches the last entry', async () => {
@@ -99,6 +119,8 @@ it('shows the next page without rendering more than one page, and reaches the la
   expect(button('さらに表示')?.disabled).toBe(false);
 
   await click('さらに表示');
+  expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+  expect(document.activeElement).toBe(container.querySelector('.dict-list-card'));
   expect(tags()).toHaveLength(PAGE_SIZE);
   expect(tags()[0]).toBe('tag0300');
   expect(tags().at(-1)).toBe('tag0599');
@@ -153,4 +175,70 @@ it('returns to the first page when the category filter changes', async () => {
   expect(button('前を表示')?.disabled).toBe(true);
   expect(button('さらに表示')?.disabled).toBe(false);
   expect(container.querySelector('.dict-count')?.textContent).toBe(`400件 / 全800件（1〜${PAGE_SIZE}件目）`);
+});
+
+it('scrolls to the list and asks before discarding an open edit when the page changes', async () => {
+  await render(numbered('tag', PAGE_SIZE + 1));
+  const edit = container.querySelector<HTMLButtonElement>('.dict-item button')!;
+  await act(async () => edit.click());
+  const tagInput = container.querySelector<HTMLInputElement>('.entry-form input')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(tagInput, 'changed');
+    tagInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  await click('さらに表示');
+  const dialog = container.querySelector('dialog.app-dialog-confirm')!;
+  expect(dialog.textContent).toContain('編集中の内容を破棄してページを移動しますか？');
+  await act(async () => dialog.querySelector<HTMLButtonElement>('button.btn:not(.btn-danger)')!.click());
+  expect(container.querySelector<HTMLInputElement>('.entry-form input')!.value).toBe('changed');
+  expect(container.querySelector('.dict-item.is-editing')).not.toBeNull();
+  expect(container.querySelector('.dict-count')?.textContent).toContain('1〜300');
+  expect(scrollIntoView).not.toHaveBeenCalled();
+
+  await click('さらに表示');
+  const confirm = container.querySelector('dialog.app-dialog-confirm')!;
+  await act(async () => confirm.querySelector<HTMLButtonElement>('button.btn-danger')!.click());
+  expect(container.querySelector('.entry-form')).toBeNull();
+  expect(tags()).toEqual(['tag0300']);
+  expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+
+  await click('前を表示');
+  expect(tags()[0]).toBe('tag0000');
+  expect(container.querySelector('.entry-form')).toBeNull();
+});
+
+it('keeps the clamped page after the last page disappears and an entry is added again', async () => {
+  const initial = numbered('tag', PAGE_SIZE + 1);
+  function Harness() {
+    const [entries, setEntries] = useState(initial);
+    return (
+      <>
+        <button type="button" onClick={() => setEntries((list) => list.slice(0, -1))}>1件減らす</button>
+        <button type="button" onClick={() => setEntries((list) => [...list, entry('added')])}>1件増やす</button>
+        <DictionaryView dictionary={dictionary(entries)} notify={() => {}} />
+      </>
+    );
+  }
+  await act(async () => {
+    root.render(
+      <DialogProvider>
+        <Harness />
+      </DialogProvider>,
+    );
+  });
+
+  await click('さらに表示');
+  expect(tags()).toEqual(['tag0300']);
+
+  await click('1件減らす');
+  expect(tags()).toHaveLength(PAGE_SIZE);
+  expect(tags()[0]).toBe('tag0000');
+  expect(button('さらに表示')).toBeUndefined();
+
+  await click('1件増やす');
+  expect(tags()[0]).toBe('tag0000');
+  expect(tags()).toHaveLength(PAGE_SIZE);
+  expect(tags()).not.toContain('added');
+  expect(button('さらに表示')?.disabled).toBe(false);
 });

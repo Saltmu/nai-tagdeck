@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import type { CategoryKey, DictEntry } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import { CATEGORIES, categoryLabel, isCategoryKey } from '../lib/categories';
@@ -33,6 +33,8 @@ export function DictionaryView({ dictionary, notify }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ImportResult } | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const listRef = useRef<HTMLElement>(null);
+  const scrollToList = useRef(false);
 
   const filtered = useMemo(
     () => filterEntries(entries, query, filterCategory),
@@ -43,6 +45,34 @@ export function DictionaryView({ dictionary, notify }: Props) {
   const pageStart = page * PAGE_SIZE;
   const shown = filtered.slice(pageStart, pageStart + PAGE_SIZE);
   const hasPager = filtered.length > PAGE_SIZE;
+
+  useEffect(() => {
+    if (pageIndex !== page) setPageIndex(page);
+  }, [page, pageIndex]);
+
+  useLayoutEffect(() => {
+    if (!scrollToList.current) return;
+    scrollToList.current = false;
+    const list = listRef.current;
+    if (!list) return;
+    // ページ送りのボタンは一覧の末尾にある。フォーカスを残すと画面がそこへ戻る。
+    list.focus({ preventScroll: true });
+    list.scrollIntoView({ block: 'start' });
+  });
+
+  const showPage = async (next: number) => {
+    if (next === page) return;
+    if (editingId && editingId !== NEW) {
+      const ok = await dialogs.confirm('編集中の内容を破棄してページを移動しますか？', {
+        okLabel: '破棄して移動',
+        danger: true,
+      });
+      if (!ok) return;
+      setEditingId(null);
+    }
+    scrollToList.current = true;
+    setPageIndex(next);
+  };
 
   const handleSave = async (entry: DictEntry): Promise<string | null> => {
     const dup = findDuplicate(entries, entry);
@@ -214,7 +244,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
           </button>
         </section>
       ) : (
-        <section className="card dict-list-card" aria-label="辞書の一覧">
+        <section ref={listRef} className="card dict-list-card" aria-label="辞書の一覧" tabIndex={-1}>
           <p className="dict-count">
             {filtered.length}件 / 全{entries.length}件
             {hasPager && `（${pageStart + 1}〜${pageStart + shown.length}件目）`}
@@ -260,7 +290,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
                 type="button"
                 className="btn"
                 disabled={page === 0}
-                onClick={() => setPageIndex(page - 1)}
+                onClick={() => void showPage(page - 1)}
               >
                 前を表示
               </button>
@@ -268,7 +298,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
                 type="button"
                 className="btn"
                 disabled={page >= pageCount - 1}
-                onClick={() => setPageIndex(page + 1)}
+                onClick={() => void showPage(page + 1)}
               >
                 さらに表示
               </button>
