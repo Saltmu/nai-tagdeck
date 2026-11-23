@@ -8,12 +8,11 @@ interface Props {
   existingCount: number;
   onImport: (mode: ImportMode) => Promise<void>;
   onCancel: () => void;
-  disabled?: boolean;
 }
 
 const MAX_ERRORS_SHOWN = 10;
 
-export function ImportPanel({ fileName, result, existingCount, onImport, onCancel, disabled = false }: Props) {
+export function ImportPanel({ fileName, result, existingCount, onImport, onCancel }: Props) {
   const [busy, setBusy] = useState(false);
   const dialogs = useDialogs();
   const { entries, errors } = result;
@@ -31,8 +30,6 @@ export function ImportPanel({ fileName, result, existingCount, onImport, onCance
     setBusy(true);
     try {
       await onImport(mode);
-    } catch {
-      // 呼び出し側が案内する。ここでは未処理の拒否にしない。
     } finally {
       setBusy(false);
     }
@@ -56,7 +53,7 @@ export function ImportPanel({ fileName, result, existingCount, onImport, onCance
         <button
           type="button"
           className="btn btn-primary"
-          disabled={disabled || busy || entries.length === 0}
+          disabled={busy || entries.length === 0}
           onClick={() => run('merge')}
           title="同じカテゴリ＋タグは上書きし、新しいものは追加します"
         >
@@ -65,7 +62,7 @@ export function ImportPanel({ fileName, result, existingCount, onImport, onCance
         <button
           type="button"
           className="btn btn-danger"
-          disabled={disabled || busy || entries.length === 0}
+          disabled={busy || entries.length === 0}
           onClick={() => run('replace')}
         >
           すべて置き換え

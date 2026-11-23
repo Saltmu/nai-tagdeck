@@ -56,7 +56,6 @@ function Harness({ onReady }: { onReady: (api: HarnessApi) => void }) {
     remove: async () => {},
     importEntries: async () => 0,
     restoreInitial: async () => 0,
-    reload: async () => {},
   };
 
   return (

@@ -1,70 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { getKV, KV_KEYS, listEntries, setKV, StaleWriteError, type KVKey } from '../lib/db';
-import type { DictEntry } from '../types';
+import { getKV, setKV, type KVKey } from '../lib/db';
 import { getDataResetSignal } from '../lib/reset';
-import { isTabSyncLocked, lockTabSyncFromStaleWrite, publishTabSync, setScopeDirty, startTabSync, subscribeTabSyncConflict } from '../lib/tabSync';
 
 export interface PersistenceState {
   loaded: boolean;
   status: 'loading' | 'idle' | 'error';
   error: string | null;
-  /** 再読み込みの世代。0 は初回読み込み。 */
-  revision: number;
 }
 
-const INITIAL: PersistenceState = { loaded: false, status: 'loading', error: null, revision: 0 };
-
-const persistedListeners = new Set<(key: KVKey) => void>();
-
-/** そのキーの保存が IndexedDB に届いたときに知らせる。 */
-export function subscribePersisted(listener: (key: KVKey) => void): () => void {
-  persistedListeners.add(listener);
-  return () => { persistedListeners.delete(listener); };
-}
-
-export function notePersisted(key: KVKey): void {
-  for (const listener of persistedListeners) listener(key);
-}
-
-const baselineAppliers = new Map<KVKey, (value: unknown) => void>();
-
-function registerBaseline(key: KVKey, apply: (value: unknown) => void): () => void {
-  baselineAppliers.set(key, apply);
-  return () => {
-    if (baselineAppliers.get(key) === apply) baselineAppliers.delete(key);
-  };
-}
-
-/** 明示して保存した値を、自動保存の基準にする。 */
-export function adoptPersistedValue(key: KVKey, value: unknown): void {
-  baselineAppliers.get(key)?.(value);
-}
-
-const kvSnapshots = new Map<KVKey, { revision: number; raw: unknown }>();
-let dictionarySnapshot: { revision: number; entries: DictEntry[] } | null = null;
-
-/** 全部読めてから画面へ渡す。途中で失敗したときは、いまの画面を変えない。 */
-export async function readReloadSnapshot(revision: number): Promise<void> {
-  const [entries, ...values] = await Promise.all([
-    listEntries(),
-    ...KV_KEYS.map((key) => getKV(key)),
-  ]);
-  KV_KEYS.forEach((key, index) => {
-    kvSnapshots.set(key, { revision, raw: values[index] });
-  });
-  dictionarySnapshot = { revision, entries };
-}
-
-export function readCachedKV(key: KVKey, revision: number): { hit: true; raw: unknown } | { hit: false } {
-  const slot = kvSnapshots.get(key);
-  if (!slot || slot.revision !== revision) return { hit: false };
-  return { hit: true, raw: slot.raw };
-}
-
-export function readCachedDictionary(revision: number): DictEntry[] | undefined {
-  if (!dictionarySnapshot || dictionarySnapshot.revision !== revision) return undefined;
-  return dictionarySnapshot.entries;
-}
+const INITIAL: PersistenceState = { loaded: false, status: 'loading', error: null };
 
 /**
  * IndexedDB の kv ストアから値を読み込み、変更を少し遅らせて書き戻す。
@@ -75,26 +19,11 @@ export function usePersistence<T>(
   value: T,
   onLoad: (raw: unknown, isCurrent: () => boolean) => Promise<void> | void,
   delayMs = 300,
-  reloadRevision = 0,
 ): PersistenceState {
-  startTabSync();
   const [state, setState] = useState({ key, ...INITIAL });
   const [resetSignal] = useState(getDataResetSignal);
   const writes = useRef(Promise.resolve());
-  const synced = useRef<{ key: string; value: T; inFlight: number; latestGen: number } | null>(null);
-  const valueRef = useRef(value);
-  valueRef.current = value;
-  const [lockTick, setLockTick] = useState(0);
-  useEffect(() => subscribeTabSyncConflict(() => {
-    if (!isTabSyncLocked()) setLockTick((tick) => tick + 1);
-  }), []);
-  useEffect(() => registerBaseline(key, (committed) => {
-    const tracker = synced.current;
-    if (!tracker || tracker.key !== key) return;
-    tracker.value = committed as T;
-    if (Object.is(valueRef.current, committed)) setScopeDirty(key, false);
-    else setScopeDirty(key, true);
-  }), [key]);
+  const synced = useRef<{ key: string; value: T; inFlight: number } | null>(null);
   const current = state.key === key ? state : INITIAL;
   const stateRef = useRef(current);
   stateRef.current = current;
@@ -103,75 +32,56 @@ export function usePersistence<T>(
 
   useEffect(() => {
     let active = true;
-    const revision = reloadRevision;
     const isCurrent = () => active && !resetSignal.aborted;
     synced.current = null;
     setState({ key, ...INITIAL });
-    const cached = revision > 0 ? readCachedKV(key, revision) : { hit: false as const };
-    const read = cached.hit ? Promise.resolve(cached.raw) : getKV<unknown>(key);
-    read
+    getKV<unknown>(key)
       .then(async (raw) => {
         if (!isCurrent()) return;
-        // 初回に値が無いときは初期状態のままにする。再読み込みで消えていたときだけ既定値へ戻す。
-        if (raw !== undefined || revision > 0) {
+        if (raw !== undefined) {
           const result = onLoadRef.current(raw, isCurrent);
           if (result && typeof (result as PromiseLike<void>).then === 'function') {
             await result;
           }
         }
         if (!isCurrent()) return;
-        setState({ key, loaded: true, status: 'idle', error: null, revision });
+        setState({ key, loaded: true, status: 'idle', error: null });
       })
       .catch((error: unknown) => {
-        if (isCurrent()) setState({ key, loaded: false, status: 'error', error: `保存データを読み込めません (${key}): ${String(error)}`, revision });
+        if (isCurrent()) setState({ key, loaded: false, status: 'error', error: `保存データを読み込めません (${key}): ${String(error)}` });
       });
     return () => { active = false; };
-  }, [key, resetSignal, reloadRevision]);
+  }, [key, resetSignal]);
 
   useEffect(() => {
     if (!current.loaded) return;
     if (synced.current?.key !== key) {
-      synced.current = { key, value, inFlight: 0, latestGen: 0 };
-      setScopeDirty(key, false);
+      synced.current = { key, value, inFlight: 0 };
       return;
     }
     const tracker = synced.current;
-    const generation = ++tracker.latestGen;
-    if (tracker.inFlight === 0 && Object.is(tracker.value, value)) {
-      setScopeDirty(key, false);
-      return;
-    }
-    setScopeDirty(key, true);
+    if (tracker.inFlight === 0 && Object.is(tracker.value, value)) return;
 
     let active = true;
     let pending = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const enqueueWrite = (force: boolean) => {
-      if (!pending || resetSignal.aborted || isTabSyncLocked()) return;
+      if (!pending) return;
       pending = false;
       clearTimeout(timer);
       tracker.inFlight += 1;
       // 遅い保存が新しい値を上書きしないよう、順番に書き込む。
       writes.current = writes.current.then(async () => {
         try {
-          // キューに入ったあとに他タブの更新やリセットが来た書き込みも捨てる。
-          if (resetSignal.aborted || isTabSyncLocked() || (!force && !active)) return;
+          if (resetSignal.aborted || (!force && !active)) return;
           await setKV(key, value);
           tracker.value = value;
-          if (tracker.latestGen === generation) setScopeDirty(key, false);
-          notePersisted(key);
-          publishTabSync('updated', key);
           if (active && (stateRef.current.status !== 'idle' || stateRef.current.error !== null)) {
-            setState({ key, loaded: true, status: 'idle', error: null, revision: stateRef.current.revision });
+            setState({ key, loaded: true, status: 'idle', error: null });
           }
         } catch (error) {
-          if (error instanceof StaleWriteError) {
-            setScopeDirty(key, true);
-            lockTabSyncFromStaleWrite(key, error.scope === 'reset' ? 'reset' : 'updated');
-            return;
-          }
-          if (active) setState({ key, loaded: true, status: 'error', error: `変更を保存できません (${key}): ${String(error)}`, revision: stateRef.current.revision });
+          if (active) setState({ key, loaded: true, status: 'error', error: `変更を保存できません (${key}): ${String(error)}` });
         } finally {
           tracker.inFlight -= 1;
         }
@@ -193,7 +103,7 @@ export function usePersistence<T>(
       window.removeEventListener('pagehide', onPageHide);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [key, value, current.loaded, delayMs, resetSignal, lockTick]);
+  }, [key, value, current.loaded, delayMs, resetSignal]);
 
   return current;
 }

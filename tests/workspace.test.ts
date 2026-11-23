@@ -15,7 +15,7 @@ import {
 import { migrateNegative } from '../src/lib/backup';
 import { buildPrompt } from '../src/lib/prompt';
 import { DEFAULT_NEGATIVE } from '../src/lib/novelai';
-import { DB_VERSION, getKV, listEntries, putEntry, replaceAllEntries, setKV } from '../src/lib/db';
+import { getKV, listEntries, putEntry, replaceAllEntries, setKV } from '../src/lib/db';
 import type { Workspace } from '../src/types';
 
 const run = (ws: Workspace, ...actions: WorkspaceAction[]) => actions.reduce(workspaceReducer, ws);
@@ -549,7 +549,7 @@ describe('db (IndexedDB)', () => {
       id: 'legacy', tag: 'open jacket', category: 'dress_state',
       alias: '前開き', default_weight: 1.2, sort_order: 4, updated_at: '2026-01-01',
     };
-    const db = await openDB('nai-tagdeck', DB_VERSION);
+    const db = await openDB('nai-tagdeck', 1);
     try {
       await db.put('dictionary', entry);
       expect(await listEntries()).toEqual([{ ...entry, category: 'outfit' }]);

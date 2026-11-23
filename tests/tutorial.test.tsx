@@ -38,7 +38,7 @@ function clickButton(label: string) {
 
 describe('tutorial entry links', () => {
   it('renders tutorial links in SettingsView and TokenSettings opening in a new tab', async () => {
-    const token = { token: '', storage: 'session' as const, save: vi.fn(), clear: vi.fn(), resync: vi.fn() };
+    const token = { token: '', storage: 'session' as const, save: vi.fn(), clear: vi.fn() };
     await act(async () => {
       root.render(
         <DialogProvider>
@@ -109,7 +109,7 @@ describe('tutorial entry links', () => {
   });
 
   it('renders TokenSettings standalone with tutorial link', async () => {
-    const token = { token: '', storage: 'session' as const, save: vi.fn(), clear: vi.fn(), resync: vi.fn() };
+    const token = { token: '', storage: 'session' as const, save: vi.fn(), clear: vi.fn() };
     await act(async () => {
       root.render(<TokenSettings token={token} notify={vi.fn()} />);
     });

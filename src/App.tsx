@@ -28,11 +28,6 @@ import { isDefaultSettings } from './lib/settings';
 import { isDefaultGeneration, normalizeGeneration, sizeOf, type GenerationSettings, type SizeKey } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { SwUpdateNotice } from './components/SwUpdateNotice';
-import { TabSyncNotice } from './components/TabSyncNotice';
-import { useTabSync } from './hooks/useTabSync';
-import { readSyncGuard, replaceSavedScopes, StaleWriteError, type KVKey } from './lib/db';
-import { adoptPersistedValue, notePersisted, readReloadSnapshot } from './hooks/usePersistence';
-import { orderedScopesToSave, publishTabSync, setScopeDirty, type SyncScope } from './lib/tabSync';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
 import { importedBaseForMode, type PromptImport } from './lib/promptImport';
@@ -48,22 +43,15 @@ const TABS: Array<{ key: Tab; label: string; icon: ReactNode }> = [
   { key: 'settings', label: '設定', icon: <SettingsIcon /> },
 ];
 
-function isKvScope(scope: SyncScope): scope is KVKey {
-  return scope !== 'dictionary' && scope !== 'reset';
-}
-
 export default function App({ onResetAll }: { onResetAll: () => void }) {
   const dictionary = useDictionary();
-  const [reloadRevision, setReloadRevision] = useState(0);
-  const reloadRevisionRef = useRef(0);
-  const kvWaiters = useRef(new Map<number, { resolve: () => void; reject: (error: Error) => void }>());
-  const { workspace, dispatch: rawDispatch, loaded, migrationHeld, persistence } = useWorkspace(reloadRevision);
-  const [settings, updateSettings, settingsPersistence] = useSettings(loaded && !migrationHeld, reloadRevision);
-  const [generation, updateGeneration, generationPersistence] = useGenerationSettings(reloadRevision);
+  const { workspace, dispatch: rawDispatch, loaded, persistence } = useWorkspace();
+  const [settings, updateSettings, settingsPersistence] = useSettings(loaded);
+  const [generation, updateGeneration, generationPersistence] = useGenerationSettings();
   // 読み込み成功だけを見る。書き込み失敗の error では、今の値をプリセットへ保存できなくしない。
   const settingsReady = generationPersistence.loaded && settingsPersistence.loaded;
   const token = useToken();
-  const presets = usePresets(reloadRevision);
+  const presets = usePresets();
   const toastRef = useRef<ToastHandle>(null);
   const show = useCallback((message: string, durationMs?: number) => {
     toastRef.current?.show(message, durationMs);
@@ -95,127 +83,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   workspaceRef.current = workspace;
   presetsRef.current = presets;
   entriesRef.current = dictionary.entries;
-  const dictionaryRef = useRef(dictionary);
-  dictionaryRef.current = dictionary;
-  const kvStates = useMemo(
-    () => [persistence, settingsPersistence, generationPersistence, ...presets.persistence],
-    [persistence, settingsPersistence, generationPersistence, presets.persistence],
-  );
-  useEffect(() => {
-    if (kvWaiters.current.size === 0) return;
-    for (const [revision, waiter] of kvWaiters.current) {
-      const failed = kvStates.find((state) => state.revision === revision && state.status === 'error' && state.error);
-      if (failed?.error) {
-        kvWaiters.current.delete(revision);
-        waiter.reject(new Error(failed.error));
-        continue;
-      }
-      if (kvStates.every((state) => state.revision === revision && state.loaded && !state.error)) {
-        kvWaiters.current.delete(revision);
-        waiter.resolve();
-      }
-    }
-  }, [kvStates]);
-  const tabSync = useTabSync({
-    confirmOverwrite: () => dialogs.confirm('別のタブでの変更を上書きし、このタブの内容を保存しますか？', { okLabel: '上書きして保存' }),
-    readGuard: () => readSyncGuard(),
-    resyncToken: () => token.resync(),
-    reloadStores: async () => {
-      const mark = {
-        workspace: workspaceRef.current,
-        settings: settingsRef.current,
-        generation: generationRef.current,
-        presets: presetsRef.current.presets,
-        activeId: presetsRef.current.activeId,
-        entries: entriesRef.current,
-      };
-      const next = reloadRevisionRef.current + 1;
-      await readReloadSnapshot(next);
-      if (
-        workspaceRef.current !== mark.workspace
-        || settingsRef.current !== mark.settings
-        || generationRef.current !== mark.generation
-        || presetsRef.current.presets !== mark.presets
-        || presetsRef.current.activeId !== mark.activeId
-        || entriesRef.current !== mark.entries
-      ) {
-        throw new Error('読み込み中にこのタブで編集したため、最新データの反映を中止しました');
-      }
-      reloadRevisionRef.current = next;
-      const kvReady = new Promise<void>((resolve, reject) => {
-        kvWaiters.current.set(next, { resolve, reject });
-      });
-      setReloadRevision(next);
-      await Promise.all([kvReady, dictionaryRef.current.reload(next)]);
-    },
-    saveLocal: async (conflict, captured) => {
-      const snapshots: Record<KVKey, unknown> = {
-        workspace: workspaceRef.current,
-        settings: settingsRef.current,
-        generation: generationRef.current,
-        presets: presetsRef.current.presets,
-        activePreset: presetsRef.current.activeId,
-      };
-      const states: Record<KVKey, { loaded: boolean; error: string | null }> = {
-        workspace: persistence,
-        settings: settingsPersistence,
-        generation: generationPersistence,
-        presets: presets.persistence[0] ?? { loaded: false, error: 'プリセットを読み込めません' },
-        activePreset: presets.persistence[1] ?? { loaded: false, error: 'プリセットを読み込めません' },
-      };
-      const scopes = orderedScopesToSave(conflict, migrationHeld);
-      for (const scope of scopes) {
-        if (scope === 'dictionary') {
-          if (!dictionaryRef.current.loaded) {
-            throw new Error('読み込みが終わっていないデータがあるため、保存を中止しました');
-          }
-          continue;
-        }
-        if (!isKvScope(scope)) continue;
-        const state = states[scope];
-        if (!state?.loaded) {
-          throw new Error('読み込みが終わっていないデータがあるため、保存を中止しました');
-        }
-      }
-      const guard = await readSyncGuard();
-      if (guard.epoch !== captured.epoch) throw new Error('別のタブでデータが削除されました');
-      for (const scope of scopes) {
-        if ((guard.seqs[scope] ?? 0) !== (captured.seqs[scope] ?? 0)) {
-          throw new Error('確認のあとで別のタブが保存したため、もう一度確認してください');
-        }
-      }
-      const kv: Partial<Record<KVKey, unknown>> = {};
-      let dictionary: typeof entriesRef.current | undefined;
-      for (const scope of scopes) {
-        if (scope === 'dictionary') {
-          dictionary = entriesRef.current;
-          continue;
-        }
-        if (isKvScope(scope)) kv[scope] = snapshots[scope];
-      }
-      try {
-        await replaceSavedScopes({ kv, dictionary }, captured.epoch, captured.seqs);
-      } catch (error) {
-        if (error instanceof StaleWriteError) {
-          throw new Error(error.scope === 'reset'
-            ? '別のタブでデータが削除されました'
-            : '確認のあとで別のタブが保存したため、もう一度確認してください');
-        }
-        throw error;
-      }
-      for (const scope of scopes) {
-        if (scope === 'dictionary') {
-          setScopeDirty('dictionary', false);
-          publishTabSync('updated', 'dictionary');
-          continue;
-        }
-        if (!isKvScope(scope)) continue;
-        adoptPersistedValue(scope, snapshots[scope]);
-        notePersisted(scope);
-        publishTabSync('updated', scope);
-      }
-    },
-  });
   const extrasSync = useMemo<UndoExtrasSync>(() => ({
     capture: () => ({
       characterNegativePrompt: settingsRef.current.characterNegativePrompt,
@@ -452,7 +319,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
 
   return (
     <div className="app">
-      <header ref={headerRef} className="app-header" data-occludes inert={tabSync.busy || undefined}>
+      <header ref={headerRef} className="app-header" data-occludes>
         <h1 className="app-title" aria-label="nai-tagdeck">
           <img className="brand-icon" src={`${import.meta.env.BASE_URL}brand/icon.svg`} width="24" height="24" alt="" />
           <img className="brand-wordmark" src={`${import.meta.env.BASE_URL}brand/wordmark.svg`} width="108" height="24" alt="" />
@@ -503,13 +370,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         />
       </header>
       <SwUpdateNotice />
-      <TabSyncNotice
-        conflict={tabSync.conflict}
-        busy={tabSync.busy}
-        error={tabSync.error}
-        onReload={tabSync.reloadLatest}
-        onPrefer={tabSync.preferLocal}
-      />
 
       {dictionary.error && (
         <p className="error-banner" role="alert">
@@ -520,7 +380,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       {[persistence, settingsPersistence, generationPersistence, ...presets.persistence].filter((state) => state.error).map((state) => (
         <p className="error-banner" role="alert" key={state.error}>{state.error}。再読み込みして再試行してください。</p>
       ))}
-      <main className="app-main" inert={tabSync.busy || undefined}>
+      <main className="app-main">
         {/* 編集と生成は、広い画面では左右に並べ、狭い画面ではタブで切り替える（どちらも表示したまま CSS で隠す） */}
         <div className="workbench" data-tab={tab} hidden={!showWorkbench}>
           <div className="pane pane-editor">
@@ -592,9 +452,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             />
           </div>
         </div>
-        {tab === 'dictionary' && (
-          <DictionaryView dictionary={dictionary} notify={show} reloadRevision={reloadRevision} />
-        )}
+        {tab === 'dictionary' && <DictionaryView dictionary={dictionary} notify={show} />}
         {tab === 'settings' && (
           <SettingsView
             token={token}

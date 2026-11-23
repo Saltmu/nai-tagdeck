@@ -29,7 +29,6 @@ const dictionary = {
   remove: async () => {},
   importEntries: async () => 0,
   restoreInitial: async () => 0,
-  reload: async () => {},
 } satisfies Dictionary;
 
 const presets = {

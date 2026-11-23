@@ -1,5 +1,4 @@
 import { clearAllData } from './db';
-import { clearTabSyncConflict, getTabSyncEpoch, publishTabSync } from './tabSync';
 
 let pendingWrites = new AbortController();
 
@@ -20,13 +19,9 @@ export function clearAppStorage(storage: Pick<Storage, 'length' | 'key' | 'remov
 
 /** 旧画面の書き込みを無効にしてから、先行する書き込みと同じストアを消去する。 */
 export async function resetAppData(): Promise<void> {
-  const epoch = getTabSyncEpoch();
   pendingWrites.abort();
   pendingWrites = new AbortController();
   clearAppStorage(window.localStorage);
   clearAppStorage(window.sessionStorage);
   await clearAllData();
-  publishTabSync('reset', 'reset');
-  // リセットより後に届いた他タブの通知は、新しい画面のロックとして残す。
-  if (getTabSyncEpoch() === epoch) clearTabSyncConflict();
 }

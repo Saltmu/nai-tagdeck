@@ -11,8 +11,6 @@ import {
 export interface TokenState extends StoredToken {
   save: (token: string, storage: TokenStorage) => boolean;
   clear: () => void;
-  /** 保存先を読み直し、他タブが削除したトークンをメモリから外す。 */
-  resync: () => void;
 }
 
 interface InternalTokenState extends StoredToken {
@@ -49,13 +47,5 @@ export function useToken(): TokenState {
     setState({ token: null, storage: 'session', memoryOnly: false });
   }, []);
 
-  const resync = useCallback(() => {
-    setState((prev) => {
-      if (prev.memoryOnly) return prev;
-      const next = loadToken();
-      return prev.token === next.token && prev.storage === next.storage ? prev : { ...next, memoryOnly: false };
-    });
-  }, []);
-
-  return { token: state.token, storage: state.storage, save, clear, resync };
+  return { token: state.token, storage: state.storage, save, clear };
 }

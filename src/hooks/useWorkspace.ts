@@ -1,69 +1,39 @@
-import { useCallback, useEffect, useMemo, useReducer, useState, useSyncExternalStore, type Dispatch } from 'react';
+import { useCallback, useMemo, useReducer, useState, type Dispatch } from 'react';
 import type { Settings, Workspace } from '../types';
 import { emptyWorkspace, hasNegative, normalizeWorkspace, workspaceReducer, type WorkspaceAction } from '../lib/workspace';
 import { migrateNegative } from '../lib/backup';
-import { getKV, setKV, StaleWriteError } from '../lib/db';
-import { getLockClearCount, isTabSyncLocked, lockTabSyncFromStaleWrite, setScopeDirty, subscribeLockClears } from '../lib/tabSync';
-import { readCachedKV, subscribePersisted, usePersistence, type PersistenceState } from './usePersistence';
+import { getKV, setKV } from '../lib/db';
 import { DEFAULT_SETTINGS, legacyNegativePrompt, normalizeSettings } from '../lib/settings';
 import { DEFAULT_GENERATION, normalizeGeneration, type GenerationSettings } from '../lib/generation';
+import { usePersistence, type PersistenceState } from './usePersistence';
 
-
-export function useWorkspace(reloadRevision = 0): { workspace: Workspace; dispatch: Dispatch<WorkspaceAction>; loaded: boolean; migrationHeld: boolean; persistence: PersistenceState } {
+export function useWorkspace(): { workspace: Workspace; dispatch: Dispatch<WorkspaceAction>; loaded: boolean; persistence: PersistenceState } {
   const [workspace, dispatch] = useReducer(workspaceReducer, undefined, emptyWorkspace);
-  const [migrationHeld, setMigrationHeld] = useState(false);
-  const lockClears = useSyncExternalStore(subscribeLockClears, getLockClearCount, () => 0);
   const persistence = usePersistence('workspace', workspace, async (raw, isCurrent) => {
-    if (raw === undefined) {
-      setMigrationHeld(false);
-      dispatch({ type: 'replace', workspace: emptyWorkspace() });
-      return;
-    }
     if (hasNegative(raw)) {
-      setMigrationHeld(false);
       dispatch({ type: 'replace', workspace: normalizeWorkspace(raw) });
       return;
     }
     // ネガティブ対応前のデータ: 設定に残っている文字列のネガティブを移し、移行済みデータを保存する
-    const cachedSettings = readCachedKV('settings', reloadRevision);
-    const settings = cachedSettings.hit ? cachedSettings.raw : await getKV<unknown>('settings');
+    const settings = await getKV<unknown>('settings');
     if (!isCurrent()) return;
     const migrated = migrateNegative(raw, settings);
-    let held = isTabSyncLocked();
-    if (!held) {
-      try {
-        await setKV('workspace', migrated);
-      } catch (error) {
-        if (!(error instanceof StaleWriteError)) throw error;
-        lockTabSyncFromStaleWrite('workspace', error instanceof StaleWriteError && error.scope === 'reset' ? 'reset' : 'updated');
-        held = true;
-      }
-    }
-    if (!isCurrent()) return;
-    setMigrationHeld(held);
-    dispatch({ type: 'replace', workspace: migrated });
-  }, 300, reloadRevision);
-  useEffect(() => subscribePersisted((key) => {
-    if (key === 'workspace') setMigrationHeld(false);
-  }), []);
-  useEffect(() => {
-    if (migrationHeld) setScopeDirty('workspace', true);
-  }, [migrationHeld, persistence.loaded, persistence.revision, lockClears]);
-  return { workspace, dispatch, loaded: persistence.loaded, migrationHeld, persistence };
+    await setKV('workspace', migrated);
+    if (isCurrent()) dispatch({ type: 'replace', workspace: migrated });
+  });
+  return { workspace, dispatch, loaded: persistence.loaded, persistence };
 }
 
-export function useGenerationSettings(reloadRevision = 0): [GenerationSettings, (patch: Partial<GenerationSettings>) => void, PersistenceState] {
+export function useGenerationSettings(): [GenerationSettings, (patch: Partial<GenerationSettings>) => void, PersistenceState] {
   const [settings, setSettings] = useState<GenerationSettings>(DEFAULT_GENERATION);
-  const persistence = usePersistence('generation', settings, (raw) => {
-    setSettings(raw === undefined ? DEFAULT_GENERATION : normalizeGeneration(raw));
-  }, 300, reloadRevision);
+  const persistence = usePersistence('generation', settings, (raw) => setSettings(normalizeGeneration(raw)));
   const update = useCallback((patch: Partial<GenerationSettings>) => {
     setSettings((prev) => normalizeGeneration({ ...prev, ...patch }));
   }, []);
   return [settings, update, persistence];
 }
 
-export function useSettings(workspaceLoaded = true, reloadRevision = 0): [Settings, (patch: Partial<Settings>) => void, PersistenceState] {
+export function useSettings(workspaceLoaded = true): [Settings, (patch: Partial<Settings>) => void, PersistenceState] {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [legacyNegative, setLegacyNegative] = useState<string | null>(null);
   const stored = useMemo(
@@ -71,14 +41,9 @@ export function useSettings(workspaceLoaded = true, reloadRevision = 0): [Settin
     [settings, legacyNegative, workspaceLoaded],
   );
   const persistence = usePersistence('settings', stored, (raw) => {
-    if (raw === undefined) {
-      setLegacyNegative(null);
-      setSettings(DEFAULT_SETTINGS);
-      return;
-    }
     setLegacyNegative(legacyNegativePrompt(raw));
     setSettings(normalizeSettings(raw));
-  }, 300, reloadRevision);
+  });
   const update = useCallback((patch: Partial<Settings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
   }, []);

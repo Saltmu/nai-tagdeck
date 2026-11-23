@@ -36,7 +36,6 @@ function dictionary(entries: DictEntry[]): Dictionary {
     remove: async () => {},
     importEntries: async () => entries.length,
     restoreInitial: async () => entries.length,
-    reload: async () => {},
   };
 }
 
@@ -52,7 +51,7 @@ async function render(entries: DictEntry[]) {
   await act(async () => {
     root.render(
       <DialogProvider>
-        <DictionaryView dictionary={dictionary(entries)} notify={() => {}} reloadRevision={0} />
+        <DictionaryView dictionary={dictionary(entries)} notify={() => {}} />
       </DialogProvider>,
     );
   });
@@ -217,7 +216,7 @@ it('keeps the clamped page after the last page disappears and an entry is added 
       <>
         <button type="button" onClick={() => setEntries((list) => list.slice(0, -1))}>1件減らす</button>
         <button type="button" onClick={() => setEntries((list) => [...list, entry('added')])}>1件増やす</button>
-        <DictionaryView dictionary={dictionary(entries)} notify={() => {}} reloadRevision={0} />
+        <DictionaryView dictionary={dictionary(entries)} notify={() => {}} />
       </>
     );
   }
@@ -329,7 +328,7 @@ it('follows an edited row onto its new page when dictionary order changes', asyn
     return (
       <>
         <button type="button" onClick={() => setEntries((list) => [entry('aaa'), ...list])}>先頭に追加</button>
-        <DictionaryView dictionary={dictionary(entries)} notify={() => {}} reloadRevision={0} />
+        <DictionaryView dictionary={dictionary(entries)} notify={() => {}} />
       </>
     );
   }
@@ -393,7 +392,7 @@ it('does not offer to discard a row while its save is still running', async () =
   await act(async () => {
     root.render(
       <DialogProvider>
-        <DictionaryView dictionary={{ ...dictionary(entries), save }} notify={() => {}} reloadRevision={0} />
+        <DictionaryView dictionary={{ ...dictionary(entries), save }} notify={() => {}} />
       </DialogProvider>,
     );
   });

@@ -24,7 +24,6 @@ const mockDictionary = (): Dictionary => ({
   remove: async () => {},
   importEntries: async () => 0,
   restoreInitial: async () => 0,
-  reload: async () => {},
 });
 
 const mockPresets = (): PresetStore => ({
@@ -33,8 +32,8 @@ const mockPresets = (): PresetStore => ({
   activeId: null,
   setActiveId: () => {},
   persistence: [
-    { status: 'idle', loaded: true, error: null, revision: 0 },
-    { status: 'idle', loaded: true, error: null, revision: 0 },
+    { status: 'idle', loaded: true, error: null },
+    { status: 'idle', loaded: true, error: null },
   ],
 });
 

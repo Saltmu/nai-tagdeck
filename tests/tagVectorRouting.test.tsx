@@ -56,7 +56,6 @@ function Harness({ initialEntries, onReady }: { initialEntries: DictEntry[]; onR
     remove: async (id) => setEntries((prev) => prev.filter((item) => item.id !== id)),
     importEntries: async () => 0,
     restoreInitial: async () => 0,
-    reload: async () => {},
   };
 
   return (
