@@ -1,4 +1,4 @@
-import { memo, useCallback, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { memo, useCallback, useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { PromptCategoryKey, TargetId, WorkTag } from '../types';
 import { categoryLabel } from '../lib/categories';
 import { WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP, clampWeight } from '../lib/prompt';
@@ -107,20 +107,38 @@ export const TagRow = memo(function TagRow({
   const [dragging, setDragging] = useState(false);
   const errorId = useId();
   // ドラッグ中は行の DOM が動いてポインターのキャプチャが外れる（上へ動かすとき）ので、window で追う。
+  // 解除関数を残し、アンマウント・並べ替え終了・次のドラッグ開始で外す。
   const onDragRef = useRef(onDrag);
   onDragRef.current = onDrag;
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    return () => {
+      dragCleanupRef.current?.();
+    };
+  }, []);
+  useEffect(() => {
+    if (sorting || !dragCleanupRef.current) return;
+    dragCleanupRef.current();
+    setDragging(false);
+  }, [sorting]);
   const startDrag = (e: ReactPointerEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
+    dragCleanupRef.current?.();
     setDragging(true);
     const id = tag.id;
     const move = (ev: PointerEvent) => onDragRef.current?.(id, ev.clientY);
     const end = () => {
+      dragCleanupRef.current?.();
       setDragging(false);
+    };
+    const cleanup = () => {
+      dragCleanupRef.current = null;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
     };
+    dragCleanupRef.current = cleanup;
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
