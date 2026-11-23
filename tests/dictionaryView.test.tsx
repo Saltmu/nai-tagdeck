@@ -242,3 +242,49 @@ it('keeps the clamped page after the last page disappears and an entry is added 
   expect(tags()).not.toContain('added');
   expect(button('さらに表示')?.disabled).toBe(false);
 });
+
+it('places a pager before the rows and another after them', async () => {
+  await render(numbered('tag', PAGE_SIZE + 1));
+  const list = container.querySelector('.dict-list')!;
+  const pagers = [...container.querySelectorAll('nav.dict-pager')];
+  expect(pagers.map((pager) => pager.getAttribute('aria-label'))).toEqual(['一覧の上のページ', '一覧の下のページ']);
+  expect(pagers[0]!.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(pagers[1]!.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+});
+
+it('asks before a filter change hides the open editor and keeps the draft on cancel', async () => {
+  await render(numbered('tag', PAGE_SIZE + 1));
+  await click('さらに表示');
+  const edit = container.querySelector<HTMLButtonElement>('.dict-item button')!;
+  await act(async () => edit.click());
+  const tagInput = container.querySelector<HTMLInputElement>('.entry-form input')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(tagInput, 'changed');
+    tagInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  await setSearch('tag ');
+  const dialog = container.querySelector('dialog.app-dialog-confirm')!;
+  expect(dialog.textContent).toContain('編集中の内容を破棄して絞り込みを変えますか？');
+  await act(async () => dialog.querySelector<HTMLButtonElement>('button.btn:not(.btn-danger)')!.click());
+  expect(container.querySelector<HTMLInputElement>('input[aria-label="辞書を絞り込む"]')!.value).toBe('');
+  expect(container.querySelector<HTMLInputElement>('.entry-form input')!.value).toBe('changed');
+  expect(container.querySelector('.dict-count')?.textContent).toContain('301〜');
+
+  await setSearch('tag ');
+  const confirm = container.querySelector('dialog.app-dialog-confirm')!;
+  await act(async () => confirm.querySelector<HTMLButtonElement>('button.btn-danger')!.click());
+  expect(container.querySelector('.entry-form')).toBeNull();
+  expect(tags()[0]).toBe('tag0000');
+  expect(container.querySelector<HTMLInputElement>('input[aria-label="辞書を絞り込む"]')!.value).toBe('tag ');
+});
+
+it('applies a filter without asking when the open editor stays on the first page', async () => {
+  await render(numbered('tag', PAGE_SIZE + 1));
+  const edit = container.querySelector<HTMLButtonElement>('.dict-item button')!;
+  await act(async () => edit.click());
+  await setSearch('tag0000');
+  expect(container.querySelector('dialog.app-dialog-confirm')).toBeNull();
+  expect(container.querySelector('.entry-form')).not.toBeNull();
+  expect(container.querySelector('.dict-count')?.textContent).toBe('1件 / 全301件');
+});

@@ -55,10 +55,32 @@ export function DictionaryView({ dictionary, notify }: Props) {
     scrollToList.current = false;
     const list = listRef.current;
     if (!list) return;
-    // ページ送りのボタンは一覧の末尾にある。フォーカスを残すと画面がそこへ戻る。
+    // ページ送りのボタンは一覧の末尾にもある。フォーカスを残すと画面がそこへ戻る。
+    // 一覧へ移すと、次の Tab は行の前にあるページ操作に入る。
     list.focus({ preventScroll: true });
     list.scrollIntoView({ block: 'start' });
   });
+
+  const editLeavesFirstPage = (nextQuery: string, nextCategory: CategoryKey | 'all') => {
+    if (!editingId || editingId === NEW) return false;
+    return !filterEntries(entries, nextQuery, nextCategory)
+      .slice(0, PAGE_SIZE)
+      .some((entry) => entry.id === editingId);
+  };
+
+  const applyListFilter = async (nextQuery: string, nextCategory: CategoryKey | 'all') => {
+    if (editLeavesFirstPage(nextQuery, nextCategory)) {
+      const ok = await dialogs.confirm('編集中の内容を破棄して絞り込みを変えますか？', {
+        okLabel: '破棄して絞り込む',
+        danger: true,
+      });
+      if (!ok) return;
+      setEditingId(null);
+    }
+    setQuery(nextQuery);
+    setFilterCategory(nextCategory);
+    setPageIndex(0);
+  };
 
   const showPage = async (next: number) => {
     if (next === page) return;
@@ -73,6 +95,17 @@ export function DictionaryView({ dictionary, notify }: Props) {
     scrollToList.current = true;
     setPageIndex(next);
   };
+
+  const pageNav = (label: string) => (
+    <nav className="dict-pager" aria-label={label}>
+      <button type="button" className="btn" disabled={page === 0} onClick={() => void showPage(page - 1)}>
+        前を表示
+      </button>
+      <button type="button" className="btn" disabled={page >= pageCount - 1} onClick={() => void showPage(page + 1)}>
+        さらに表示
+      </button>
+    </nav>
+  );
 
   const handleSave = async (entry: DictEntry): Promise<string | null> => {
     const dup = findDuplicate(entries, entry);
@@ -162,16 +195,18 @@ export function DictionaryView({ dictionary, notify }: Props) {
             aria-label="辞書を絞り込む"
             value={query}
             onChange={(e) => {
-              setQuery(e.target.value);
-              setPageIndex(0);
+              const next = e.target.value;
+              if (editLeavesFirstPage(next, filterCategory)) e.currentTarget.value = query;
+              void applyListFilter(next, filterCategory);
             }}
           />
           <select
             aria-label="カテゴリで絞り込む"
             value={filterCategory}
             onChange={(e) => {
-              setFilterCategory(isCategoryKey(e.target.value) ? e.target.value : 'all');
-              setPageIndex(0);
+              const next = isCategoryKey(e.target.value) ? e.target.value : 'all';
+              if (editLeavesFirstPage(query, next)) e.currentTarget.value = filterCategory;
+              void applyListFilter(query, next);
             }}
           >
             <option value="all">すべてのカテゴリ</option>
@@ -249,6 +284,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
             {filtered.length}件 / 全{entries.length}件
             {hasPager && `（${pageStart + 1}〜${pageStart + shown.length}件目）`}
           </p>
+          {hasPager && pageNav('一覧の上のページ')}
           <ul className="dict-list">
             {shown.map((entry) =>
               editingId === entry.id ? (
@@ -284,26 +320,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
               ),
             )}
           </ul>
-          {hasPager && (
-            <nav className="dict-pager" aria-label="一覧のページ">
-              <button
-                type="button"
-                className="btn"
-                disabled={page === 0}
-                onClick={() => void showPage(page - 1)}
-              >
-                前を表示
-              </button>
-              <button
-                type="button"
-                className="btn"
-                disabled={page >= pageCount - 1}
-                onClick={() => void showPage(page + 1)}
-              >
-                さらに表示
-              </button>
-            </nav>
-          )}
+          {hasPager && pageNav('一覧の下のページ')}
         </section>
       )}
     </div>
