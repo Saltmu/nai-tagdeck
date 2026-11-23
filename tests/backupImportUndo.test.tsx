@@ -60,7 +60,7 @@ async function deleteExistingTag() {
   expect(undoButton().getAttribute('aria-disabled')).toBe('false');
 }
 
-async function importBackup() {
+async function openBackupConfirm() {
   await click(button('設定'));
   const input = container.querySelector<HTMLInputElement>('input[accept*="json"]');
   if (!input) throw new Error('バックアップの入力がありません');
@@ -85,6 +85,11 @@ async function importBackup() {
   });
   const confirm = container.querySelector('dialog.app-dialog-confirm');
   if (!confirm) throw new Error('読み込み確認がありません');
+  return confirm;
+}
+
+async function importBackup() {
+  const confirm = await openBackupConfirm();
   await click(button('読み込む', confirm));
 }
 
@@ -164,6 +169,28 @@ it('clears undo after a backup import so the workspace stays with the merged dic
   await click(container.querySelector<HTMLButtonElement>('.preset-search input')!);
   expect(container.textContent).toContain('追加');
   expect(container.textContent).toContain('基本');
+});
+
+it('keeps the imported workspace when Ctrl+Z arrives before the replacement renders', async () => {
+  await deleteExistingTag();
+  const confirm = await openBackupConfirm();
+  // 読み込みの確定を act の外で進め、描画前の Ctrl+Z を再現する。
+  const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    button('読み込む', confirm).click();
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+    await act(async () => {});
+  } finally {
+    error.mockRestore();
+  }
+  await openEditor();
+  expect(preview()).toBe('backup-tag');
+  expect(dictionaryCount()).toBe('2');
+  expect(field('steps')?.value).toBe('12');
+  expect(undoButton().getAttribute('aria-disabled')).toBe('true');
+  await pressUndo();
+  expect(preview()).toBe('backup-tag');
 });
 
 it('clears undo when the first-run sample replaces the workspace and restores the dictionary', async () => {

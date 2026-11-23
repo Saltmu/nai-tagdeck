@@ -106,7 +106,8 @@ function freezeExtras(
  * 入力中の重み、キャラクター名、個別ネガティブ、位置、ドラッグ中の並び替えだけを 1 ステップにまとめる。
  * 欄を離れる、または 3 秒空くと、そのまとまりは終わる。
  * テキスト入力中の Ctrl/Cmd+Z は入力欄に任せ、ダイアログ表示中は反応しない。
- * 永続化の読み込みなど、この dispatch を通らない置換は履歴を捨てる。
+ * 永続化の読み込みなど、この dispatch を通らない置換は次の描画で履歴を捨てる。
+ * バックアップのように他の状態も同時に変わる置換は、描画前に discardHistory で捨てる。
  * 第2引数で渡した共通キャラネガティブと生成設定は、適用時に変わった項目だけをそのステップの Undo / Redo で戻す。
  * 生成設定や共通キャラネガティブの手入力は履歴に入らないため、Undo 時は適用前の値へ戻す。
  */
@@ -302,10 +303,25 @@ export function useTagUndo(
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // 描画前に呼ぶ。永続化の読み込みと同じく履歴は捨てるが、次の描画を待たない。
+  // 待っていると、置換を積んだ直後の Ctrl+Z が読み込み前の作業状態を戻す。
+  const discardHistory = useCallback(() => {
+    lastActionRef.current = null;
+    lastControlRef.current = null;
+    const hadHistory = pastRef.current.length > 0 || futureRef.current.length > 0;
+    pastRef.current = [];
+    futureRef.current = [];
+    if (!hadHistory) return;
+    setPast([]);
+    setFuture([]);
+    setStatus('');
+  }, []);
+
   const canUndo = past.length > 0;
   const canRedo = future.length > 0;
   return {
     dispatch: trackedDispatch,
+    discardHistory,
     undo,
     redo,
     canUndo,
