@@ -28,8 +28,11 @@ export function DictionaryView({ dictionary, notify }: Props) {
   const dialogs = useDialogs();
   const { entries, loaded, save, saveMany, remove, importEntries, restoreInitial } = dictionary;
   const [query, setQuery] = useState('');
+  const [queryDraft, setQueryDraft] = useState('');
   const [filterCategory, setFilterCategory] = useState<CategoryKey | 'all'>('all');
   const [pageIndex, setPageIndex] = useState(0);
+  const queryComposing = useRef(false);
+  const confirmingFilter = useRef(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ImportResult } | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -41,7 +44,11 @@ export function DictionaryView({ dictionary, notify }: Props) {
     [entries, filterCategory, query],
   );
   const pageCount = Math.ceil(filtered.length / PAGE_SIZE);
-  const page = pageCount === 0 ? 0 : Math.min(pageIndex, pageCount - 1);
+  const editedIndex = editingId && editingId !== NEW ? filtered.findIndex((entry) => entry.id === editingId) : -1;
+  // 辞書の更新で編集中の行が別ページへ動いても、その行を表示したままにする。ページを外すと入力が消える。
+  const editedPage = editedIndex >= 0 ? Math.floor(editedIndex / PAGE_SIZE) : null;
+  const clampedPage = pageCount === 0 ? 0 : Math.min(pageIndex, pageCount - 1);
+  const page = editedPage ?? clampedPage;
   const pageStart = page * PAGE_SIZE;
   const shown = filtered.slice(pageStart, pageStart + PAGE_SIZE);
   const hasPager = filtered.length > PAGE_SIZE;
@@ -70,14 +77,21 @@ export function DictionaryView({ dictionary, notify }: Props) {
 
   const applyListFilter = async (nextQuery: string, nextCategory: CategoryKey | 'all') => {
     if (editLeavesFirstPage(nextQuery, nextCategory)) {
+      if (confirmingFilter.current) return;
+      confirmingFilter.current = true;
       const ok = await dialogs.confirm('編集中の内容を破棄して絞り込みを変えますか？', {
         okLabel: '破棄して絞り込む',
         danger: true,
       });
-      if (!ok) return;
+      confirmingFilter.current = false;
+      if (!ok) {
+        setQueryDraft(query);
+        return;
+      }
       setEditingId(null);
     }
     setQuery(nextQuery);
+    setQueryDraft(nextQuery);
     setFilterCategory(nextCategory);
     setPageIndex(0);
   };
@@ -193,10 +207,22 @@ export function DictionaryView({ dictionary, notify }: Props) {
             className="grow"
             placeholder="タグ・日本語名で絞り込み"
             aria-label="辞書を絞り込む"
-            value={query}
+            value={queryDraft}
+            onCompositionStart={() => {
+              queryComposing.current = true;
+            }}
+            onCompositionEnd={(e) => {
+              queryComposing.current = false;
+              const next = e.currentTarget.value;
+              setQueryDraft(next);
+              void applyListFilter(next, filterCategory);
+            }}
             onChange={(e) => {
               const next = e.target.value;
-              if (editLeavesFirstPage(next, filterCategory)) e.currentTarget.value = query;
+              setQueryDraft(next);
+              // 変換中の中間文字列では破棄確認を出さない。確定は compositionend で行う。
+              const native = e.nativeEvent;
+              if (queryComposing.current || ('isComposing' in native && native.isComposing)) return;
               void applyListFilter(next, filterCategory);
             }}
           />

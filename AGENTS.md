@@ -26,5 +26,5 @@ NovelAI Diffusion V5 向けのタグ編集・画像生成アプリ。React / Typ
 ## 確認
 
 - 依存関係は `npm ci` でインストールする。実装の変更は `npm run lint`、`npm test`、`npm run build` で確認する。テストは [tests/](tests/) にあり、生成処理はモックで検証できる。Pull Request と `main` への push では [.github/workflows/ci.yml](.github/workflows/ci.yml) が lint、型チェック、テスト、ビルドを実行する。
-- UI の変更箇所に応じて、広い画面での編集・生成の2ペイン表示と、狭い画面でのタブ切り替えを確認する。タグ入力を変更した場合は、日本語 IME、候補のキー操作、候補を閉じるときの外側クリックも確認する。[既存の回帰確認記録](docs/refactor-regression-2026-10-09.md)
+- UI の変更箇所に応じて、広い画面での編集・生成の2ペイン表示と、狭い画面でのタブ切り替えを確認する。タグ入力を変更した場合は、日本語 IME、候補のキー操作、候補を閉じるときの外側クリックも確認する。辞書一覧で行を編集中に絞り込み欄を変えるときは、日本語 IME の変換が終わるまで破棄確認を出さない。[既存の回帰確認記録](docs/refactor-regression-2026-10-09.md)
 - `npm run preview` は本番ビルドのローカル確認に使う。`npm run deploy` は公開先のファイルを追加・削除する同期処理なので、同期対象の確認には `npm run deploy -- --dry` を使う。

@@ -288,3 +288,71 @@ it('applies a filter without asking when the open editor stays on the first page
   expect(container.querySelector('.entry-form')).not.toBeNull();
   expect(container.querySelector('.dict-count')?.textContent).toBe('1件 / 全301件');
 });
+
+it('keeps an in-progress search composition and asks only after it ends', async () => {
+  await render(numbered('tag', PAGE_SIZE + 1));
+  await click('さらに表示');
+  const edit = container.querySelector<HTMLButtonElement>('.dict-item button')!;
+  await act(async () => edit.click());
+  const tagInput = container.querySelector<HTMLInputElement>('.entry-form input')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(tagInput, 'changed');
+    tagInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  const search = container.querySelector<HTMLInputElement>('input[aria-label="辞書を絞り込む"]')!;
+  await act(async () => {
+    search.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  });
+  await setSearch('あ');
+  expect(container.querySelector('dialog.app-dialog-confirm')).toBeNull();
+  expect(search.value).toBe('あ');
+  expect(container.querySelector<HTMLInputElement>('.entry-form input')!.value).toBe('changed');
+  expect(container.querySelector('.dict-count')?.textContent).toContain('301〜');
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, 'tag ');
+    search.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+  });
+  const dialog = container.querySelector('dialog.app-dialog-confirm')!;
+  expect(dialog.textContent).toContain('編集中の内容を破棄して絞り込みを変えますか？');
+  await act(async () => dialog.querySelector<HTMLButtonElement>('button.btn:not(.btn-danger)')!.click());
+  expect(search.value).toBe('');
+  expect(container.querySelector<HTMLInputElement>('.entry-form input')!.value).toBe('changed');
+});
+
+it('follows an edited row onto its new page when dictionary order changes', async () => {
+  const initial = numbered('tag', PAGE_SIZE * 2);
+  function Harness() {
+    const [entries, setEntries] = useState(initial);
+    return (
+      <>
+        <button type="button" onClick={() => setEntries((list) => [entry('aaa'), ...list])}>先頭に追加</button>
+        <DictionaryView dictionary={dictionary(entries)} notify={() => {}} />
+      </>
+    );
+  }
+  await act(async () => {
+    root.render(
+      <DialogProvider>
+        <Harness />
+      </DialogProvider>,
+    );
+  });
+
+  await click('さらに表示');
+  const edit = [...container.querySelectorAll<HTMLButtonElement>('.dict-item button')].at(-2)!;
+  expect(edit.textContent).toBe('編集');
+  await act(async () => edit.click());
+  const tagInput = container.querySelector<HTMLInputElement>('.entry-form input')!;
+  expect(tagInput.value).toBe('tag0599');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(tagInput, 'changed');
+    tagInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  await click('先頭に追加');
+  expect(container.querySelector<HTMLInputElement>('.entry-form input')!.value).toBe('changed');
+  expect(container.querySelector('.dict-count')?.textContent).toContain('601〜601');
+  expect(tags()).not.toContain('aaa');
+});
