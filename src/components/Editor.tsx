@@ -262,7 +262,7 @@ export function Editor({
   };
 
   const { dragging, dropProps } = usePngDrop({
-    enabled: !!onPickPng && !!onReadPng,
+    enabled: !!onPickPng && !!onReadPng && !registering,
     onDropFile: (source) => onReadPng?.(source),
     onMultipleFiles: () => notify('PNG を1枚ずつドロップしてください'),
   });

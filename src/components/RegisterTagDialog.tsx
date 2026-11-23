@@ -79,21 +79,15 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onCanc
 
   const onKeyDown = (e: KeyboardEvent<HTMLFormElement>) => {
     if (e.key !== 'Enter') return;
-    // 変換確定、修飾キー、押しっぱなしの Enter では登録しない。
-    // Ctrl/Cmd+Enter は生成のショートカットで、ダイアログ表示中は生成自体も止める。
-    if (
-      e.nativeEvent.isComposing
-      || e.keyCode === 229
-      || e.repeat
-      || e.ctrlKey
-      || e.metaKey
-      || e.altKey
-      || e.shiftKey
-    ) {
+    // 変換確定の Enter は IME に渡す。preventDefault すると変換自体が確定しないことがある。
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    // Ctrl/Cmd+Enter は生成のショートカット。押しっぱなしの Enter でも登録しない。
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
       e.preventDefault();
       return;
     }
-    if (e.target instanceof HTMLButtonElement) return;
+    // カテゴリのセレクトは、Enter で一覧を開くブラウザの動作を残す。
+    if (!(e.target instanceof HTMLInputElement)) return;
     e.preventDefault();
     form.current?.requestSubmit();
   };

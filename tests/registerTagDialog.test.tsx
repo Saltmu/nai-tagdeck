@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DialogProvider } from '../src/components/Dialogs';
 import { Editor } from '../src/components/Editor';
+import type { PromptSource } from '../src/components/PromptImportDialog';
 import type { Dictionary } from '../src/hooks/useDictionary';
 import type { PresetStore } from '../src/hooks/usePresets';
 import { emptyWorkspace, workspaceReducer } from '../src/lib/workspace';
@@ -24,12 +25,14 @@ interface HarnessApi {
   getEntries: () => DictEntry[];
   setSave: (save: Dictionary['save']) => void;
   notifications: string[];
+  pngReads: string[];
 }
 
 function Harness({ onReady }: { onReady: (api: HarnessApi) => void }) {
   const [workspace, dispatch] = useReducer(workspaceReducer, undefined, emptyWorkspace);
   const [entries, setEntries] = useState<DictEntry[]>([]);
   const notifications = useRef<string[]>([]);
+  const pngReads = useRef<string[]>([]);
   const saveRef = useRef<Dictionary['save']>(async (entry) => {
     setEntries((prev) => [...prev.filter((item) => item.id !== entry.id), entry]);
   });
@@ -41,6 +44,7 @@ function Harness({ onReady }: { onReady: (api: HarnessApi) => void }) {
       saveRef.current = save;
     },
     notifications: notifications.current,
+    pngReads: pngReads.current,
   });
 
   const dictionary: Dictionary = {
@@ -67,6 +71,10 @@ function Harness({ onReady }: { onReady: (api: HarnessApi) => void }) {
           notifications.current.push(message);
         }}
         presets={presets}
+        onPickPng={() => {}}
+        onReadPng={(source: PromptSource) => {
+          pngReads.current.push(source.name);
+        }}
         characterNegative=""
         onCharacterNegativeChange={() => {}}
         shown
@@ -336,15 +344,23 @@ it('does not save while an IME composition is confirming, and Escape or cancel d
   await type(aliasInput(), '手を振る');
   const composing = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, isComposing: true });
   await act(async () => aliasInput().dispatchEvent(composing));
-  expect(composing.defaultPrevented).toBe(true);
+  expect(composing.defaultPrevented).toBe(false);
   expect(api.getEntries()).toEqual([]);
   expect(aliasInput().value).toBe('手を振る');
 
   const imeKey = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
   Object.defineProperty(imeKey, 'keyCode', { value: 229 });
   await act(async () => aliasInput().dispatchEvent(imeKey));
-  expect(imeKey.defaultPrevented).toBe(true);
+  expect(imeKey.defaultPrevented).toBe(false);
   expect(api.getEntries()).toEqual([]);
+
+  const select = dialog().querySelector('select')!;
+  select.focus();
+  const selectEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+  await act(async () => select.dispatchEvent(selectEnter));
+  expect(selectEnter.defaultPrevented).toBe(false);
+  expect(api.getEntries()).toEqual([]);
+  expect(dialog().querySelector('select')?.value).toBe('pose');
 
   const cancelEvent = new Event('cancel', { bubbles: true, cancelable: true });
   await act(async () => dialog().dispatchEvent(cancelEvent));
@@ -359,6 +375,26 @@ it('does not save while an IME composition is confirming, and Escape or cancel d
   expect(container.querySelector('dialog.register-tag-dialog')).toBeNull();
   expect(api.notifications).toEqual([]);
   expect(api.getEntries()).toEqual([]);
+});
+
+it('ignores a PNG dropped on the open registration dialog and accepts one after it closes', async () => {
+  await addTag('構図', 'close-up');
+  await openRegister('close-up');
+  const during = new Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(during, 'dataTransfer', {
+    value: { types: ['Files'], files: [new File(['png'], 'during.png', { type: 'image/png' })] },
+  });
+  await act(async () => dialog().dispatchEvent(during));
+  expect(api.pngReads).toEqual([]);
+  expect(container.querySelector('dialog.register-tag-dialog')).not.toBeNull();
+
+  await click([...dialog().querySelectorAll('button')].find((button) => button.textContent === 'キャンセル')!);
+  const after = new Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(after, 'dataTransfer', {
+    value: { types: ['Files'], files: [new File(['png'], 'after.png', { type: 'image/png' })] },
+  });
+  await act(async () => container.querySelector('.editor')!.dispatchEvent(after));
+  expect(api.pngReads).toEqual(['after.png']);
 });
 
 it('does not offer dictionary registration for an unclassified tag', async () => {
