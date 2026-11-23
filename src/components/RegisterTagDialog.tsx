@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { CategoryKey } from '../types';
 import { CATEGORIES, isCategoryKey } from '../lib/categories';
 import { clampWeight } from '../lib/prompt';
@@ -107,7 +108,8 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onClos
     form.current?.requestSubmit();
   };
 
-  return (
+  // 狭い画面では編集ペインが display:none になる。中にあるとモーダルだけが残り、操作できなくなる。
+  return createPortal(
     <dialog
       ref={dialog}
       className="app-dialog register-tag-dialog"
@@ -171,6 +173,7 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onClos
           </p>
         )}
       </form>
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }

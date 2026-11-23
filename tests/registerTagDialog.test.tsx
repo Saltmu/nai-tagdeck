@@ -151,7 +151,7 @@ function registerButton(tag: string): HTMLButtonElement | null {
 }
 
 function dialog(): HTMLDialogElement {
-  const element = container.querySelector<HTMLDialogElement>('dialog.register-tag-dialog');
+  const element = document.querySelector<HTMLDialogElement>('dialog.register-tag-dialog');
   if (!element) throw new Error('登録ダイアログが開いていません');
   return element;
 }
@@ -226,7 +226,7 @@ it('registers a base tag with an alias, category, and weight without leaving the
   await type(opened.querySelector('input[type="number"]')!, '1.4');
   await pressEnter(aliasInput());
 
-  expect(container.querySelector('dialog.register-tag-dialog')).toBeNull();
+  expect(document.querySelector('dialog.register-tag-dialog')).toBeNull();
   expect(document.activeElement?.getAttribute('aria-label')).toBe('custom flower を編集');
   expect(api.notifications).toEqual(['「custom flower」（花 はな）を辞書に登録しました']);
   const saved = api.getEntries().find((entry) => entry.tag === 'custom flower');
@@ -248,7 +248,7 @@ it('registers from a character row and keeps an empty alias on Enter', async () 
   await openRegister('silver hair');
   expect(dialog().querySelector('select')?.value).toBe('appearance');
   await pressEnter(aliasInput());
-  expect(container.querySelector('dialog.register-tag-dialog')).toBeNull();
+  expect(document.querySelector('dialog.register-tag-dialog')).toBeNull();
   expect(api.notifications).toEqual(['「silver hair」を辞書に登録しました']);
   expect(api.getEntries()[0]).toMatchObject({ tag: 'silver hair', category: 'appearance', alias: '', default_weight: 1 });
   expect(registerButton('silver hair')).toBeNull();
@@ -282,7 +282,7 @@ it('does not register on Ctrl+Enter, Cmd+Enter, or a repeated Enter', async () =
   await pressEnter(aliasInput(), { metaKey: true });
   await pressEnter(aliasInput(), { repeat: true });
   expect(api.getEntries()).toEqual([]);
-  expect(container.querySelector('dialog.register-tag-dialog')).not.toBeNull();
+  expect(document.querySelector('dialog.register-tag-dialog')).not.toBeNull();
   expect(aliasInput().value).toBe('きらめき');
   await pressEnter(aliasInput());
   expect(api.getEntries()[0]).toMatchObject({ tag: 'sparkle', alias: 'きらめき' });
@@ -340,7 +340,7 @@ it('disables the actions while saving so the registration is not sent twice', as
   await click(submit);
   expect(calls).toHaveLength(1);
   await act(async () => finish());
-  expect(container.querySelector('dialog.register-tag-dialog')).toBeNull();
+  expect(document.querySelector('dialog.register-tag-dialog')).toBeNull();
 });
 
 it('does not save while an IME composition is confirming, and Escape or cancel discards the draft', async () => {
@@ -372,7 +372,7 @@ it('does not save while an IME composition is confirming, and Escape or cancel d
   const cancelEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
   await act(async () => cancel.dispatchEvent(cancelEnter));
   expect(cancelEnter.defaultPrevented).toBe(false);
-  expect(container.querySelector('dialog.register-tag-dialog')).not.toBeNull();
+  expect(document.querySelector('dialog.register-tag-dialog')).not.toBeNull();
 
   const submit = dialog().querySelector<HTMLButtonElement>('button[type="submit"]')!;
   submit.focus();
@@ -383,14 +383,14 @@ it('does not save while an IME composition is confirming, and Escape or cancel d
   const cancelEvent = new Event('cancel', { bubbles: true, cancelable: true });
   await act(async () => dialog().dispatchEvent(cancelEvent));
   expect(cancelEvent.defaultPrevented).toBe(true);
-  expect(container.querySelector('dialog.register-tag-dialog')).toBeNull();
+  expect(document.querySelector('dialog.register-tag-dialog')).toBeNull();
   expect(api.getEntries()).toEqual([]);
   expect(registerButton('waving')).not.toBeNull();
 
   await openRegister('waving');
   await type(aliasInput(), '手を振る');
   await click([...dialog().querySelectorAll('button')].find((button) => button.textContent === 'キャンセル')!);
-  expect(container.querySelector('dialog.register-tag-dialog')).toBeNull();
+  expect(document.querySelector('dialog.register-tag-dialog')).toBeNull();
   expect(api.notifications).toEqual([]);
   expect(api.getEntries()).toEqual([]);
 });
@@ -404,7 +404,7 @@ it('ignores a PNG dropped on the open registration dialog and accepts one after 
   });
   await act(async () => dialog().dispatchEvent(during));
   expect(api.pngReads).toEqual([]);
-  expect(container.querySelector('dialog.register-tag-dialog')).not.toBeNull();
+  expect(document.querySelector('dialog.register-tag-dialog')).not.toBeNull();
 
   await click([...dialog().querySelectorAll('button')].find((button) => button.textContent === 'キャンセル')!);
   const after = new Event('drop', { bubbles: true, cancelable: true });
