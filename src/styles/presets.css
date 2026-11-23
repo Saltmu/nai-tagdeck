@@ -39,6 +39,10 @@
   max-height: 16rem;
 }
 
+.preset-mode-chip {
+  flex: none;
+}
+
 .suggestion.is-current .suggestion-tag::after {
   content: ' ✓';
   color: var(--accent);

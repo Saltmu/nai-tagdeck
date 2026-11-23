@@ -2,12 +2,17 @@ import { describe, expect, it } from 'vitest';
 import {
   filterPresets,
   createPreset,
+  generationSaveForOverwrite,
   isEmptyWorkspace,
   mergePresets,
   normalizePresets,
   overwritePreset,
+  presetGenerationOf,
+  presetGenerationSummary,
+  presetLoadExtras,
   presetToWorkspace,
   renamePreset,
+  samePreset,
   sameWorkspace,
 } from '../src/lib/presets';
 import { backupImportMessage, parseBackup, toBackupJSON } from '../src/lib/backup';
@@ -264,5 +269,138 @@ describe('プリセットのネガティブ', () => {
     const ws = emptyWorkspace();
     expect(sameWorkspace(ws, withNegative(ws, 'other'))).toBe(false);
     expect(isEmptyWorkspace(withNegative(ws, 'other'))).toBe(true);
+  });
+});
+
+describe('プリセットの生成設定', () => {
+  const ws = emptyWorkspace();
+  const current = {
+    generation: { ...DEFAULT_GENERATION, seed: 42 },
+    characterNegativePrompt: 'blurry',
+  };
+  const furry = {
+    generation: { ...DEFAULT_GENERATION, mode: 'furry' as const, seed: 7 },
+    characterNegativePrompt: 'lowres',
+  };
+
+  it('生成設定はシードを除いて保存し、不正な値は捨てる', () => {
+    const saved = createPreset('ケモノ', ws, furry);
+    expect(saved.generation).toEqual(presetGenerationOf(furry.generation));
+    expect(saved.generation).not.toHaveProperty('seed');
+    expect(saved.characterNegativePrompt).toBe('lowres');
+    expect(presetGenerationSummary(saved.generation!)).toBe(
+      'ケモノ · 縦 832×1216 · 28 steps · スケール 5 · Euler Ancestral',
+    );
+
+    const [restored] = normalizePresets([{
+      name: '復元',
+      workspace: {},
+      generation: { ...furry.generation, steps: 20 },
+      characterNegativePrompt: '',
+    }]);
+    expect(restored!.generation).toMatchObject({ mode: 'furry', steps: 20 });
+    expect(restored!.generation).not.toHaveProperty('seed');
+    expect(restored!.characterNegativePrompt).toBe('');
+
+    const [dropped] = normalizePresets([{
+      name: '不正',
+      workspace: {},
+      generation: 'furry',
+      characterNegativePrompt: 1,
+    }]);
+    expect(dropped!.generation).toBeUndefined();
+    expect(dropped!.characterNegativePrompt).toBeUndefined();
+    expect(normalizePresets([{ name: '配列', workspace: {}, generation: [] }])[0]!.generation).toBeUndefined();
+  });
+
+  it('バックアップの version 1 のまま生成設定を往復する', () => {
+    const preset = createPreset('ケモノ', withTag(ws, 'solo'), furry);
+    const json = toBackupJSON({
+      dictionary: [],
+      presets: [preset],
+      workspace: ws,
+      settings: DEFAULT_SETTINGS,
+      generation: DEFAULT_GENERATION,
+    });
+    const raw = JSON.parse(json) as { version: number; presets: Array<{ generation?: { seed?: unknown }; characterNegativePrompt?: string }> };
+    expect(raw.version).toBe(1);
+    expect(raw.presets[0]?.generation).not.toHaveProperty('seed');
+    expect(raw.presets[0]?.characterNegativePrompt).toBe('lowres');
+    const parsed = parseBackup(json);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.data.presets[0]).toEqual(preset);
+  });
+
+  it('タグだけのプリセットは生成設定や共通キャラネガティブの変更を差分にしない', () => {
+    const preset = createPreset('タグのみ', withTag(ws, 'solo'));
+    expect(samePreset(preset, { workspace: preset.workspace, ...current })).toBe(true);
+    expect(samePreset(preset, { workspace: withTag(ws, 'other'), ...current })).toBe(false);
+    expect(generationSaveForOverwrite(preset, current)).toBeUndefined();
+    const overwritten = overwritePreset([preset], preset.id, withTag(ws, 'other'));
+    expect(overwritten[0]!.generation).toBeUndefined();
+    expect(overwritten[0]!.characterNegativePrompt).toBeUndefined();
+    expect(overwritten[0]!.workspace.base.quality[0]!.tag).toBe('other');
+  });
+
+  it('生成設定付きプリセットはシード以外の変更だけを差分にする', () => {
+    const preset = createPreset('ケモノ', ws, furry);
+    const loaded = { workspace: preset.workspace, generation: { ...furry.generation, seed: 99 }, characterNegativePrompt: 'lowres' };
+    expect(samePreset(preset, loaded)).toBe(true);
+    expect(samePreset(preset, { ...loaded, generation: { ...loaded.generation, steps: 20 } })).toBe(false);
+    expect(samePreset(preset, { ...loaded, generation: { ...loaded.generation, dynamicThresholding: true } })).toBe(false);
+    expect(samePreset(preset, { ...loaded, characterNegativePrompt: 'blurry' })).toBe(false);
+
+    const kept = overwritePreset([preset], preset.id, ws);
+    expect(kept[0]!.generation).toEqual(preset.generation);
+    expect(kept[0]!.characterNegativePrompt).toBe('lowres');
+
+    const updated = overwritePreset([preset], preset.id, ws, generationSaveForOverwrite(preset, current)!);
+    expect(updated[0]!.generation).toEqual(presetGenerationOf(current.generation));
+    expect(updated[0]!.generation).not.toHaveProperty('seed');
+    expect(updated[0]!.characterNegativePrompt).toBe('blurry');
+
+    const stripped = overwritePreset(updated, preset.id, ws, null);
+    expect(stripped[0]!.generation).toBeUndefined();
+    expect(stripped[0]!.characterNegativePrompt).toBeUndefined();
+  });
+
+  it('生成設定が無く共通キャラネガティブだけあるプリセットは、その文字列だけ上書きする', () => {
+    const [preset] = normalizePresets([{
+      id: 'p',
+      name: '旧',
+      workspace: {},
+      generation: 'bad',
+      characterNegativePrompt: 'old',
+      updated_at: 't',
+    }]);
+    expect(preset!.generation).toBeUndefined();
+    expect(preset!.characterNegativePrompt).toBe('old');
+    const edited = {
+      workspace: preset!.workspace,
+      generation: { ...DEFAULT_GENERATION, steps: 20, seed: 3 },
+      characterNegativePrompt: 'new',
+    };
+    expect(samePreset(preset!, edited)).toBe(false);
+    expect(samePreset(preset!, { ...edited, characterNegativePrompt: 'old' })).toBe(true);
+    const save = generationSaveForOverwrite(preset!, edited);
+    expect(save).toEqual({ characterNegativePrompt: 'new' });
+    const [updated] = overwritePreset([preset!], preset!.id, emptyWorkspace(), save);
+    expect(updated!.generation).toBeUndefined();
+    expect(updated!.characterNegativePrompt).toBe('new');
+    expect(samePreset(updated!, { ...edited, workspace: updated!.workspace })).toBe(true);
+  });
+
+  it('読み込みで変える項目だけを返し、シードは含めない', () => {
+    const preset = createPreset('ケモノ', ws, furry);
+    expect(presetLoadExtras(preset, {
+      generation: { ...furry.generation, seed: 3 },
+      characterNegativePrompt: 'lowres',
+    })).toBeUndefined();
+    expect(presetLoadExtras(preset, current)).toEqual({
+      generation: { mode: 'furry' },
+      characterNegativePrompt: 'lowres',
+    });
+    expect(presetLoadExtras(createPreset('タグのみ', ws), current)).toBeUndefined();
   });
 });
