@@ -356,3 +356,57 @@ it('follows an edited row onto its new page when dictionary order changes', asyn
   expect(container.querySelector('.dict-count')?.textContent).toContain('601〜601');
   expect(tags()).not.toContain('aaa');
 });
+
+it('does not discard an edit when IME composition ends on the same search text', async () => {
+  await render(numbered('tag', PAGE_SIZE + 1));
+  await click('さらに表示');
+  const edit = container.querySelector<HTMLButtonElement>('.dict-item button')!;
+  await act(async () => edit.click());
+  const tagInput = container.querySelector<HTMLInputElement>('.entry-form input')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(tagInput, 'changed');
+    tagInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  const search = container.querySelector<HTMLInputElement>('input[aria-label="辞書を絞り込む"]')!;
+  await act(async () => {
+    search.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  });
+  await setSearch('あ');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, '');
+    search.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+  });
+  expect(container.querySelector('dialog.app-dialog-confirm')).toBeNull();
+  expect(search.value).toBe('');
+  expect(container.querySelector<HTMLInputElement>('.entry-form input')!.value).toBe('changed');
+  expect(container.querySelector('.dict-count')?.textContent).toContain('301〜');
+});
+
+it('does not offer to discard a row while its save is still running', async () => {
+  let releaseSave: () => void = () => {};
+  const save = vi.fn(() => new Promise<void>((resolve) => {
+    releaseSave = resolve;
+  }));
+  const entries = numbered('tag', PAGE_SIZE * 2 + 1);
+  await act(async () => {
+    root.render(
+      <DialogProvider>
+        <DictionaryView dictionary={{ ...dictionary(entries), save }} notify={() => {}} />
+      </DialogProvider>,
+    );
+  });
+  await click('さらに表示');
+  expect(button('さらに表示')?.disabled).toBe(false);
+  const edit = container.querySelector<HTMLButtonElement>('.dict-item button')!;
+  await act(async () => edit.click());
+  await click('保存');
+  expect(save).toHaveBeenCalledOnce();
+  expect(button('さらに表示')?.disabled).toBe(true);
+  expect(container.querySelector('dialog.app-dialog-confirm')).toBeNull();
+  expect(container.querySelector('.entry-form')).not.toBeNull();
+
+  await act(async () => releaseSave());
+  expect(container.querySelector('.entry-form')).toBeNull();
+  expect(button('さらに表示')?.disabled).toBe(false);
+});

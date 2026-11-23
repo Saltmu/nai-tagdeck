@@ -34,6 +34,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
   const queryComposing = useRef(false);
   const confirmingFilter = useRef(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ImportResult } | null>(null);
   const [restoring, setRestoring] = useState(false);
   const listRef = useRef<HTMLElement>(null);
@@ -76,6 +77,15 @@ export function DictionaryView({ dictionary, notify }: Props) {
   };
 
   const applyListFilter = async (nextQuery: string, nextCategory: CategoryKey | 'all') => {
+    if (nextQuery === query && nextCategory === filterCategory) {
+      setQueryDraft(query);
+      return;
+    }
+    // 保存の完了前に破棄させない。書き込みは続いている。
+    if (savingEdit && editLeavesFirstPage(nextQuery, nextCategory)) {
+      setQueryDraft(query);
+      return;
+    }
     if (editLeavesFirstPage(nextQuery, nextCategory)) {
       if (confirmingFilter.current) return;
       confirmingFilter.current = true;
@@ -97,7 +107,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
   };
 
   const showPage = async (next: number) => {
-    if (next === page) return;
+    if (next === page || savingEdit) return;
     if (editingId && editingId !== NEW) {
       const ok = await dialogs.confirm('編集中の内容を破棄してページを移動しますか？', {
         okLabel: '破棄して移動',
@@ -112,10 +122,10 @@ export function DictionaryView({ dictionary, notify }: Props) {
 
   const pageNav = (label: string) => (
     <nav className="dict-pager" aria-label={label}>
-      <button type="button" className="btn" disabled={page === 0} onClick={() => void showPage(page - 1)}>
+      <button type="button" className="btn" disabled={page === 0 || savingEdit} onClick={() => void showPage(page - 1)}>
         前を表示
       </button>
-      <button type="button" className="btn" disabled={page >= pageCount - 1} onClick={() => void showPage(page + 1)}>
+      <button type="button" className="btn" disabled={page >= pageCount - 1 || savingEdit} onClick={() => void showPage(page + 1)}>
         さらに表示
       </button>
     </nav>
@@ -124,10 +134,13 @@ export function DictionaryView({ dictionary, notify }: Props) {
   const handleSave = async (entry: DictEntry): Promise<string | null> => {
     const dup = findDuplicate(entries, entry);
     if (dup) return `「${dup.tag}」は ${categoryLabel(dup.category)} に登録済みです`;
+    setSavingEdit(true);
     try {
       await save(entry);
     } catch (e) {
       return `保存できませんでした: ${String(e)}`;
+    } finally {
+      setSavingEdit(false);
     }
     setEditingId(null);
     notify(`「${entry.tag}」を保存しました`);
