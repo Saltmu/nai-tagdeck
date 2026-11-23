@@ -7,7 +7,7 @@ import { DialogProvider } from '../src/components/Dialogs';
 import { TabSyncNotice } from '../src/components/TabSyncNotice';
 import { useImages } from '../src/hooks/useImages';
 import { useTabSync } from '../src/hooks/useTabSync';
-import { getKV, listEntries, replaceAllEntries, replaceKV, setKV } from '../src/lib/db';
+import { getKV, listEntries, readSyncGuard, replaceAllEntries, replaceKV, replaceSavedScopes, setKV } from '../src/lib/db';
 import { requestImages } from '../src/lib/novelai';
 import { getTabSyncConflict, receiveTabSyncMessage, resetTabSyncForTests } from '../src/lib/tabSync';
 
@@ -22,6 +22,7 @@ vi.mock('../src/lib/db', () => {
     listEntries: vi.fn(),
     replaceAllEntries: vi.fn(),
     replaceKV: vi.fn(),
+    replaceSavedScopes: vi.fn(),
     readSyncEpoch: vi.fn(async () => 0),
     readSyncGuard: vi.fn(async () => ({ seqs: {}, epoch: 0 })),
     putEntry: vi.fn(),
@@ -61,6 +62,7 @@ beforeEach(() => {
   vi.mocked(listEntries).mockResolvedValue([]);
   vi.mocked(replaceAllEntries).mockResolvedValue(undefined);
   vi.mocked(replaceKV).mockResolvedValue(undefined);
+  vi.mocked(replaceSavedScopes).mockResolvedValue(undefined);
   vi.mocked(requestImages).mockResolvedValue([{ blob: new Blob(['png'], { type: 'image/png' }) }]);
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
   vi.stubGlobal('URL', class extends URL {
@@ -129,7 +131,7 @@ describe('TabSyncNotice', () => {
         confirmOverwrite: async () => false,
         reloadStores: async () => { setNote('after'); },
         saveLocal: async () => {},
-        readEpoch: async () => 0,
+        readGuard: async () => ({ seqs: {}, epoch: 0 }),
         resyncToken: () => {},
       });
       return (
@@ -162,7 +164,7 @@ describe('TabSyncNotice', () => {
         confirmOverwrite: async () => false,
         reloadStores: async () => {},
         saveLocal: async () => {},
-        readEpoch: async () => 0,
+        readGuard: async () => ({ seqs: {}, epoch: 0 }),
         resyncToken,
       });
       return <TabSyncNotice conflict={sync.conflict} busy={sync.busy} error={sync.error} onReload={sync.reloadLatest} onPrefer={sync.preferLocal} />;
@@ -181,16 +183,16 @@ describe('TabSyncNotice', () => {
   });
 
   it('includes a scope that arrives while the reset generation is checked again', async () => {
-    let releaseEpoch!: (epoch: number) => void;
+    let releaseGuard!: (guard: { seqs: Record<string, number>; epoch: number }) => void;
     const saveLocal = vi.fn(async () => {});
     function Harness() {
       const sync = useTabSync({
         confirmOverwrite: async () => true,
         reloadStores: async () => {},
         saveLocal,
-        readEpoch: vi.fn()
-          .mockResolvedValueOnce(0)
-          .mockImplementationOnce(() => new Promise<number>((resolve) => { releaseEpoch = resolve; })),
+        readGuard: vi.fn()
+          .mockResolvedValueOnce({ seqs: {}, epoch: 0 })
+          .mockImplementationOnce(() => new Promise((resolve) => { releaseGuard = resolve; })),
         resyncToken: () => {},
       });
       return <TabSyncNotice conflict={sync.conflict} busy={sync.busy} error={sync.error} onReload={sync.reloadLatest} onPrefer={sync.preferLocal} />;
@@ -202,11 +204,11 @@ describe('TabSyncNotice', () => {
     await act(async () => button('このタブの内容を優先して保存する').click());
     await act(async () => {
       receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'workspace', seq: 2, at: 2 });
-      releaseEpoch(0);
+      releaseGuard({ seqs: {}, epoch: 0 });
     });
     expect(saveLocal).toHaveBeenCalledWith(expect.objectContaining({
       scopes: expect.arrayContaining(['settings', 'workspace']),
-    }), 0);
+    }), { seqs: {}, epoch: 0 });
   });
 
   it('shows a notice when the reset generation cannot be read', async () => {
@@ -215,7 +217,7 @@ describe('TabSyncNotice', () => {
         confirmOverwrite: async () => true,
         reloadStores: async () => {},
         saveLocal: async () => {},
-        readEpoch: async () => { throw new Error('idb down'); },
+        readGuard: async () => { throw new Error('idb down'); },
         resyncToken: () => {},
       });
       return <TabSyncNotice conflict={sync.conflict} busy={sync.busy} error={sync.error} onReload={sync.reloadLatest} onPrefer={sync.preferLocal} />;
@@ -252,12 +254,18 @@ describe('App tab sync', () => {
     const dialog = container.querySelector('dialog');
     expect(dialog?.textContent).toContain('別のタブでの変更を上書きし、このタブの内容を保存しますか？');
     await act(async () => button('上書きして保存', dialog!).click());
-    expect(replaceKV).toHaveBeenCalledWith('workspace', expect.objectContaining({
-      base: expect.objectContaining({
-        quality: expect.arrayContaining([expect.objectContaining({ tag: 'tab-sync-remote' })]),
+    expect(replaceSavedScopes).toHaveBeenCalledWith(expect.objectContaining({
+      kv: expect.objectContaining({
+        workspace: expect.objectContaining({
+          base: expect.objectContaining({
+            quality: expect.arrayContaining([expect.objectContaining({ tag: 'tab-sync-remote' })]),
+          }),
+        }),
       }),
-    }), 0, 0);
-    expect(replaceAllEntries).toHaveBeenCalledWith([], 0, 0);
+      dictionary: [],
+    }), 0, {});
+    expect(replaceKV).not.toHaveBeenCalled();
+    expect(replaceAllEntries).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain('このタブの自動保存を停止しています');
   });
 
@@ -303,7 +311,46 @@ describe('App tab sync', () => {
     await act(async () => button('このタブの内容を優先して保存する').click());
     const dialog = container.querySelector('dialog');
     await act(async () => button('上書きして保存', dialog!).click());
-    expect(replaceKV).not.toHaveBeenCalled();
+    expect(replaceSavedScopes).not.toHaveBeenCalled();
     expect(container.textContent).toContain('読み込みが終わっていないデータがあるため、保存を中止しました');
+  });
+
+  it('asks for confirmation again when another tab saves during the prompt', async () => {
+    vi.mocked(readSyncGuard)
+      .mockResolvedValueOnce({ seqs: { workspace: 1 }, epoch: 0 })
+      .mockResolvedValueOnce({ seqs: { workspace: 1 }, epoch: 0 })
+      .mockResolvedValueOnce({ seqs: { workspace: 2 }, epoch: 0 });
+    await act(async () => root.render(<DialogProvider><App onResetAll={() => {}} /></DialogProvider>));
+    await act(async () => {
+      receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'workspace', seq: 6, at: 6 });
+    });
+    await act(async () => button('このタブの内容を優先して保存する').click());
+    const dialog = container.querySelector('dialog');
+    await act(async () => button('上書きして保存', dialog!).click());
+    expect(replaceSavedScopes).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('確認のあとで別のタブが保存したため、もう一度確認してください');
+    expect(container.textContent).toContain('このタブの自動保存を停止しています');
+  });
+
+  it('keeps edits made while the latest data is still loading', async () => {
+    await act(async () => root.render(<DialogProvider><App onResetAll={() => {}} /></DialogProvider>));
+    await act(async () => {
+      receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'workspace', seq: 7, at: 7 });
+    });
+    let release!: (entries: []) => void;
+    vi.mocked(listEntries).mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    workspaceValue = { base: { quality: [{ tag: 'tab-sync-remote', enabled: true, weight: 1 }] }, negative: [] };
+    await act(async () => button('最新のデータを読み込む').click());
+    expect(container.querySelector('header')?.hasAttribute('inert')).toBe(true);
+    expect(container.querySelector('main')?.hasAttribute('inert')).toBe(true);
+    const label = Array.from(container.querySelectorAll('label')).find((node) => node.textContent?.includes('tab-sync-local'));
+    const input = label?.querySelector('input');
+    if (!input) throw new Error('checkbox missing');
+    await act(async () => input.click());
+    await act(async () => { release([]); });
+    expect(container.textContent).toContain('読み込み中にこのタブで編集したため、最新データの反映を中止しました');
+    expect(container.textContent).toContain('tab-sync-local');
+    expect(container.textContent).not.toContain('tab-sync-remote');
+    expect(container.querySelector('header')?.hasAttribute('inert')).toBe(false);
   });
 });

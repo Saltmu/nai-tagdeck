@@ -1,5 +1,6 @@
+import { openDB } from 'idb';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { clearAllData, getKV, listEntries, putEntry, readSyncEpoch, readSyncGuard, replaceAllEntries, replaceKV, setKV, StaleWriteError } from '../src/lib/db';
+import { clearAllData, getKV, listEntries, putEntry, readSyncEpoch, readSyncGuard, replaceAllEntries, replaceKV, replaceSavedScopes, setKV, StaleWriteError } from '../src/lib/db';
 import type { DictEntry } from '../src/types';
 
 interface Guard {
@@ -98,6 +99,27 @@ describe('sync guard', () => {
     await bumpGuard((current) => { current.seqs.workspace = (current.seqs.workspace ?? 0) + 1; });
     await expect(replaceKV('workspace', { tag: 'preferred' }, guard.epoch, guard.seqs.workspace ?? 0)).rejects.toMatchObject({ scope: 'workspace' });
     expect(await getKV('workspace')).toEqual({ tag: 'local' });
+  });
+
+  it('rejects a tab that still opens the database version from before the sync guard', async () => {
+    await setKV('workspace', { tag: 'kept' });
+    await expect(openDB('nai-tagdeck', 1)).rejects.toThrow();
+    expect(await getKV('workspace')).toEqual({ tag: 'kept' });
+  });
+
+  it('keeps earlier scopes when a later confirmed overwrite is stale', async () => {
+    await setKV('workspace', { tag: 'workspace' });
+    await putEntry(entry('kept'));
+    const guard = await readSyncGuard();
+    await bumpGuard((current) => {
+      current.seqs.dictionary = (current.seqs.dictionary ?? 0) + 1;
+    });
+    await expect(replaceSavedScopes({
+      kv: { workspace: { tag: 'replaced' } },
+      dictionary: [entry('replaced')],
+    }, guard.epoch, guard.seqs)).rejects.toMatchObject({ scope: 'dictionary' });
+    expect(await getKV('workspace')).toEqual({ tag: 'workspace' });
+    expect((await listEntries()).map((item) => item.id)).toEqual(['kept']);
   });
 
   it('writes a confirmed snapshot for the same reset generation and refuses an older one', async () => {

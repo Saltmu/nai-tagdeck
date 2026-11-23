@@ -30,7 +30,7 @@ import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/p
 import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { TabSyncNotice } from './components/TabSyncNotice';
 import { useTabSync } from './hooks/useTabSync';
-import { readSyncEpoch, readSyncGuard, replaceAllEntries, replaceKV, type KVKey } from './lib/db';
+import { readSyncGuard, replaceSavedScopes, StaleWriteError, type KVKey } from './lib/db';
 import { adoptPersistedValue, notePersisted, readReloadSnapshot } from './hooks/usePersistence';
 import { orderedScopesToSave, publishTabSync, setScopeDirty, type SyncScope } from './lib/tabSync';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
@@ -116,11 +116,29 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   }, [kvStates]);
   const tabSync = useTabSync({
     confirmOverwrite: () => dialogs.confirm('別のタブでの変更を上書きし、このタブの内容を保存しますか？', { okLabel: '上書きして保存' }),
-    readEpoch: () => readSyncEpoch(),
+    readGuard: () => readSyncGuard(),
     resyncToken: () => token.resync(),
     reloadStores: async () => {
+      const mark = {
+        workspace: workspaceRef.current,
+        settings: settingsRef.current,
+        generation: generationRef.current,
+        presets: presetsRef.current.presets,
+        activeId: presetsRef.current.activeId,
+        entries: entriesRef.current,
+      };
       const next = reloadRevisionRef.current + 1;
       await readReloadSnapshot(next);
+      if (
+        workspaceRef.current !== mark.workspace
+        || settingsRef.current !== mark.settings
+        || generationRef.current !== mark.generation
+        || presetsRef.current.presets !== mark.presets
+        || presetsRef.current.activeId !== mark.activeId
+        || entriesRef.current !== mark.entries
+      ) {
+        throw new Error('読み込み中にこのタブで編集したため、最新データの反映を中止しました');
+      }
       reloadRevisionRef.current = next;
       const kvReady = new Promise<void>((resolve, reject) => {
         kvWaiters.current.set(next, { resolve, reject });
@@ -128,7 +146,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       setReloadRevision(next);
       await Promise.all([kvReady, dictionaryRef.current.reload(next)]);
     },
-    saveLocal: async (conflict, epoch) => {
+    saveLocal: async (conflict, captured) => {
       const snapshots: Record<KVKey, unknown> = {
         workspace: workspaceRef.current,
         settings: settingsRef.current,
@@ -158,16 +176,38 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         }
       }
       const guard = await readSyncGuard();
-      if (guard.epoch !== epoch) throw new Error('別のタブでデータが削除されました');
+      if (guard.epoch !== captured.epoch) throw new Error('別のタブでデータが削除されました');
+      for (const scope of scopes) {
+        if ((guard.seqs[scope] ?? 0) !== (captured.seqs[scope] ?? 0)) {
+          throw new Error('確認のあとで別のタブが保存したため、もう一度確認してください');
+        }
+      }
+      const kv: Partial<Record<KVKey, unknown>> = {};
+      let dictionary: typeof entriesRef.current | undefined;
       for (const scope of scopes) {
         if (scope === 'dictionary') {
-          await replaceAllEntries(entriesRef.current, guard.epoch, guard.seqs.dictionary ?? 0);
+          dictionary = entriesRef.current;
+          continue;
+        }
+        if (isKvScope(scope)) kv[scope] = snapshots[scope];
+      }
+      try {
+        await replaceSavedScopes({ kv, dictionary }, captured.epoch, captured.seqs);
+      } catch (error) {
+        if (error instanceof StaleWriteError) {
+          throw new Error(error.scope === 'reset'
+            ? '別のタブでデータが削除されました'
+            : '確認のあとで別のタブが保存したため、もう一度確認してください');
+        }
+        throw error;
+      }
+      for (const scope of scopes) {
+        if (scope === 'dictionary') {
           setScopeDirty('dictionary', false);
           publishTabSync('updated', 'dictionary');
           continue;
         }
         if (!isKvScope(scope)) continue;
-        await replaceKV(scope, snapshots[scope], guard.epoch, guard.seqs[scope] ?? 0);
         adoptPersistedValue(scope, snapshots[scope]);
         notePersisted(scope);
         publishTabSync('updated', scope);
@@ -396,7 +436,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
 
   return (
     <div className="app">
-      <header ref={headerRef} className="app-header" data-occludes>
+      <header ref={headerRef} className="app-header" data-occludes inert={tabSync.busy || undefined}>
         <h1 className="app-title" aria-label="nai-tagdeck">
           <img className="brand-icon" src={`${import.meta.env.BASE_URL}brand/icon.svg`} width="24" height="24" alt="" />
           <img className="brand-wordmark" src={`${import.meta.env.BASE_URL}brand/wordmark.svg`} width="108" height="24" alt="" />
@@ -464,7 +504,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       {[persistence, settingsPersistence, generationPersistence, ...presets.persistence].filter((state) => state.error).map((state) => (
         <p className="error-banner" role="alert" key={state.error}>{state.error}。再読み込みして再試行してください。</p>
       ))}
-      <main className="app-main">
+      <main className="app-main" inert={tabSync.busy || undefined}>
         {/* 編集と生成は、広い画面では左右に並べ、狭い画面ではタブで切り替える（どちらも表示したまま CSS で隠す） */}
         <div className="workbench" data-tab={tab} hidden={!showWorkbench}>
           <div className="pane pane-editor">
@@ -533,7 +573,9 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             />
           </div>
         </div>
-        {tab === 'dictionary' && <DictionaryView dictionary={dictionary} notify={show} />}
+        {tab === 'dictionary' && (
+          <DictionaryView dictionary={dictionary} notify={show} reloadRevision={reloadRevision} />
+        )}
         {tab === 'settings' && (
           <SettingsView
             token={token}

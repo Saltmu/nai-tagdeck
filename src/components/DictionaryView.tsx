@@ -16,6 +16,8 @@ import { getTabSyncConflict, subscribeTabSyncConflict } from '../lib/tabSync';
 interface Props {
   dictionary: Dictionary;
   notify: (message: string) => void;
+  /** 他タブの内容を読み込んだ回数。この値が増えたときだけ下書きを閉じる。 */
+  reloadRevision: number;
 }
 
 const MAX_SHOWN = 300;
@@ -25,7 +27,7 @@ function blankEntry(category: CategoryKey): DictEntry {
   return { id: newId(), tag: '', category, alias: '', default_weight: 1, sort_order: 0, updated_at: '' };
 }
 
-export function DictionaryView({ dictionary, notify }: Props) {
+export function DictionaryView({ dictionary, notify, reloadRevision }: Props) {
   const dialogs = useDialogs();
   const { entries, loaded, save, saveMany, remove, importEntries, restoreInitial } = dictionary;
   const [query, setQuery] = useState('');
@@ -37,7 +39,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
   useEffect(() => {
     setEditingId(null);
     setPendingImport(null);
-  }, [entries]);
+  }, [reloadRevision]);
 
   const filtered = useMemo(
     () => filterEntries(entries, query, filterCategory),

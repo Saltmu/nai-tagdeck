@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { SyncGuard } from '../lib/db';
 import {
   clearTabSyncConflict,
   getTabSyncConflict,
@@ -12,9 +13,10 @@ interface TabSyncPorts {
   confirmOverwrite: () => Promise<boolean>;
   /** 画面を破棄せず、IndexedDB の最新値を読み直す。 */
   reloadStores: () => Promise<void>;
-  /** ロックを残したまま、このタブの内容を書き戻して他タブへ通知する。全削除の世代が変わっていたら失敗させる。 */
-  saveLocal: (conflict: TabSyncConflict, epoch: number) => Promise<void>;
-  readEpoch: () => Promise<number>;
+  /** ロックを残したまま、確認前に見た版でこのタブの内容を書き戻す。 */
+  saveLocal: (conflict: TabSyncConflict, captured: SyncGuard) => Promise<void>;
+  /** 画面の基準は進めず、保存されている世代と範囲ごとの版を返す。 */
+  readGuard: () => Promise<SyncGuard>;
   resyncToken: () => void;
 }
 
@@ -70,10 +72,10 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
     void (async () => {
       let started = false;
       try {
-        const storedEpoch = await portsRef.current.readEpoch();
+        const captured = await portsRef.current.readGuard();
         const ok = await portsRef.current.confirmOverwrite();
         if (!ok || busyRef.current || !getTabSyncConflict()) return;
-        if ((await portsRef.current.readEpoch()) !== storedEpoch) {
+        if ((await portsRef.current.readGuard()).epoch !== captured.epoch) {
           setError('別のタブでデータが削除されたため、保存を中止しました。内容を確認してからもう一度選んでください。');
           return;
         }
@@ -84,7 +86,7 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
         busyRef.current = true;
         setBusy(true);
         setError(null);
-        await portsRef.current.saveLocal(latest, storedEpoch);
+        await portsRef.current.saveLocal(latest, captured);
         if (getTabSyncEpoch() === syncEpoch) clearTabSyncConflict();
       } catch (caught) {
         setError(`このタブの内容を保存できません: ${String(caught)}`);

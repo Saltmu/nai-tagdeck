@@ -13,6 +13,12 @@ interface TagDeckDB extends DBSchema {
 
 const DB_NAME = 'nai-tagdeck';
 
+/**
+ * 版 2 は同期ガード導入前のタブを拒む。ストアの形は版 1 のまま。
+ * 新しいタブが開いたあと、版 1 のままのタブは開けなくなる。
+ */
+export const DB_VERSION = 2;
+
 /** IndexedDB の kv ストアにアプリが書くキー。 */
 export const KV_KEYS = ['workspace', 'settings', 'generation', 'presets', 'activePreset'] as const;
 export type KVKey = (typeof KV_KEYS)[number];
@@ -22,10 +28,12 @@ let dbPromise: Promise<IDBPDatabase<TagDeckDB>> | null = null;
 function getDB(): Promise<IDBPDatabase<TagDeckDB>> {
   if (!dbPromise) {
     let opened: IDBPDatabase<TagDeckDB> | null = null;
-    const promise = openDB<TagDeckDB>(DB_NAME, 1, {
-      upgrade(db) {
-        db.createObjectStore('dictionary', { keyPath: 'id' });
-        db.createObjectStore('kv');
+    const promise = openDB<TagDeckDB>(DB_NAME, DB_VERSION, {
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          db.createObjectStore('dictionary', { keyPath: 'id' });
+          db.createObjectStore('kv');
+        }
       },
       blocking(_currentVersion, _blockedVersion, event) {
         if (dbPromise === promise) dbPromise = null;
@@ -234,6 +242,68 @@ export async function setKV(key: KVKey, value: unknown): Promise<void> {
 /** 確認済みの世代と版のときだけ、このタブの内容でそのキーを上書きする。 */
 export async function replaceKV(key: KVKey, value: unknown, epoch: number, expectedSeq?: number): Promise<void> {
   await writeKV(key, value, epoch, expectedSeq);
+}
+
+export interface SavedScopeReplacement {
+  kv: Partial<Record<KVKey, unknown>>;
+  dictionary?: readonly DictEntry[];
+}
+
+/** 確認した版のまま、対象の範囲を一つのトランザクションで上書きする。 */
+export async function replaceSavedScopes(
+  replacement: SavedScopeReplacement,
+  epoch: number,
+  expectedSeqs: Partial<Record<string, number>>,
+): Promise<void> {
+  const kvKeys = KV_KEYS.filter((key) => Object.hasOwn(replacement.kv, key));
+  const entries = replacement.dictionary;
+  const scopes = [...kvKeys, ...(entries ? [DICTIONARY_SEQ] : [])];
+  if (scopes.length === 0) return;
+  const db = await open();
+  if (!hasTransaction(db)) throw new Error('まとめて保存するにはトランザクションが必要です');
+  const tx = db.transaction(entries ? ['dictionary', 'kv'] : ['kv'], 'readwrite');
+  const kv = tx.objectStore('kv');
+  const guard = await readGuard(kv);
+  const stale = staleScopeList(guard, epoch, scopes, expectedSeqs);
+  if (stale) {
+    await tx.done;
+    throw new StaleWriteError(stale);
+  }
+  try {
+    for (const key of kvKeys) {
+      await kv.put(replacement.kv[key], key);
+      guard.seqs[key] = (guard.seqs[key] ?? 0) + 1;
+    }
+    if (entries) {
+      const dictionary = tx.objectStore('dictionary');
+      await dictionary.clear();
+      await Promise.all(entries.map((entry) => dictionary.put(entry)));
+      guard.seqs[DICTIONARY_SEQ] = (guard.seqs[DICTIONARY_SEQ] ?? 0) + 1;
+    }
+    await kv.put(guard, SYNC_GUARD_KEY);
+    await tx.done;
+  } catch (error) {
+    try {
+      tx.abort();
+    } catch {
+      // 失敗したトランザクションはすでに終わっている
+    }
+    throw error;
+  }
+  for (const scope of scopes) remember(scope, guard.seqs[scope] ?? 0, guard.epoch);
+}
+
+function staleScopeList(
+  guard: SyncGuard,
+  epoch: number,
+  scopes: readonly string[],
+  expectedSeqs: Partial<Record<string, number>>,
+): string | null {
+  if (guard.epoch !== epoch) return 'reset';
+  for (const scope of scopes) {
+    if ((guard.seqs[scope] ?? 0) !== (expectedSeqs[scope] ?? 0)) return scope;
+  }
+  return null;
 }
 
 async function readGuardSnapshot(): Promise<SyncGuard> {
