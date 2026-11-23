@@ -32,12 +32,14 @@ function Harness({
   initialActiveId,
   initialGeneration,
   initialNegative,
+  settingsReady = true,
 }: {
   initialWorkspace: Workspace;
   initialPresets: Preset[];
   initialActiveId: string | null;
   initialGeneration: GenerationSettings;
   initialNegative: string;
+  settingsReady?: boolean;
 }) {
   const [workspace, rawDispatch] = useReducer(workspaceReducer, initialWorkspace);
   const [presets, setPresets] = useState(initialPresets);
@@ -82,6 +84,7 @@ function Harness({
         notify={setToast}
         generation={generation}
         characterNegativePrompt={characterNegativePrompt}
+        settingsReady={settingsReady}
       />
       </div>
       <button type="button" onClick={() => setGeneration((current) => ({ ...current, mode: current.mode === 'furry' ? 'anime' : 'furry' }))}>
@@ -103,6 +106,7 @@ async function renderHarness(props: {
   activeId?: string | null;
   generation?: GenerationSettings;
   negative?: string;
+  settingsReady?: boolean;
 }) {
   await act(async () => root.render(
     <Harness
@@ -111,6 +115,7 @@ async function renderHarness(props: {
       initialActiveId={props.activeId ?? null}
       initialGeneration={props.generation ?? { ...DEFAULT_GENERATION, mode: 'furry', seed: 7 }}
       initialNegative={props.negative ?? 'lowres'}
+      settingsReady={props.settingsReady}
     />,
   ));
 }
@@ -265,4 +270,45 @@ it('does not open a PNG import when a file is dropped on the save dialog', async
   expect(event.defaultPrevented).toBe(true);
   expect(container.querySelector('.drop-probe')?.getAttribute('data-drops')).toBe('0');
   expect(saveDialog()).toBe(dialog);
+});
+
+it('does not write generation settings before they have loaded', async () => {
+  const workspace = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'solo' });
+  const preset = createPreset('基本', workspace, {
+    generation: { ...DEFAULT_GENERATION, mode: 'anime' },
+    characterNegativePrompt: 'blurry',
+  });
+  await renderHarness({
+    workspace,
+    presets: [preset],
+    activeId: preset.id,
+    generation: { ...DEFAULT_GENERATION, mode: 'furry' },
+    negative: 'changed',
+    settingsReady: false,
+  });
+  expect(container.textContent).toContain('変更あり');
+  await click(button('変更を上書き'));
+  expect(container.querySelector('.toast')?.textContent).toBe('生成設定を読み込めていないため、上書きできません');
+  expect(container.textContent).toContain('変更あり');
+
+  await click(button('新しいプリセットとして保存'));
+  const dialog = saveDialog();
+  if (!dialog) throw new Error('保存ダイアログがありません');
+  const checkbox = dialog.querySelector('input[type="checkbox"]') as HTMLInputElement;
+  expect(checkbox.disabled).toBe(true);
+  expect(checkbox.checked).toBe(false);
+  expect(dialog.textContent).toContain('タグだけ保存できます');
+  const name = dialog.querySelector('input[type="text"]') as HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  await act(async () => {
+    setter.call(name, 'タグだけ');
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await click(button('保存', dialog));
+  const search = container.querySelector<HTMLInputElement>('.preset-search input')!;
+  await act(async () => { search.focus(); });
+  const options = [...container.querySelectorAll('[role="option"]')];
+  expect(options.map((option) => option.textContent)).toContain('タグだけ');
+  expect(options.find((option) => option.textContent?.includes('タグだけ'))?.querySelector('.preset-mode-chip')).toBeNull();
+  expect(options.find((option) => option.textContent?.includes('基本'))?.querySelector('.preset-mode-chip')?.textContent).toBe('アニメ');
 });

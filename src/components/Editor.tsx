@@ -56,6 +56,8 @@ interface Props {
   onCharacterNegativeChange: (value: string) => void;
   /** プリセットへ保存・復元する生成設定。 */
   generation?: GenerationSettings;
+  /** 生成設定と共通キャラネガティブの読み込みが成功している。 */
+  settingsReady?: boolean;
   /** 位置ピッカーの縦横比に使う出力画像サイズ。 */
   canvasSize?: { width: number; height: number };
   /** 編集画面を開いている（false の間は他の画面を表示している）。 */
@@ -77,6 +79,7 @@ export function Editor({
   characterNegative,
   onCharacterNegativeChange,
   generation = DEFAULT_GENERATION,
+  settingsReady = true,
   canvasSize,
   shown,
 }: Props) {
@@ -262,6 +265,7 @@ export function Editor({
         notify={notify}
         generation={generation}
         characterNegativePrompt={characterNegative}
+        settingsReady={settingsReady}
         onPickPng={onPickPng}
       />
 

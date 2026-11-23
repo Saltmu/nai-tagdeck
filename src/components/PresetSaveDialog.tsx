@@ -10,13 +10,22 @@ function stopFileDrag(event: DragEvent<HTMLDialogElement>) {
 interface Props {
   initialName: string;
   includeGeneration: boolean;
+  /** 生成設定と共通キャラネガティブの読み込みが成功しているときだけ選べる。 */
+  canIncludeGeneration: boolean;
   summary: string;
   onCancel: () => void;
   onSave: (result: { name: string; includeGeneration: boolean }) => void;
 }
 
 /** プリセット名と、生成設定を一緒に保存するかの選択。 */
-export function PresetSaveDialog({ initialName, includeGeneration, summary, onCancel, onSave }: Props) {
+export function PresetSaveDialog({
+  initialName,
+  includeGeneration,
+  canIncludeGeneration,
+  summary,
+  onCancel,
+  onSave,
+}: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const id = useId();
@@ -76,10 +85,18 @@ export function PresetSaveDialog({ initialName, includeGeneration, summary, onCa
           onChange={(e) => setName(e.target.value)}
         />
         <label className="preset-save-option">
-          <input type="checkbox" checked={include} onChange={(e) => setInclude(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={canIncludeGeneration && include}
+            disabled={!canIncludeGeneration}
+            onChange={(e) => setInclude(e.target.checked)}
+          />
           生成設定と共通キャラネガティブも保存する
         </label>
-        {include && <p className="hint preset-save-summary">{summary}</p>}
+        {canIncludeGeneration && include && <p className="hint preset-save-summary">{summary}</p>}
+        {!canIncludeGeneration && (
+          <p className="hint preset-save-summary">生成設定を読み込めていないため、タグだけ保存できます。</p>
+        )}
         <div className="app-dialog-actions">
           <button type="button" className="btn" onClick={() => finish(null)}>キャンセル</button>
           <button type="submit" className="btn btn-primary">保存</button>

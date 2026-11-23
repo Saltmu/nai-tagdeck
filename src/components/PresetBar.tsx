@@ -33,6 +33,8 @@ interface Props {
   notify: (message: string) => void;
   generation: GenerationSettings;
   characterNegativePrompt: string;
+  /** 生成設定と共通キャラネガティブを IndexedDB から読み終えている。失敗時は false。 */
+  settingsReady?: boolean;
   onPickPng?: () => void;
 }
 
@@ -43,6 +45,7 @@ export function PresetBar({
   notify,
   generation,
   characterNegativePrompt,
+  settingsReady = true,
   onPickPng,
 }: Props) {
   const id = useId();
@@ -89,7 +92,16 @@ export function PresetBar({
 
   const commitSave = async (choice: { name: string; includeGeneration: boolean }) => {
     setSaveOpen(false);
-    const save = choice.includeGeneration ? { generation, characterNegativePrompt } : null;
+    if (choice.includeGeneration && !settingsReady) {
+      notify('生成設定を読み込めていないため、保存を中止しました');
+      return;
+    }
+    // 読み込み前は、チェックを外した扱いで既存の生成設定まで消さない。
+    const save = choice.includeGeneration
+      ? { generation, characterNegativePrompt }
+      : settingsReady
+        ? null
+        : undefined;
     const same = presets.find((p) => p.name === choice.name);
     if (same) {
       if (!(await dialogs.confirm(`「${choice.name}」はすでにあります。上書きしますか？`, { okLabel: '上書き' }))) return;
@@ -105,12 +117,12 @@ export function PresetBar({
 
   const overwrite = () => {
     if (!active) return;
-    setPresets(overwritePreset(
-      presets,
-      active.id,
-      workspace,
-      generationSaveForOverwrite(active, { generation, characterNegativePrompt }),
-    ));
+    const save = generationSaveForOverwrite(active, { generation, characterNegativePrompt });
+    if (save && !settingsReady) {
+      notify('生成設定を読み込めていないため、上書きできません');
+      return;
+    }
+    setPresets(overwritePreset(presets, active.id, workspace, save));
     notify(`プリセット「${active.name}」に変更を上書きしました`);
   };
 
@@ -167,7 +179,8 @@ export function PresetBar({
       {saveOpen && (
         <PresetSaveDialog
           initialName={active?.name ?? ''}
-          includeGeneration={active ? active.generation !== undefined : true}
+          includeGeneration={settingsReady && (active ? active.generation !== undefined : true)}
+          canIncludeGeneration={settingsReady}
           summary={presetGenerationSummary(presetGenerationOf(generation))}
           onCancel={() => setSaveOpen(false)}
           onSave={commitSave}

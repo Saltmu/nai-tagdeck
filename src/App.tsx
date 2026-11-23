@@ -48,6 +48,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const { workspace, dispatch: rawDispatch, loaded, persistence } = useWorkspace();
   const [settings, updateSettings, settingsPersistence] = useSettings(loaded);
   const [generation, updateGeneration, generationPersistence] = useGenerationSettings();
+  const settingsReady = generationPersistence.loaded && !generationPersistence.error
+    && settingsPersistence.loaded && !settingsPersistence.error;
   const token = useToken();
   const presets = usePresets();
   const toastRef = useRef<ToastHandle>(null);
@@ -265,15 +267,15 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       }
     }
     if (choice === 'save' && active) {
-      store.setPresets(overwritePreset(
-        store.presets,
-        active.id,
-        currentWorkspace,
-        generationSaveForOverwrite(active, {
-          generation: currentGeneration,
-          characterNegativePrompt: currentSettings.characterNegativePrompt,
-        }),
-      ));
+      const save = generationSaveForOverwrite(active, {
+        generation: currentGeneration,
+        characterNegativePrompt: currentSettings.characterNegativePrompt,
+      });
+      if (save && !settingsReady) {
+        show('生成設定を読み込めていないため、適用を中止しました');
+        return false;
+      }
+      store.setPresets(overwritePreset(store.presets, active.id, currentWorkspace, save));
     }
     const nextMode = nextGeneration?.mode ?? currentGeneration.mode;
     const extras: UndoExtras = {};
@@ -397,6 +399,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               characterNegative={settings.characterNegativePrompt}
               onCharacterNegativeChange={handleCharacterNegativeChange}
               generation={generation}
+              settingsReady={settingsReady}
               canvasSize={sizeOf(generation.size)}
               shown={tab === 'editor'}
             />
