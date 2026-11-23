@@ -312,3 +312,104 @@ it('does not write generation settings before they have loaded', async () => {
   expect(options.find((option) => option.textContent?.includes('タグだけ'))?.querySelector('.preset-mode-chip')).toBeNull();
   expect(options.find((option) => option.textContent?.includes('基本'))?.querySelector('.preset-mode-chip')?.textContent).toBe('アニメ');
 });
+
+function optionNamed(name: string): HTMLElement {
+  const found = [...container.querySelectorAll<HTMLElement>('[role="option"]')].find((node) => node.textContent?.includes(name));
+  if (!found) throw new Error(`候補がありません: ${name}`);
+  return found;
+}
+
+it('checks the generation option once settings finish loading', async () => {
+  const workspace = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'solo' });
+  const preset = createPreset('基本', workspace, {
+    generation: { ...DEFAULT_GENERATION, mode: 'anime' },
+    characterNegativePrompt: 'blurry',
+  });
+  const props = {
+    workspace,
+    presets: [preset],
+    activeId: preset.id,
+    generation: { ...DEFAULT_GENERATION, mode: 'furry' as const },
+    negative: 'changed',
+    settingsReady: false as const,
+  };
+  await renderHarness(props);
+  await click(button('新しいプリセットとして保存'));
+  const dialog = saveDialog();
+  if (!dialog) throw new Error('保存ダイアログがありません');
+  const checkbox = dialog.querySelector('input[type="checkbox"]') as HTMLInputElement;
+  expect(checkbox.disabled).toBe(true);
+  expect(checkbox.checked).toBe(false);
+
+  await renderHarness({ ...props, settingsReady: true });
+  const ready = saveDialog();
+  if (!ready) throw new Error('保存ダイアログが閉じています');
+  const readyCheckbox = ready.querySelector('input[type="checkbox"]') as HTMLInputElement;
+  expect(readyCheckbox.disabled).toBe(false);
+  expect(readyCheckbox.checked).toBe(true);
+  expect(ready.textContent).toContain('ケモノ · 縦 832×1216 · 28 steps · スケール 5 · Euler Ancestral');
+});
+
+it('does not switch presets when overwrite is blocked', async () => {
+  const workspace = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'solo' });
+  const current = createPreset('基本', workspace, {
+    generation: { ...DEFAULT_GENERATION, mode: 'anime' },
+    characterNegativePrompt: 'blurry',
+  });
+  const other = createPreset('別', workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'hat' }));
+  await renderHarness({
+    workspace,
+    presets: [current, other],
+    activeId: current.id,
+    generation: { ...DEFAULT_GENERATION, mode: 'furry' },
+    negative: 'changed',
+    settingsReady: false,
+  });
+  const search = container.querySelector<HTMLInputElement>('.preset-search input')!;
+  await act(async () => { search.focus(); });
+  await click(optionNamed('別'));
+  await click(button('変更を反映してから読み込む'));
+  expect(container.querySelector('.toast')?.textContent).toBe('生成設定を読み込めていないため、上書きできません');
+  expect(container.querySelector<HTMLInputElement>('.preset-search input')!.value).toBe('基本');
+  expect(state().dataset.mode).toBe('furry');
+  expect(container.textContent).toContain('変更あり');
+
+  await click(button('新規'));
+  await click(button('変更を反映してから新規作成'));
+  expect(container.querySelector('.toast')?.textContent).toBe('生成設定を読み込めていないため、上書きできません');
+  expect(container.querySelector<HTMLInputElement>('.preset-search input')!.value).toBe('基本');
+  expect(container.textContent).toContain('変更あり');
+});
+
+it('does not load a generation preset before settings are read', async () => {
+  const workspace = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'solo' });
+  const current = createPreset('タグのみ', workspace);
+  const generationPreset = createPreset('ケモノ用', workspace, {
+    generation: { ...DEFAULT_GENERATION, mode: 'furry' },
+    characterNegativePrompt: 'lowres',
+  });
+  const props = {
+    workspace,
+    presets: [current, generationPreset],
+    activeId: current.id,
+    generation: { ...DEFAULT_GENERATION, mode: 'anime' as const },
+    negative: 'blurry',
+    settingsReady: false as const,
+  };
+  await renderHarness(props);
+  expect(container.textContent).not.toContain('変更あり');
+  const search = container.querySelector<HTMLInputElement>('.preset-search input')!;
+  await act(async () => { search.focus(); });
+  await click(optionNamed('ケモノ用'));
+  expect(container.querySelector('.toast')?.textContent).toBe('生成設定を読み込めていないため、このプリセットは読み込めません');
+  expect(state().dataset).toMatchObject({ mode: 'anime', negative: 'blurry' });
+  expect(container.querySelector<HTMLInputElement>('.preset-search input')!.value).toBe('タグのみ');
+
+  await renderHarness({ ...props, settingsReady: true });
+  const readySearch = container.querySelector<HTMLInputElement>('.preset-search input')!;
+  await act(async () => { readySearch.focus(); });
+  await click(optionNamed('ケモノ用'));
+  expect(container.querySelector('.toast')?.textContent).toBe('「ケモノ用」を読み込みました（生成設定も反映）');
+  expect(state().dataset).toMatchObject({ mode: 'furry', negative: 'lowres' });
+  expect(container.querySelector<HTMLInputElement>('.preset-search input')!.value).toBe('ケモノ用');
+});

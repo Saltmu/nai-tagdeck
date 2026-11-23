@@ -51,6 +51,12 @@ export function PresetBar({
   const id = useId();
   const dialogs = useDialogs();
   const { presets, setPresets, activeId, setActiveId } = store;
+  const generationRef = useRef(generation);
+  const characterNegativeRef = useRef(characterNegativePrompt);
+  const settingsReadyRef = useRef(settingsReady);
+  generationRef.current = generation;
+  characterNegativeRef.current = characterNegativePrompt;
+  settingsReadyRef.current = settingsReady;
   const active = presets.find((p) => p.id === activeId) ?? null;
   const [saveOpen, setSaveOpen] = useState(false);
   const dirty = active
@@ -68,7 +74,7 @@ export function PresetBar({
       action,
       okLabel,
     });
-    if (choice === 'save') overwrite();
+    if (choice === 'save') return overwrite();
     return choice !== null;
   };
 
@@ -76,9 +82,17 @@ export function PresetBar({
     const preset = presets.find((p) => p.id === presetId);
     if (!preset || preset.id === active?.id) return;
     if (!(await confirmDiscard(`「${preset.name}」を読み込みますか？`, '読み込む'))) return;
+    const affectsSettings = preset.generation !== undefined || preset.characterNegativePrompt !== undefined;
+    if (affectsSettings && !settingsReadyRef.current) {
+      notify('生成設定を読み込めていないため、このプリセットは読み込めません');
+      return;
+    }
     dispatch(
       { type: 'replace', workspace: presetToWorkspace(preset.workspace, workspace) },
-      presetLoadExtras(preset, { generation, characterNegativePrompt }),
+      presetLoadExtras(preset, {
+        generation: generationRef.current,
+        characterNegativePrompt: characterNegativeRef.current,
+      }),
     );
     setActiveId(preset.id);
     notify(
@@ -116,14 +130,18 @@ export function PresetBar({
   };
 
   const overwrite = () => {
-    if (!active) return;
-    const save = generationSaveForOverwrite(active, { generation, characterNegativePrompt });
-    if (save && !settingsReady) {
+    if (!active) return false;
+    const save = generationSaveForOverwrite(active, {
+      generation: generationRef.current,
+      characterNegativePrompt: characterNegativeRef.current,
+    });
+    if (save && !settingsReadyRef.current) {
       notify('生成設定を読み込めていないため、上書きできません');
-      return;
+      return false;
     }
     setPresets(overwritePreset(presets, active.id, workspace, save));
     notify(`プリセット「${active.name}」に変更を上書きしました`);
+    return true;
   };
 
   const rename = async () => {
@@ -179,7 +197,7 @@ export function PresetBar({
       {saveOpen && (
         <PresetSaveDialog
           initialName={active?.name ?? ''}
-          includeGeneration={settingsReady && (active ? active.generation !== undefined : true)}
+          includeGeneration={active ? active.generation !== undefined : true}
           canIncludeGeneration={settingsReady}
           summary={presetGenerationSummary(presetGenerationOf(generation))}
           onCancel={() => setSaveOpen(false)}

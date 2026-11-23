@@ -48,8 +48,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const { workspace, dispatch: rawDispatch, loaded, persistence } = useWorkspace();
   const [settings, updateSettings, settingsPersistence] = useSettings(loaded);
   const [generation, updateGeneration, generationPersistence] = useGenerationSettings();
-  const settingsReady = generationPersistence.loaded && !generationPersistence.error
-    && settingsPersistence.loaded && !settingsPersistence.error;
+  // 読み込み成功だけを見る。書き込み失敗の error では、今の値をプリセットへ保存できなくしない。
+  const settingsReady = generationPersistence.loaded && settingsPersistence.loaded;
   const token = useToken();
   const presets = usePresets();
   const toastRef = useRef<ToastHandle>(null);

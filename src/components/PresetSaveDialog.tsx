@@ -52,7 +52,7 @@ export function PresetSaveDialog({
   const save = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    finish({ name: trimmed, includeGeneration: include });
+    finish({ name: trimmed, includeGeneration: canIncludeGeneration && include });
   };
 
   return (
