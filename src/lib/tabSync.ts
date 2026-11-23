@@ -2,11 +2,17 @@ import { newId } from './id';
 
 export type TabSyncType = 'updated' | 'reset';
 
+export interface TabSyncMeta {
+  rev: number;
+  epoch: number;
+}
+
 export interface TabSyncMessage {
   type: TabSyncType;
   senderId: string;
   seq: number;
   at: number;
+  meta?: TabSyncMeta;
 }
 
 export const TAB_SYNC_STORAGE_KEY = 'nai-tagdeck:sync-event';
@@ -19,12 +25,19 @@ let storageListener: ((event: StorageEvent) => void) | null = null;
 let preferStorage = false;
 const listeners = new Set<(message: TabSyncMessage) => void>();
 
+function isTabSyncMeta(raw: unknown): raw is TabSyncMeta {
+  if (!raw || typeof raw !== 'object') return false;
+  const meta = raw as Partial<TabSyncMeta>;
+  return typeof meta.rev === 'number' && Number.isFinite(meta.rev) && typeof meta.epoch === 'number' && Number.isFinite(meta.epoch);
+}
+
 function isTabSyncMessage(data: unknown): data is TabSyncMessage {
   if (!data || typeof data !== 'object') return false;
   const msg = data as Partial<TabSyncMessage>;
   if (msg.type !== 'updated' && msg.type !== 'reset') return false;
   if (typeof msg.senderId !== 'string' || !msg.senderId) return false;
   if (typeof msg.seq !== 'number' || typeof msg.at !== 'number') return false;
+  if (msg.meta !== undefined && !isTabSyncMeta(msg.meta)) return false;
   return true;
 }
 
@@ -93,12 +106,13 @@ function writeStorageFallback(message: TabSyncMessage): void {
 }
 
 /** 書き込み成功後に他タブへ知らせる。届かなくても保存結果には影響しない。 */
-export function publishTabSync(type: TabSyncType): void {
+export function publishTabSync(type: TabSyncType, meta?: TabSyncMeta): void {
   const message: TabSyncMessage = {
     type,
     senderId: tabId,
     seq: ++seq,
     at: Date.now(),
+    ...(meta ? { meta: { rev: meta.rev, epoch: meta.epoch } } : {}),
   };
   if (!preferStorage && typeof BroadcastChannel !== 'undefined') {
     const existing = channel;

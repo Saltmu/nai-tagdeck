@@ -327,10 +327,13 @@ export async function readSyncMeta(): Promise<SyncMeta> {
   return normalizeMeta(rawMeta);
 }
 
-/** 確認前にキャプチャした expectedMeta と一致する場合のみ、全ストアを 1 トランザクションで上書きする。 */
+/**
+ * 確認前にキャプチャした expectedMeta（省略時はタブの現在基準 baseMeta）と一致する場合のみ、
+ * 全ストアを 1 トランザクションで上書きする。
+ */
 export async function replaceAllAppData(
   replacement: AppDataReplacement,
-  expectedMeta: SyncMeta,
+  expectedMeta?: SyncMeta,
 ): Promise<SyncMeta> {
   return enqueueWrite(async () => {
     const db = await open();
@@ -339,7 +342,7 @@ export async function replaceAllAppData(
     tx.done.catch(() => {});
     const metaStore = tx.objectStore('meta');
     const current = normalizeMeta(await metaStore.get(SYNC_META_KEY));
-    const reason = compareMeta(current, expectedMeta);
+    const reason = compareMeta(current, expectedMeta ?? baseMeta);
     if (reason) {
       await tx.done;
       throw new StaleWriteError(reason);
@@ -383,6 +386,11 @@ export async function clearAllData(): Promise<void> {
     await tx.done;
     baseMeta = nextMeta;
   });
+}
+
+/** このタブが現在基準としている同期メタを返す（通知への添付用）。 */
+export function getBaseMeta(): SyncMeta | null {
+  return baseMeta ? { ...baseMeta } : null;
 }
 
 /** テスト用: タブが保持している基準リビジョンを任意の値へ設定（または初期化）する。 */

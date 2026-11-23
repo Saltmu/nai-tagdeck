@@ -197,7 +197,15 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   );
 
   const { getBackup, importBackup } = useBackupTransfer({
-    dictionary, presets, workspace, dispatch: replaceWithoutHistory, settings, updateSettings, generation, updateGeneration,
+    dictionary,
+    presets,
+    workspace,
+    dispatch: replaceWithoutHistory,
+    settings,
+    updateSettings,
+    generation,
+    updateGeneration,
+    commitAll: tabSync.commitAll,
   });
   const openSettings = useCallback(() => setTab('settings'), []);
   const { blocker, startGenerate } = useGenerationControls({

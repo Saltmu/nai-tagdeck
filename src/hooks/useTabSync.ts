@@ -1,12 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { migrateNegative } from '../lib/backup';
 import * as db from '../lib/db';
-import type { AppDataReplacement, AppDataSnapshot, KVKey } from '../lib/db';
+import type { AppDataReplacement, AppDataSnapshot, KVKey, SyncMeta } from '../lib/db';
 import { getDataResetSignal } from '../lib/reset';
-import { isStaleWriteError, publishTabSync, subscribeTabSync, type TabSyncType } from '../lib/tabSync';
+import { isStaleWriteError, publishTabSync, subscribeTabSync, type TabSyncMeta, type TabSyncType } from '../lib/tabSync';
 import { hasNegative } from '../lib/workspace';
+import type { DictEntry } from '../types';
 
 const DEFAULT_KV_KEYS: readonly KVKey[] = ['workspace', 'settings', 'generation', 'presets', 'activePreset'];
+
+function currentDbMeta(): SyncMeta | undefined {
+  return 'getBaseMeta' in db && typeof db.getBaseMeta === 'function' ? db.getBaseMeta() ?? undefined : undefined;
+}
+
+/** 受信した通知のリビジョンが、すでに読み込み・反映済みのメタに含まれているか。 */
+function isCoveredByLoaded(incoming: TabSyncMeta | undefined, loaded: SyncMeta | null): boolean {
+  if (!incoming || !loaded) return false;
+  if (incoming.epoch < loaded.epoch) return true;
+  if (incoming.epoch === loaded.epoch && incoming.rev <= loaded.rev) return true;
+  return false;
+}
 
 /** 既存テストが db.ts の一部だけをモックしている場合でも動作する読み込みアダプタ。 */
 async function loadAllSnapshot(): Promise<AppDataSnapshot> {
@@ -29,9 +42,11 @@ async function migrateLegacyWorkspaceInSnapshot(data: AppDataSnapshot): Promise<
   if (rawWorkspace === undefined || hasNegative(rawWorkspace)) return data;
   const migrated = migrateNegative(rawWorkspace, data.kv.settings);
   await db.setKV('workspace', migrated);
-  publishTabSync('updated');
+  const meta = currentDbMeta() ?? { rev: data.meta.rev + 1, epoch: data.meta.epoch };
+  publishTabSync('updated', meta);
   return {
     ...data,
+    meta,
     kv: { ...data.kv, workspace: migrated },
   };
 }
@@ -44,6 +59,7 @@ export interface SyncSnapshot {
 export interface CommittedSnapshot {
   revision: number;
   kv: Record<KVKey, unknown>;
+  dictionary?: readonly DictEntry[];
 }
 
 /** 永続化・辞書フックへ渡す同期ブリッジ（モジュールグローバルを持たず React 経由で連携する）。 */
@@ -75,6 +91,8 @@ export interface TabSyncController {
   reloadCount: number;
   reloadLatest: () => void;
   preferLocal: () => void;
+  /** バックアップ復元など全ストアを 1 トランザクションで保存・通知する。未対応環境（部分モック）は false。 */
+  commitAll: (replacement: AppDataReplacement) => Promise<boolean>;
 }
 
 function mergeConflict(prev: TabSyncType | null, next: TabSyncType): TabSyncType {
@@ -101,7 +119,7 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
   const conflictRef = useRef<TabSyncType | null>(null);
   const noticeSeqRef = useRef(0);
   const snapshotRevRef = useRef(0);
-  const lastLoadedEpochRef = useRef<number | null>(null);
+  const lastLoadedMetaRef = useRef<SyncMeta | null>(null);
   const commitRevRef = useRef(0);
   const busyRef = useRef(false);
 
@@ -127,7 +145,7 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
         if (!isCurrent()) return;
         const data = await migrateLegacyWorkspaceInSnapshot(raw);
         if (!isCurrent()) return;
-        lastLoadedEpochRef.current = data.meta.epoch;
+        lastLoadedMetaRef.current = data.meta;
         const rev = ++snapshotRevRef.current;
         setSnapshot({ revision: rev, data });
         setLoadError(null);
@@ -145,6 +163,7 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
 
   // 他タブからの更新・全削除通知および DB ブロック状態を購読する
   useEffect(() => subscribeTabSync((message) => {
+    if (isCoveredByLoaded(message.meta, lastLoadedMetaRef.current)) return;
     noteConflict(message.type);
   }), [noteConflict]);
 
@@ -155,7 +174,11 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
   ), []);
 
   const isLocked = useCallback(() => conflictRef.current !== null, []);
-  const onPersisted = useCallback(() => { publishTabSync('updated'); }, []);
+  const onPersisted = useCallback(() => {
+    const meta = currentDbMeta();
+    if (meta) lastLoadedMetaRef.current = meta;
+    publishTabSync('updated', meta);
+  }, []);
 
   const reloadLatest = useCallback(() => {
     const current = conflictRef.current;
@@ -170,8 +193,8 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
         if (resetSignal.aborted) return;
         const data = await migrateLegacyWorkspaceInSnapshot(raw);
         if (resetSignal.aborted) return;
-        const epochChanged = lastLoadedEpochRef.current !== null && data.meta.epoch !== lastLoadedEpochRef.current;
-        lastLoadedEpochRef.current = data.meta.epoch;
+        const epochChanged = lastLoadedMetaRef.current !== null && data.meta.epoch !== lastLoadedMetaRef.current.epoch;
+        lastLoadedMetaRef.current = data.meta;
         portsRef.current.onBeforeReloadApply();
         const rev = ++snapshotRevRef.current;
         setSnapshot({ revision: rev, data });
@@ -212,11 +235,12 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
         if (!ok || resetSignal.aborted || !conflictRef.current) return;
         const startNoticeSeq = noticeSeqRef.current;
         const replacement = portsRef.current.captureLocal();
-        await db.replaceAllAppData(replacement, capturedMeta);
+        const nextMeta = await db.replaceAllAppData(replacement, capturedMeta);
         if (resetSignal.aborted) return;
+        lastLoadedMetaRef.current = nextMeta;
         const commitRev = ++commitRevRef.current;
         setCommitted({ revision: commitRev, kv: replacement.kv });
-        publishTabSync('updated');
+        publishTabSync('updated', nextMeta);
         if (noticeSeqRef.current === startNoticeSeq) clearConflict();
       } catch (caught) {
         if (isStaleWriteError(caught)) {
@@ -235,6 +259,26 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
       }
     })();
   }, [clearConflict, noteConflict, resetSignal]);
+
+  const commitAll = useCallback(async (replacement: AppDataReplacement): Promise<boolean> => {
+    if (!('replaceAllAppData' in db) || typeof db.replaceAllAppData !== 'function') return false;
+    resetSignal.throwIfAborted();
+    if (conflictRef.current !== null) {
+      throw new DOMException('別のタブでデータが更新されたため、このタブの保存を停止しています', 'AbortError');
+    }
+    try {
+      const nextMeta = await db.replaceAllAppData(replacement);
+      resetSignal.throwIfAborted();
+      lastLoadedMetaRef.current = nextMeta;
+      const commitRev = ++commitRevRef.current;
+      setCommitted({ revision: commitRev, kv: replacement.kv, dictionary: replacement.dictionary });
+      publishTabSync('updated', nextMeta);
+      return true;
+    } catch (caught) {
+      if (isStaleWriteError(caught)) noteConflict(caught.reason);
+      throw caught;
+    }
+  }, [noteConflict, resetSignal]);
 
   const bridge = useMemo<SyncBridge>(() => ({
     locked: conflict !== null,
@@ -256,5 +300,6 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
     reloadCount,
     reloadLatest,
     preferLocal,
+    commitAll,
   };
 }

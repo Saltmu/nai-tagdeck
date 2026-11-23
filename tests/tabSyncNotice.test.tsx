@@ -573,4 +573,90 @@ describe('multi-tab sync notice & conflict resolution', () => {
     await click(button('編集'));
     expect(container.querySelector('output.preview-text')?.textContent).toContain('legacy-tag');
   });
+
+  it('commits backup restore in one transaction before notifying peers so another tab never sees partial state', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'before-backup' });
+    await writeFromOtherTab({
+      workspace: initialWs,
+      dictionary: [{ id: 'd1', tag: 'existing-tag', category: 'quality', alias: '', default_weight: 1, sort_order: 0, updated_at: '2026-01-01' }],
+    }, false);
+    await mountApp();
+    await click(button('設定'));
+
+    // 別タブのリスナーで通知を受けた瞬間の DB 状態を検査する
+    const peer = new FakeBroadcastChannel('nai-tagdeck:sync');
+    const observedAtNotice: Array<{ msg: unknown; snapshot: Awaited<ReturnType<typeof readAllAppData>> }> = [];
+    peer.onmessage = (event) => {
+      void readAllAppData().then((snapshot) => {
+        observedAtNotice.push({ msg: event.data, snapshot });
+      });
+    };
+
+    const backupWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'restored-ws-tag' });
+    const backupJson = JSON.stringify({
+      app: 'nai-tagdeck',
+      kind: 'backup',
+      version: 1,
+      dictionary: [{ id: 'd2', tag: 'restored-dict-tag', category: 'quality', alias: '', default_weight: 1, sort_order: 0, updated_at: '2026-01-02' }],
+      presets: [{ id: 'p1', name: '復元プリセット', workspace: backupWs, updated_at: '2026-01-02' }],
+      workspace: backupWs,
+      settings: { weightSyntax: 'brace', characterNegativePrompt: 'custom-neg' },
+      generation: { mode: 'furry', size: 'square', steps: 20, scale: 6, sampler: 'k_euler_ancestral', noiseSchedule: 'karras', seed: null, cfgRescale: 0, dynamicThresholding: false },
+    });
+    const file = new File([backupJson], 'backup.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => backupJson });
+    const input = container.querySelector<HTMLInputElement>('.backup-actions input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush(30);
+    const confirm = container.querySelector<HTMLDialogElement>('dialog.app-dialog-confirm');
+    await click(button('読み込む', confirm!));
+    await flush(100);
+    peer.close();
+
+    // 通知は 1 回だけで、その時点で辞書・プリセット・workspace・settings・generation すべてが揃っている
+    expect(observedAtNotice).toHaveLength(1);
+    const { snapshot } = observedAtNotice[0]!;
+    expect(snapshot.dictionary.map((e) => e.tag)).toEqual(['existing-tag', 'restored-dict-tag']);
+    expect((snapshot.kv.presets as Array<{ name: string }>).map((p) => p.name)).toEqual(['復元プリセット']);
+    expect((snapshot.kv.workspace as typeof backupWs).base.quality.map((t) => t.tag)).toEqual(['restored-ws-tag']);
+    expect(snapshot.kv.settings).toMatchObject({ weightSyntax: 'brace', characterNegativePrompt: 'custom-neg' });
+    expect(snapshot.kv.generation).toMatchObject({ mode: 'furry', size: 'square' });
+  });
+
+  it('ignores delayed notifications whose meta rev/epoch is already covered by the loaded snapshot', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'masterpiece' });
+    await writeFromOtherTab({ workspace: initialWs }, false);
+    const loadedSnapshot = await readAllAppData();
+
+    await mountApp();
+
+    // 読み込み済みスナップショットと同じまたは古い rev/epoch の遅延通知が届いてもロックしない
+    const peer = new FakeBroadcastChannel('nai-tagdeck:sync');
+    await act(async () => {
+      peer.postMessage({
+        type: 'updated',
+        senderId: 'other-tab',
+        seq: 1,
+        at: Date.now(),
+        meta: { rev: loadedSnapshot.meta.rev, epoch: loadedSnapshot.meta.epoch },
+      });
+    });
+    expect(container.querySelector('.tab-sync')).toBeNull();
+
+    // より新しい rev の通知は従来どおりロックする
+    await act(async () => {
+      peer.postMessage({
+        type: 'updated',
+        senderId: 'other-tab',
+        seq: 2,
+        at: Date.now(),
+        meta: { rev: loadedSnapshot.meta.rev + 1, epoch: loadedSnapshot.meta.epoch },
+      });
+    });
+    peer.close();
+    expect(container.querySelector('.tab-sync')?.textContent).toContain('別のタブでデータが更新されました');
+  });
 });
