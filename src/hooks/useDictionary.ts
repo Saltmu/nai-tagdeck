@@ -24,6 +24,8 @@ export function useDictionary(sync?: SyncBridge): Dictionary {
   const [error, setError] = useState<string | null>(null);
   const [resetSignal] = useState(getDataResetSignal);
   const latest = useRef<DictEntry[]>(entries);
+  const loadedRef = useRef(loaded);
+  loadedRef.current = loaded;
   const writes = useRef(Promise.resolve());
   const syncRef = useRef(sync);
   syncRef.current = sync;
@@ -36,6 +38,9 @@ export function useDictionary(sync?: SyncBridge): Dictionary {
   const enqueue = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
     const run = writes.current.then(() => {
       resetSignal.throwIfAborted();
+      if (!loadedRef.current) {
+        throw new Error('辞書の読み込みが完了していないため保存できません');
+      }
       if (syncRef.current?.isLocked()) {
         throw new DOMException('別のタブでデータが更新されたため、このタブの保存を停止しています', 'AbortError');
       }
@@ -59,12 +64,14 @@ export function useDictionary(sync?: SyncBridge): Dictionary {
         if (!active) return;
         const sorted = sortEntries(list);
         latest.current = sorted;
+        loadedRef.current = true;
         setEntries(sorted);
         setError(null);
         setLoaded(true);
       })
       .catch((e: unknown) => {
         if (!active) return;
+        loadedRef.current = false;
         setError(`辞書を読み込めません: ${String(e)}`);
         setLoaded(false);
       });
@@ -77,6 +84,7 @@ export function useDictionary(sync?: SyncBridge): Dictionary {
     if (!hasSync || !snap || snapshotRevision === 0) return;
     const sorted = sortEntries(snap.data.dictionary);
     latest.current = sorted;
+    loadedRef.current = true;
     setEntries(sorted);
     setError(null);
     setLoaded(true);

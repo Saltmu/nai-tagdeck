@@ -136,7 +136,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const tagUndo = useTagUndo(workspace, rawDispatch, {
     activeId: presets.activeId,
     setActiveId: presets.setActiveId,
-  }, extrasSync);
+  }, extrasSync, tabSync.busy);
   discardHistoryRef.current = tagUndo.discardHistory;
   const dispatch = tagUndo.dispatch;
   // 辞書・プリセット・設定と同時に置き換える経路。履歴は描画を待たずに捨てる。
@@ -201,7 +201,16 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   });
   const openSettings = useCallback(() => setTab('settings'), []);
   const { blocker, startGenerate } = useGenerationControls({
-    generator, token: token.token, basePrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings: openSettings,
+    generator,
+    token: token.token,
+    basePrompt,
+    characterPrompts,
+    negativePrompt,
+    settings,
+    generation,
+    show,
+    onOpenSettings: openSettings,
+    shortcutsDisabled: tabSync.busy,
   });
   const latest = imageStore.images[0];
   const { unseenId, dismiss } = useLatestImageNotice(latest?.id, tab === 'generate');
@@ -522,6 +531,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             onResetAll={onResetAll}
             onShowFirstRun={firstRun.showGuide}
             firstRunDisabled={!firstRunReady || firstRun.busy}
+            backupImportDisabled={!firstRunReady || tabSync.bridge.locked}
           />
         )}
       </main>

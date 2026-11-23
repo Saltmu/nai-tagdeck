@@ -174,4 +174,28 @@ describe('db single-revision sync guard', () => {
     expect(stored.dictionary).toEqual([]);
     expect(stored.kv.workspace).toBeUndefined();
   });
+
+  it('propagates request errors without emitting unhandled tx.done rejections or advancing rev', async () => {
+    const before = await readAllAppData();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      await expect(setKV('workspace', () => {})).rejects.toThrow();
+      await expect(
+        replaceAllAppData(
+          {
+            dictionary: [],
+            kv: { workspace: () => {}, settings: undefined, generation: undefined, presets: [], activePreset: null },
+          },
+          before.meta,
+        ),
+      ).rejects.toThrow();
+      await new Promise((r) => setTimeout(r, 20));
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+    expect(unhandled).toEqual([]);
+    expect((await readSyncMeta())).toEqual(before.meta);
+  });
 });

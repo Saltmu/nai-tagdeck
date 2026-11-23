@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { DialogProvider } from '../src/components/Dialogs';
 import { clearAllData, DB_VERSION, readAllAppData, setBaseMetaForTests } from '../src/lib/db';
+import * as dbModule from '../src/lib/db';
 import { requestImages } from '../src/lib/novelai';
 import { resetTabSyncForTests, TAB_SYNC_STORAGE_KEY } from '../src/lib/tabSync';
 import { loadToken, saveToken } from '../src/lib/token';
@@ -311,5 +312,48 @@ describe('multi-tab sync notice & conflict resolution', () => {
     expect(container.querySelector('.tab-sync')?.textContent).toContain('別のタブでデータが更新されました');
     const saved = await readAllAppData();
     expect((saved.kv.workspace as typeof silentWs).base.quality.map((t) => t.tag)).toEqual(['silent-other']);
+  });
+
+  it('disables Ctrl+Enter generation and Ctrl+Z undo while reloadLatest is in flight', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'masterpiece' });
+    await writeFromOtherTab({ workspace: initialWs }, false);
+    saveToken('pst-valid-token', 'local');
+    vi.mocked(requestImages).mockReset();
+
+    await mountApp();
+    // 1 つ操作して Undo 履歴を作る
+    await click(button('best quality'));
+    expect(container.querySelector('output.preview-text')?.textContent).toContain('best quality');
+
+    const otherWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'reloaded-tag' });
+    await act(async () => {
+      await writeFromOtherTab({ workspace: otherWs }, true);
+    });
+
+    // readAllAppData を一時的に保留して busy 中のショートカットを検証する
+    let releaseReload!: () => void;
+    const realReadAll = dbModule.readAllAppData;
+    const spy = vi.spyOn(dbModule, 'readAllAppData').mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => { releaseReload = resolve; });
+      return realReadAll();
+    });
+
+    await click(button('最新のデータを読み込む'));
+    await flush(10);
+    expect(container.querySelector('main')?.hasAttribute('inert')).toBe(true);
+
+    // busy 中は Ctrl+Enter も Ctrl+Z も効かない
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true }));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }));
+    });
+    expect(requestImages).not.toHaveBeenCalled();
+    expect(container.querySelector('output.preview-text')?.textContent).toContain('best quality');
+
+    await act(async () => { releaseReload(); });
+    await flush(80);
+    spy.mockRestore();
+
+    expect(container.querySelector('output.preview-text')?.textContent).toContain('reloaded-tag');
   });
 });

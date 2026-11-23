@@ -116,6 +116,7 @@ export function useTagUndo(
   dispatch: Dispatch<WorkspaceAction>,
   preset?: PresetSelectionSync,
   extrasSync?: UndoExtrasSync,
+  shortcutsDisabled = false,
 ) {
   const [past, setPast] = useState<PastStep[]>([]);
   const [future, setFuture] = useState<FutureStep[]>([]);
@@ -271,8 +272,10 @@ export function useTagUndo(
 
   const undoRef = useRef(undo);
   const redoRef = useRef(redo);
+  const shortcutsDisabledRef = useRef(shortcutsDisabled);
   undoRef.current = undo;
   redoRef.current = redo;
+  shortcutsDisabledRef.current = shortcutsDisabled;
 
   useEffect(() => {
     const onFocusOut = (event: FocusEvent) => {
@@ -287,6 +290,7 @@ export function useTagUndo(
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (shortcutsDisabledRef.current) return;
       if (event.isComposing || event.altKey) return;
       if (document.querySelector('dialog[open]')) return;
       if (isTextEntry(event.target)) return;

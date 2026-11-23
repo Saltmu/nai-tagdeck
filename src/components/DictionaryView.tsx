@@ -36,6 +36,7 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ImportResult } | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const writeDisabled = !loaded || locked;
 
   useEffect(() => {
     if (reloadCount === 0) return;
@@ -161,11 +162,11 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
           </select>
         </div>
         <div className="toolbar-row">
-          <button type="button" className="btn btn-primary" onClick={() => setEditingId(NEW)}>
+          <button type="button" className="btn btn-primary" disabled={writeDisabled} onClick={() => setEditingId(NEW)}>
             ＋ 新規登録
           </button>
           <span className="spacer" />
-          <button type="button" className="btn" disabled={!loaded || restoring || !!dictionary.error} onClick={handleRestore}>
+          <button type="button" className="btn" disabled={writeDisabled || restoring || !!dictionary.error} onClick={handleRestore}>
             {restoring ? '復元中…' : '初期カテゴリを復元'}
           </button>
           <button type="button" className="btn" disabled={entries.length === 0} onClick={() => exportAs('json')}>
@@ -180,7 +181,7 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
               type="file"
               className="visually-hidden"
               accept=".json,.csv,application/json,text/csv"
-              disabled={locked}
+              disabled={writeDisabled}
               onChange={handleFile}
             />
           </label>
@@ -195,7 +196,7 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
           existingCount={entries.length}
           onImport={handleImport}
           onCancel={() => setPendingImport(null)}
-          disabled={locked}
+          disabled={writeDisabled}
         />
       )}
 
@@ -256,7 +257,7 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
                     <button type="button" className="btn btn-small" onClick={() => setEditingId(entry.id)}>
                       編集
                     </button>
-                    <button type="button" className="btn btn-small btn-danger" disabled={locked} onClick={() => handleDelete(entry)}>
+                    <button type="button" className="btn btn-small btn-danger" disabled={writeDisabled} onClick={() => handleDelete(entry)}>
                       削除
                     </button>
                   </div>

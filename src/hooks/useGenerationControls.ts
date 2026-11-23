@@ -15,9 +15,22 @@ interface Args {
   generation: GenerationSettings;
   show: (message: string, duration?: number) => void;
   onOpenSettings: () => void;
+  /** 競合解決中など、グローバルショートカットと生成開始を止める間は true。 */
+  shortcutsDisabled?: boolean;
 }
 
-export function useGenerationControls({ generator, token, basePrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings }: Args) {
+export function useGenerationControls({
+  generator,
+  token,
+  basePrompt,
+  characterPrompts,
+  negativePrompt,
+  settings,
+  generation,
+  show,
+  onOpenSettings,
+  shortcutsDisabled = false,
+}: Args) {
   const { generating, generate, error } = generator;
   // ---- 生成（ヘッダー・生成パネル・Ctrl+Enter の共通処理） ----
   // ケモノモードは先頭に fur dataset を補えるため、キャラに ON のタグがあればベースが空でも生成できる
@@ -29,7 +42,7 @@ export function useGenerationControls({ generator, token, basePrompt, characterP
       : null;
 
   const startGenerate = useCallback(() => {
-    if (generating) return;
+    if (generating || shortcutsDisabled) return;
     if (!token) {
       show('トークンが未設定です。設定タブで入力してください', 3500);
       onOpenSettings();
@@ -50,11 +63,12 @@ export function useGenerationControls({ generator, token, basePrompt, characterP
       })),
       settings: generation,
     });
-  }, [generating, generate, token, basePrompt, missingPrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings]);
+  }, [generating, shortcutsDisabled, generate, token, basePrompt, missingPrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings]);
 
   // Ctrl+Enter（Mac は ⌘+Enter）でどこからでも生成する
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (shortcutsDisabled) return;
       if (document.querySelector('dialog[open]')) return;
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) {
         e.preventDefault();
@@ -63,7 +77,7 @@ export function useGenerationControls({ generator, token, basePrompt, characterP
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [startGenerate]);
+  }, [shortcutsDisabled, startGenerate]);
 
   // 生成パネルが見えていないとき（狭い画面の編集タブ）でも失敗に気づけるようにする
   useEffect(() => {

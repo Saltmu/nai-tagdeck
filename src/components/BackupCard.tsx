@@ -7,9 +7,10 @@ interface Props {
   getData: () => Backup;
   onImport: (data: Backup) => Promise<void>;
   notify: (message: string) => void;
+  importDisabled?: boolean;
 }
 
-export function BackupCard({ getData, onImport, notify }: Props) {
+export function BackupCard({ getData, onImport, notify, importDisabled = false }: Props) {
   const dialogs = useDialogs();
   const [error, setError] = useState<string | null>(null);
 
@@ -59,7 +60,13 @@ export function BackupCard({ getData, onImport, notify }: Props) {
         </button>
         <label className="btn file-btn">
           バックアップを読み込む
-          <input type="file" className="visually-hidden" accept=".json,application/json" onChange={handleFile} />
+          <input
+            type="file"
+            className="visually-hidden"
+            accept=".json,application/json"
+            disabled={importDisabled}
+            onChange={handleFile}
+          />
         </label>
       </div>
       {error && (

@@ -197,6 +197,8 @@ async function writeDictionary(
       throw new Error('dictionary writes require a transaction');
     }
     const tx = db.transaction(['dictionary', 'meta'], 'readwrite');
+    // リクエスト失敗時に tx.done が単独で未処理拒否になるのを防ぐ
+    tx.done.catch(() => {});
     const metaStore = tx.objectStore('meta');
     const current = normalizeMeta(await metaStore.get(SYNC_META_KEY));
     const reason = compareMeta(current, baseMeta);
@@ -276,6 +278,7 @@ export async function setKV(key: KVKey, value: unknown): Promise<void> {
       return;
     }
     const tx = db.transaction(['kv', 'meta'], 'readwrite');
+    tx.done.catch(() => {});
     const metaStore = tx.objectStore('meta');
     const current = normalizeMeta(await metaStore.get(SYNC_META_KEY));
     const reason = compareMeta(current, baseMeta);
@@ -341,6 +344,7 @@ export async function replaceAllAppData(
     const db = await open();
     if (!hasTransaction(db)) throw new Error('まとめて保存するにはトランザクションが必要です');
     const tx = db.transaction(['dictionary', 'kv', 'meta'], 'readwrite');
+    tx.done.catch(() => {});
     const metaStore = tx.objectStore('meta');
     const current = normalizeMeta(await metaStore.get(SYNC_META_KEY));
     const reason = compareMeta(current, expectedMeta);
@@ -375,6 +379,7 @@ export async function clearAllData(): Promise<void> {
   return enqueueWrite(async () => {
     const db = await getDB();
     const tx = db.transaction(['dictionary', 'kv', 'meta'], 'readwrite');
+    tx.done.catch(() => {});
     const metaStore = tx.objectStore('meta');
     const current = normalizeMeta(await metaStore.get(SYNC_META_KEY));
     const nextMeta: SyncMeta = { rev: current.rev + 1, epoch: current.epoch + 1 };
