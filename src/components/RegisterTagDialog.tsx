@@ -1,0 +1,157 @@
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import type { CategoryKey } from '../types';
+import { CATEGORIES, isCategoryKey } from '../lib/categories';
+import { clampWeight } from '../lib/prompt';
+import { WeightInput } from './WeightInput';
+
+/** 編集画面から辞書へ登録するときの入力。タグ名は編集画面のタグをそのまま使う。 */
+export interface RegisterTagDraft {
+  tag: string;
+  category: CategoryKey;
+  alias: string;
+  default_weight: number;
+}
+
+interface Props {
+  tag: string;
+  category: CategoryKey;
+  weight: number;
+  onCancel: () => void;
+  /** 保存に失敗したらエラー文を返す。成功は null。 */
+  onSave: (draft: RegisterTagDraft) => Promise<string | null>;
+}
+
+export function RegisterTagDialog({ tag, category, weight: initialWeight, onCancel, onSave }: Props) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const form = useRef<HTMLFormElement>(null);
+  const aliasInput = useRef<HTMLInputElement>(null);
+  const id = useId();
+  const [alias, setAlias] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<CategoryKey>(category);
+  const [weight, setWeight] = useState(initialWeight);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const element = dialog.current;
+    if (element && !element.open) element.showModal();
+    // タグ名は決まっているので、日本語名から入力できるようにする。
+    aliasInput.current?.focus();
+  }, []);
+
+  const close = () => {
+    if (saving) return;
+    dialog.current?.close();
+    onCancel();
+  };
+
+  const readWeight = () => {
+    const input = form.current?.querySelector<HTMLInputElement>('input[type="number"]');
+    if (!input) return clampWeight(weight);
+    const n = Number(input.value);
+    // Enter 送信と同じタイミングでは、重み入力の state がまだ反映されていないことがある。
+    return input.value.trim() !== '' && Number.isFinite(n) ? clampWeight(n) : clampWeight(weight);
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    let result: string | null;
+    try {
+      result = await onSave({
+        tag,
+        category: selectedCategory,
+        alias: alias.trim(),
+        default_weight: readWeight(),
+      });
+    } catch (cause) {
+      result = `保存できませんでした: ${String(cause)}`;
+    }
+    if (result) {
+      setSaving(false);
+      setError(result);
+      return;
+    }
+    onCancel();
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLFormElement>) => {
+    if (e.key !== 'Enter') return;
+    // 変換確定の Enter では登録しない。
+    if (e.nativeEvent.isComposing || e.keyCode === 229) {
+      e.preventDefault();
+      return;
+    }
+    if (e.target instanceof HTMLButtonElement) return;
+    e.preventDefault();
+    form.current?.requestSubmit();
+  };
+
+  return (
+    <dialog
+      ref={dialog}
+      className="app-dialog register-tag-dialog"
+      aria-labelledby={id}
+      onCancel={(e) => {
+        e.preventDefault();
+        close();
+      }}
+    >
+      <h2 id={id} className="app-dialog-title">辞書に登録</h2>
+      <form ref={form} className="register-tag-form" onSubmit={submit} onKeyDown={onKeyDown}>
+        <fieldset className="register-tag-fields" disabled={saving}>
+          <div className="field field-tag">
+            <span>タグ名</span>
+            <code className="register-tag-name">{tag}</code>
+          </div>
+          <label className="field field-alias" htmlFor={`${id}-alias`}>
+            <span>日本語名・よみ</span>
+            <input
+              ref={aliasInput}
+              id={`${id}-alias`}
+              value={alias}
+              placeholder="例: 笑顔 えがお（空白区切りで複数）"
+              onChange={(e) => setAlias(e.target.value)}
+              autoComplete="off"
+            />
+          </label>
+          <label className="field" htmlFor={`${id}-cat`}>
+            <span>カテゴリ</span>
+            <select
+              id={`${id}-cat`}
+              value={selectedCategory}
+              onChange={(e) => {
+                if (isCategoryKey(e.target.value)) setSelectedCategory(e.target.value);
+              }}
+            >
+              {CATEGORIES.map((item) => (
+                <option key={item.key} value={item.key}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field field-num" htmlFor={`${id}-weight`}>
+            <span>既定の重み</span>
+            <WeightInput id={`${id}-weight`} value={weight} label="既定の重み" onChange={setWeight} />
+          </label>
+          <div className="form-actions">
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              登録
+            </button>
+            <button type="button" className="btn" disabled={saving} onClick={close}>
+              キャンセル
+            </button>
+          </div>
+        </fieldset>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+      </form>
+    </dialog>
+  );
+}

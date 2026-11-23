@@ -8,12 +8,13 @@ import {
   NEGATIVE,
   type WorkspaceAction,
 } from '../lib/workspace';
-import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
+import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS, categoryLabel } from '../lib/categories';
 import { saveCategoriesOpen } from '../lib/categoryOpen';
 import { buildPrompt } from '../lib/prompt';
 import { buildTagAliasMap, isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import { classifyEditorTag, createTagVectorIndex } from '../lib/tagClassification';
 import { normalize } from '../lib/tagText';
+import { findDuplicate } from '../lib/io';
 import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
 import { CategorySection } from './CategorySection';
@@ -23,6 +24,7 @@ import type { PeerCharacterCenter } from './CharacterCenterPicker';
 import { HistoryControls } from './HistoryControls';
 import { PresetBar } from './PresetBar';
 import { TagFilterBar } from './TagFilterBar';
+import { RegisterTagDialog, type RegisterTagDraft } from './RegisterTagDialog';
 import { TagInput } from './TagInput';
 import type { PromptSource } from './PromptImportDialog';
 import { useDialogs } from './Dialogs';
@@ -86,20 +88,36 @@ export function Editor({
   } = useUnclassifiedSuggestions(workspace.base.unclassified);
 
   const { save } = dictionary;
-  const register = useCallback(
-    async (tag: WorkTag, category: CategoryKey) => {
-      await save({
+  const [registering, setRegistering] = useState<{ tag: WorkTag; category: CategoryKey } | null>(null);
+  const register = useCallback((tag: WorkTag, category: CategoryKey) => {
+    setRegistering({ tag, category });
+  }, []);
+  const saveRegistration = useCallback(
+    async (draft: RegisterTagDraft): Promise<string | null> => {
+      const entry = {
         id: newId(),
-        tag: tag.tag,
-        category,
-        alias: '',
-        default_weight: tag.weight,
+        tag: draft.tag,
+        category: draft.category,
+        alias: draft.alias,
+        default_weight: draft.default_weight,
         sort_order: 0,
         updated_at: '',
-      });
-      notify(`「${tag.tag}」を辞書に登録しました`);
+      };
+      const dup = findDuplicate(dictionary.entries, entry);
+      if (dup) return `「${dup.tag}」は ${categoryLabel(dup.category)} に登録済みです`;
+      try {
+        await save(entry);
+      } catch (e) {
+        return `保存できませんでした: ${String(e)}`;
+      }
+      notify(
+        draft.alias
+          ? `「${draft.tag}」（${draft.alias}）を辞書に登録しました`
+          : `「${draft.tag}」を辞書に登録しました`,
+      );
+      return null;
     },
-    [save, notify],
+    [dictionary.entries, notify, save],
   );
 
   const { characters } = workspace;
@@ -429,6 +447,15 @@ export function Editor({
       <p className="hint">
         保存 {characters.length}/{MAX_CHARACTERS} · 生成対象 {enabledCount}/{MAX_ENABLED_CHARACTERS}
       </p>
+      {registering && (
+        <RegisterTagDialog
+          tag={registering.tag.tag}
+          category={registering.category}
+          weight={registering.tag.weight}
+          onCancel={() => setRegistering(null)}
+          onSave={saveRegistration}
+        />
+      )}
     </div>
   );
 }
