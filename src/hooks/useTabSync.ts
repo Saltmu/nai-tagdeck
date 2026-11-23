@@ -5,7 +5,6 @@ import type { AppDataReplacement, AppDataSnapshot, KVKey, SyncMeta } from '../li
 import { getDataResetSignal } from '../lib/reset';
 import { isStaleWriteError, publishTabSync, subscribeTabSync, type TabSyncMeta, type TabSyncType } from '../lib/tabSync';
 import { hasNegative } from '../lib/workspace';
-import type { DictEntry } from '../types';
 
 const DEFAULT_KV_KEYS: readonly KVKey[] = ['workspace', 'settings', 'generation', 'presets', 'activePreset'];
 
@@ -59,7 +58,6 @@ export interface SyncSnapshot {
 export interface CommittedSnapshot {
   revision: number;
   kv: Record<KVKey, unknown>;
-  dictionary?: readonly DictEntry[];
 }
 
 /** 永続化・辞書フックへ渡す同期ブリッジ（モジュールグローバルを持たず React 経由で連携する）。 */
@@ -270,8 +268,18 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
       const nextMeta = await db.replaceAllAppData(replacement);
       resetSignal.throwIfAborted();
       lastLoadedMetaRef.current = nextMeta;
-      const commitRev = ++commitRevRef.current;
-      setCommitted({ revision: commitRev, kv: replacement.kv, dictionary: replacement.dictionary });
+      portsRef.current.onBeforeReloadApply();
+      const rev = ++snapshotRevRef.current;
+      // 各フックへスナップショットとして適用することで、正規化後の実参照がそのまま保存基準になり不要な再保存を防ぐ
+      setSnapshot({
+        revision: rev,
+        data: {
+          dictionary: [...replacement.dictionary],
+          kv: { ...replacement.kv },
+          meta: nextMeta,
+        },
+      });
+      setLoadError(null);
       publishTabSync('updated', nextMeta);
       return true;
     } catch (caught) {

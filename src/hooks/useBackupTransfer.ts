@@ -39,6 +39,7 @@ export function useBackupTransfer({
   presetsRef.current = presets;
   const commitAllRef = useRef(commitAll);
   commitAllRef.current = commitAll;
+  const importingRef = useRef(false);
 
   const getBackup = useCallback(
     (): Backup => ({
@@ -53,40 +54,42 @@ export function useBackupTransfer({
 
   const importBackup = useCallback(
     async (data: Backup) => {
-      const latestDict = dictionaryRef.current;
-      const latestPresets = presetsRef.current;
-      const mergedPresets = mergePresets(latestPresets.presets, data.presets);
-      if (commitAllRef.current) {
-        if (!latestDict.loaded) {
-          throw new Error('辞書の読み込みが完了していないため保存できません');
-        }
-        const mergedDictionary = mergeEntries(latestDict.entries, data.dictionary, 'merge');
-        const committed = await commitAllRef.current({
-          dictionary: mergedDictionary,
-          kv: {
-            workspace: data.workspace,
-            presets: mergedPresets,
-            activePreset: null,
-            settings: data.settings,
-            generation: data.generation,
-          },
-        });
-        if (committed) {
-          latestPresets.setPresets(mergedPresets);
-          latestPresets.setActiveId(null);
-          dispatch({ type: 'replace', workspace: data.workspace });
-          updateSettings(data.settings);
-          updateGeneration(data.generation);
-          return;
-        }
+      if (importingRef.current) {
+        throw new Error('別のバックアップを読み込み中です。完了してからやり直してください');
       }
-      await latestDict.importEntries(data.dictionary, 'merge');
-      const currentPresets = presetsRef.current;
-      currentPresets.setPresets(mergePresets(currentPresets.presets, data.presets));
-      currentPresets.setActiveId(null);
-      dispatch({ type: 'replace', workspace: data.workspace });
-      updateSettings(data.settings);
-      updateGeneration(data.generation);
+      importingRef.current = true;
+      try {
+        const latestDict = dictionaryRef.current;
+        const latestPresets = presetsRef.current;
+        const mergedPresets = mergePresets(latestPresets.presets, data.presets);
+        if (commitAllRef.current) {
+          if (!latestDict.loaded) {
+            throw new Error('辞書の読み込みが完了していないため保存できません');
+          }
+          const mergedDictionary = mergeEntries(latestDict.entries, data.dictionary, 'merge');
+          const committed = await commitAllRef.current({
+            dictionary: mergedDictionary,
+            kv: {
+              workspace: data.workspace,
+              presets: mergedPresets,
+              activePreset: null,
+              settings: data.settings,
+              generation: data.generation,
+            },
+          });
+          // commitAll が true のときは useTabSync の snapshot 経由で全ストアへ反映済み
+          if (committed) return;
+        }
+        await latestDict.importEntries(data.dictionary, 'merge');
+        const currentPresets = presetsRef.current;
+        currentPresets.setPresets(mergePresets(currentPresets.presets, data.presets));
+        currentPresets.setActiveId(null);
+        dispatch({ type: 'replace', workspace: data.workspace });
+        updateSettings(data.settings);
+        updateGeneration(data.generation);
+      } finally {
+        importingRef.current = false;
+      }
     },
     [dispatch, updateSettings, updateGeneration],
   );

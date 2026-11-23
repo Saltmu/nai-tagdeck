@@ -15,6 +15,8 @@ interface Props {
 export function BackupCard({ getData, onImport, notify, importDisabled = false, reloadCount = 0 }: Props) {
   const dialogs = useDialogs();
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const importingRef = useRef(false);
   const onImportRef = useRef(onImport);
   onImportRef.current = onImport;
   const importDisabledRef = useRef(importDisabled);
@@ -39,7 +41,7 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
   const handleFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file) return;
+    if (!file || importingRef.current) return;
     activeOpAbortRef.current?.abort();
     const controller = new AbortController();
     activeOpAbortRef.current = controller;
@@ -77,11 +79,16 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
         setError('保存データの読み込み中または同期ロック中のため、バックアップを読み込めません');
         return;
       }
+      importingRef.current = true;
+      setImporting(true);
       try {
         await onImportRef.current(data);
         if (mountedRef.current) notify('バックアップを読み込みました');
       } catch (err) {
         if (mountedRef.current) setError(`読み込めませんでした: ${String(err)}`);
+      } finally {
+        importingRef.current = false;
+        if (mountedRef.current) setImporting(false);
       }
     } finally {
       if (activeOpAbortRef.current === controller) activeOpAbortRef.current = null;
@@ -113,7 +120,7 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
             type="file"
             className="visually-hidden"
             accept=".json,application/json"
-            disabled={importDisabled}
+            disabled={importDisabled || importing}
             onChange={handleFile}
           />
         </label>

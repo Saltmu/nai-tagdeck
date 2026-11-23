@@ -34,10 +34,6 @@ export function useDictionary(sync?: SyncBridge): Dictionary {
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
   const snapshotRevision = snapshot?.revision ?? 0;
-  const committed = sync?.committed ?? null;
-  const committedRef = useRef(committed);
-  committedRef.current = committed;
-  const committedRevision = committed?.revision ?? 0;
 
   const enqueue = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
     const run = writes.current.then(() => {
@@ -93,18 +89,6 @@ export function useDictionary(sync?: SyncBridge): Dictionary {
     setError(null);
     setLoaded(true);
   }, [hasSync, snapshotRevision]);
-
-  // バックアップ復元などの一括コミットで辞書が更新された場合に画面へ反映する
-  useEffect(() => {
-    const latestCommitted = committedRef.current;
-    if (!latestCommitted?.dictionary || committedRevision === 0) return;
-    const sorted = sortEntries([...latestCommitted.dictionary]);
-    latest.current = sorted;
-    loadedRef.current = true;
-    setEntries(sorted);
-    setError(null);
-    setLoaded(true);
-  }, [committedRevision]);
 
   const save = useCallback((entry: DictEntry) => enqueue(async () => {
     const next = { ...entry, updated_at: new Date().toISOString() };

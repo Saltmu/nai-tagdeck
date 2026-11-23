@@ -613,7 +613,8 @@ describe('multi-tab sync notice & conflict resolution', () => {
     await flush(30);
     const confirm = container.querySelector<HTMLDialogElement>('dialog.app-dialog-confirm');
     await click(button('読み込む', confirm!));
-    await flush(100);
+    // 自動保存のデバウンス（300ms）を過ぎても余計な再保存・通知が飛ばないことを確認する
+    await flush(450);
     peer.close();
 
     // 通知は 1 回だけで、その時点で辞書・プリセット・workspace・settings・generation すべてが揃っている
@@ -624,6 +625,60 @@ describe('multi-tab sync notice & conflict resolution', () => {
     expect((snapshot.kv.workspace as typeof backupWs).base.quality.map((t) => t.tag)).toEqual(['restored-ws-tag']);
     expect(snapshot.kv.settings).toMatchObject({ weightSyntax: 'brace', characterNegativePrompt: 'custom-neg' });
     expect(snapshot.kv.generation).toMatchObject({ mode: 'furry', size: 'square' });
+  });
+
+  it('disables overlapping backup imports while one restore is committing and keeps backup import enabled after an autosave error', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'masterpiece' });
+    await writeFromOtherTab({ workspace: initialWs }, false);
+    await mountApp();
+
+    // 自動保存を 1 回失敗させてエラー状態にする
+    const failSetKv = vi.spyOn(dbModule, 'setKV').mockRejectedValueOnce(new Error('quota exceeded'));
+    await click(button('best quality'));
+    await flush(400);
+    failSetKv.mockRestore();
+    expect(container.querySelector('.error-banner')?.textContent).toContain('quota exceeded');
+
+    // 自動保存エラー後でも全ストア読み込み済みならバックアップ読み込みボタンは有効なまま
+    await click(button('設定'));
+    const input = container.querySelector<HTMLInputElement>('.backup-actions input[type="file"]')!;
+    expect(input.disabled).toBe(false);
+
+    // 復元コミット実行中は input が disabled になり重複復元できない
+    let releaseReplace!: () => void;
+    const realReplace = dbModule.replaceAllAppData;
+    const replaceSpy = vi.spyOn(dbModule, 'replaceAllAppData').mockImplementationOnce(async (replacement, expected) => {
+      await new Promise<void>((resolve) => { releaseReplace = resolve; });
+      return realReplace(replacement, expected);
+    });
+    const backupWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'recovered' });
+    const backupJson = JSON.stringify({
+      app: 'nai-tagdeck',
+      kind: 'backup',
+      version: 1,
+      dictionary: [],
+      presets: [],
+      workspace: backupWs,
+      settings: { weightSyntax: 'numeric', characterNegativePrompt: 'lowres, aliasing, ' },
+      generation: { mode: 'anime', size: 'portrait', steps: 28, scale: 5, sampler: 'k_euler_ancestral', noiseSchedule: 'karras', seed: null, cfgRescale: 0, dynamicThresholding: false },
+    });
+    const file = new File([backupJson], 'recover.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => backupJson });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+    await flush(30);
+    const confirm = container.querySelector<HTMLDialogElement>('dialog.app-dialog-confirm');
+    await click(button('読み込む', confirm!));
+    await flush(20);
+
+    expect(input.disabled).toBe(true);
+
+    await act(async () => { releaseReplace(); });
+    await flush(80);
+    replaceSpy.mockRestore();
+
+    expect(input.disabled).toBe(false);
+    expect(container.querySelector('.error-banner')).toBeNull();
   });
 
   it('ignores delayed notifications whose meta rev/epoch is already covered by the loaded snapshot', async () => {

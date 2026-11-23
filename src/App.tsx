@@ -108,9 +108,10 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   workspaceRef.current = workspace;
   presetsRef.current = presets;
   entriesRef.current = dictionary.entries;
-  allLoadedRef.current =
+  const storesLoaded =
     dictionary.loaded &&
     [persistence, settingsPersistence, generationPersistence, ...presets.persistence].every((state) => state.loaded);
+  allLoadedRef.current = storesLoaded;
   captureLocalRef.current = () => ({
     dictionary: entriesRef.current,
     kv: {
@@ -539,7 +540,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             onResetAll={onResetAll}
             onShowFirstRun={firstRun.showGuide}
             firstRunDisabled={!firstRunReady || firstRun.busy}
-            backupImportDisabled={!firstRunReady || tabSync.bridge.locked}
+            backupImportDisabled={!storesLoaded || tabSync.bridge.locked}
             reloadCount={tabSync.reloadCount}
           />
         )}
