@@ -27,6 +27,8 @@ export function PresetSaveDialog({ initialName, includeGeneration, summary, onCa
   const finish = (result: { name: string; includeGeneration: boolean } | null) => {
     if (settled.current) return;
     settled.current = true;
+    // 開く前のボタンへフォーカスを戻してから、上書き確認などを出す。
+    dialog.current?.close();
     if (result) onSave(result);
     else onCancel();
   };

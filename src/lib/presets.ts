@@ -29,10 +29,13 @@ export interface Preset {
   updated_at: string;
 }
 
-/** 新規保存や、生成設定付きプリセットの上書きで書き込む値。シードは保存時に除く。 */
+/**
+ * 新規保存や上書きで書き込む値。シードは保存時に除く。
+ * 共通キャラネガティブだけのプリセットは、generation を付けずに characterNegativePrompt だけ渡す。
+ */
 export interface PresetGenerationSave {
-  generation: GenerationSettings;
-  characterNegativePrompt: string;
+  generation?: GenerationSettings;
+  characterNegativePrompt?: string;
 }
 
 /** ネガティブを持たない古いプリセットは、読み込み時に作業中のネガティブを残すため negative を省いたままにする。 */
@@ -120,8 +123,8 @@ function withGenerationSave(preset: Preset, save: PresetGenerationSave | null | 
     delete preset.characterNegativePrompt;
     return preset;
   }
-  preset.generation = presetGenerationOf(save.generation);
-  preset.characterNegativePrompt = save.characterNegativePrompt;
+  if (save.generation) preset.generation = presetGenerationOf(save.generation);
+  if (save.characterNegativePrompt !== undefined) preset.characterNegativePrompt = save.characterNegativePrompt;
   return preset;
 }
 
@@ -134,8 +137,8 @@ export function createPreset(name: string, workspace: Workspace, save?: PresetGe
 
 /**
  * タグを上書きする。
- * save を渡すと生成設定と共通キャラネガティブも書き換える。
- * null ならその2つを外す。省略すると、もともと付いていた生成設定は変えない。
+ * save に入っている項目だけ生成設定か共通キャラネガティブを書き換える。
+ * null ならその2つを外す。省略すると、もともと付いていた項目は変えない。
  */
 export function overwritePreset(
   presets: readonly Preset[],
@@ -153,12 +156,16 @@ export function overwritePreset(
   );
 }
 
-/** 変更の上書きで使う。生成設定を持たないプリセットはタグだけ更新する。 */
+/**
+ * 変更の上書きで使う。
+ * 生成設定が無ければタグだけ更新する。共通キャラネガティブだけある場合は、その文字列だけ更新する。
+ */
 export function generationSaveForOverwrite(
-  preset: Pick<Preset, 'generation'>,
+  preset: Pick<Preset, 'generation' | 'characterNegativePrompt'>,
   current: { generation: GenerationSettings; characterNegativePrompt: string },
 ): PresetGenerationSave | undefined {
-  if (preset.generation === undefined) return undefined;
+  if (preset.generation === undefined && preset.characterNegativePrompt === undefined) return undefined;
+  if (preset.generation === undefined) return { characterNegativePrompt: current.characterNegativePrompt };
   return {
     generation: current.generation,
     characterNegativePrompt: current.characterNegativePrompt,

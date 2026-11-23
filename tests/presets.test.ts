@@ -365,6 +365,32 @@ describe('プリセットの生成設定', () => {
     expect(stripped[0]!.characterNegativePrompt).toBeUndefined();
   });
 
+  it('生成設定が無く共通キャラネガティブだけあるプリセットは、その文字列だけ上書きする', () => {
+    const [preset] = normalizePresets([{
+      id: 'p',
+      name: '旧',
+      workspace: {},
+      generation: 'bad',
+      characterNegativePrompt: 'old',
+      updated_at: 't',
+    }]);
+    expect(preset!.generation).toBeUndefined();
+    expect(preset!.characterNegativePrompt).toBe('old');
+    const edited = {
+      workspace: preset!.workspace,
+      generation: { ...DEFAULT_GENERATION, steps: 20, seed: 3 },
+      characterNegativePrompt: 'new',
+    };
+    expect(samePreset(preset!, edited)).toBe(false);
+    expect(samePreset(preset!, { ...edited, characterNegativePrompt: 'old' })).toBe(true);
+    const save = generationSaveForOverwrite(preset!, edited);
+    expect(save).toEqual({ characterNegativePrompt: 'new' });
+    const [updated] = overwritePreset([preset!], preset!.id, emptyWorkspace(), save);
+    expect(updated!.generation).toBeUndefined();
+    expect(updated!.characterNegativePrompt).toBe('new');
+    expect(samePreset(updated!, { ...edited, workspace: updated!.workspace })).toBe(true);
+  });
+
   it('読み込みで変える項目だけを返し、シードは含めない', () => {
     const preset = createPreset('ケモノ', ws, furry);
     expect(presetLoadExtras(preset, {

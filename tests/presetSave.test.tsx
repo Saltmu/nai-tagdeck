@@ -155,7 +155,9 @@ it('saves generation settings when asked and restores them without the seed', as
     setter.call(name, 'ケモノ用');
     name.dispatchEvent(new Event('input', { bubbles: true }));
   });
+  const closeSpy = vi.spyOn(dialog as HTMLDialogElement, 'close');
   await click(button('保存', dialog));
+  expect(closeSpy).toHaveBeenCalled();
   expect(container.querySelector('.toast')?.textContent).toContain('プリセット「ケモノ用」に保存しました');
 
   await click(button('新規'));
