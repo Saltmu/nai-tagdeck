@@ -31,7 +31,7 @@ import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
 import { importedBaseForMode, type PromptImport } from './lib/promptImport';
-import { defaultNegativeTags } from './lib/workspace';
+import { defaultNegativeTags, type WorkspaceAction } from './lib/workspace';
 import type { WeightSyntax } from './types';
 
 type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
@@ -98,6 +98,12 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     setActiveId: presets.setActiveId,
   }, extrasSync);
   const dispatch = tagUndo.dispatch;
+  // 辞書・プリセット・設定と同時に置き換える経路。履歴は描画を待たずに捨てる。
+  // 描画前の Ctrl+Z が、読み込み前の作業状態だけを戻すのを防ぐ。
+  const replaceWithoutHistory = useCallback((action: WorkspaceAction) => {
+    tagUndo.discardHistory();
+    rawDispatch(action);
+  }, [rawDispatch, tagUndo.discardHistory]);
   const openEditor = useCallback(() => setTab('editor'), []);
   const firstRunReady = dictionary.loaded && !dictionary.error &&
     [persistence, settingsPersistence, generationPersistence, ...presets.persistence].every((state) => state.loaded && !state.error);
@@ -114,7 +120,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const firstRun = useFirstRun({
     ready: firstRunReady,
     hasExistingData,
-    dictionary, workspace, dispatch, presets, notify: show, onOpenEditor: openEditor,
+    dictionary, workspace, dispatch: replaceWithoutHistory, presets, notify: show, onOpenEditor: openEditor,
   });
 
   const basePrompt = useMemo(
@@ -150,7 +156,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   );
 
   const { getBackup, importBackup } = useBackupTransfer({
-    dictionary, presets, workspace, dispatch, settings, updateSettings, generation, updateGeneration,
+    dictionary, presets, workspace, dispatch: replaceWithoutHistory, settings, updateSettings, generation, updateGeneration,
   });
   const openSettings = useCallback(() => setTab('settings'), []);
   const { blocker, startGenerate } = useGenerationControls({
