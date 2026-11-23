@@ -83,6 +83,7 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
   const conflictRef = useRef<TabSyncType | null>(null);
   const noticeSeqRef = useRef(0);
   const snapshotRevRef = useRef(0);
+  const lastLoadedEpochRef = useRef<number | null>(null);
   const commitRevRef = useRef(0);
   const busyRef = useRef(false);
 
@@ -106,6 +107,7 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
     loadAllSnapshot()
       .then((data) => {
         if (!isCurrent()) return;
+        lastLoadedEpochRef.current = data.meta.epoch;
         const rev = ++snapshotRevRef.current;
         setSnapshot({ revision: rev, data });
         setLoadError(null);
@@ -142,12 +144,14 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
       try {
         const data = await loadAllSnapshot();
         if (resetSignal.aborted) return;
+        const epochChanged = lastLoadedEpochRef.current !== null && data.meta.epoch !== lastLoadedEpochRef.current;
+        lastLoadedEpochRef.current = data.meta.epoch;
         portsRef.current.onBeforeReloadApply();
         const rev = ++snapshotRevRef.current;
         setSnapshot({ revision: rev, data });
         setLoadError(null);
         setReloadCount((n) => n + 1);
-        if (current === 'reset') portsRef.current.resyncToken();
+        if (current === 'reset' || epochChanged) portsRef.current.resyncToken();
         if (noticeSeqRef.current === startNoticeSeq) clearConflict();
       } catch (caught) {
         setError(`最新のデータを読み込めません: ${String(caught)}`);

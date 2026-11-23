@@ -14,6 +14,7 @@ interface Props {
   onShowFirstRun: () => void;
   firstRunDisabled: boolean;
   backupImportDisabled?: boolean;
+  reloadCount?: number;
 }
 
 export function SettingsView({
@@ -25,6 +26,7 @@ export function SettingsView({
   onShowFirstRun,
   firstRunDisabled,
   backupImportDisabled = false,
+  reloadCount = 0,
 }: Props) {
   return (
     <div className="settings">
@@ -80,7 +82,13 @@ export function SettingsView({
         </div>
       </section>
       <TokenSettings token={token} notify={notify} />
-      <BackupCard getData={getBackup} onImport={onImportBackup} notify={notify} importDisabled={backupImportDisabled} />
+      <BackupCard
+        getData={getBackup}
+        onImport={onImportBackup}
+        notify={notify}
+        importDisabled={backupImportDisabled}
+        reloadCount={reloadCount}
+      />
       <DangerZone onReset={onResetAll} />
       <section className="card" aria-labelledby="disclaimer-title">
         <h2 id="disclaimer-title" className="card-title">免責事項</h2>

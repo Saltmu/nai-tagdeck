@@ -356,4 +356,98 @@ describe('multi-tab sync notice & conflict resolution', () => {
 
     expect(container.querySelector('output.preview-text')?.textContent).toContain('reloaded-tag');
   });
+
+  it('resyncs deleted shared token when epoch changes even if reset notification was missed, while keeping session token', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'masterpiece' });
+    await writeFromOtherTab({ workspace: initialWs }, false);
+    saveToken('pst-shared-local-token', 'local');
+
+    await mountApp();
+    // リセット通知を見逃し、後から通常更新通知だけ届いたケースを再現
+    await resetFromOtherTab(false);
+    const postResetWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'after-reset' });
+    await act(async () => {
+      await writeFromOtherTab({ workspace: postResetWs }, true);
+    });
+
+    const notice = container.querySelector('.tab-sync');
+    expect(notice?.textContent).toContain('別のタブでデータが更新されました');
+    await click(button('最新のデータを読み込む', notice!));
+    await flush(80);
+
+    await click(button('設定'));
+    expect(container.querySelector('.token-status')?.textContent).toContain('未設定');
+
+    // タブ限定の sessionStorage トークンは別タブの削除で消えないことも確認
+    saveToken('pst-tab-only-token', 'session');
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mountApp();
+    await resetFromOtherTab(false);
+    await act(async () => {
+      await writeFromOtherTab({ workspace: postResetWs }, true);
+    });
+    await click(button('最新のデータを読み込む'));
+    await flush(80);
+    await click(button('設定'));
+    expect(container.querySelector('.token-status')?.textContent).toContain('設定済み');
+    expect(container.querySelector('.token-status')?.textContent).toContain('このタブだけ');
+  });
+
+  it('aborts a pending backup import when latest data is reloaded while reading the file, preserving reloaded presets', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'masterpiece' });
+    await writeFromOtherTab({ workspace: initialWs }, false);
+    await mountApp();
+    await click(button('設定'));
+
+    // バックアップファイルの text() 読み取りを保留し、その間に他タブがプリセットを追加してこのタブで再読み込みする
+    let releaseFileText!: (text: string) => void;
+    const emptyBackupJson = JSON.stringify({
+      app: 'nai-tagdeck',
+      kind: 'backup',
+      version: 1,
+      dictionary: [],
+      presets: [],
+      workspace: emptyWorkspace(),
+      settings: { weightSyntax: 'numeric', characterNegativePrompt: 'lowres, aliasing, ' },
+      generation: { mode: 'anime', size: 'portrait', steps: 28, scale: 5, sampler: 'k_euler_ancestral', noiseSchedule: 'karras', seed: null, cfgRescale: 0, dynamicThresholding: false },
+    });
+    const file = new File([emptyBackupJson], 'backup.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', {
+      value: () => new Promise<string>((resolve) => { releaseFileText = resolve; }),
+    });
+
+    const input = container.querySelector<HTMLInputElement>('.backup-actions input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // 他タブでプリセットを保存して通知
+    const db = await openDB('nai-tagdeck', DB_VERSION);
+    try {
+      const tx = db.transaction(['kv', 'meta'], 'readwrite');
+      const raw = (await tx.objectStore('meta').get('sync')) as { rev?: number; epoch?: number } | undefined;
+      await tx.objectStore('kv').put([{ id: 'p-remote', name: '別タブのプリセット', workspace: initialWs, updated_at: '2026-01-01' }], 'presets');
+      await tx.objectStore('meta').put({ rev: (raw?.rev ?? 0) + 1, epoch: raw?.epoch ?? 0 }, 'sync');
+      await tx.done;
+    } finally {
+      db.close();
+    }
+    await act(async () => {
+      const peer = new FakeBroadcastChannel('nai-tagdeck:sync');
+      peer.postMessage({ type: 'updated', senderId: 'other-tab', seq: Date.now(), at: Date.now() });
+      peer.close();
+    });
+    await click(button('最新のデータを読み込む'));
+    await flush(80);
+
+    // 保留していたファイル読み取りを完了させても、バックアップ適用は中止され別タブのプリセットが残る
+    await act(async () => { releaseFileText(emptyBackupJson); });
+    await flush(80);
+
+    expect(container.querySelector('.form-error')?.textContent).toContain('中止しました');
+    const saved = await readAllAppData();
+    expect((saved.kv.presets as Array<{ name: string }>).map((p) => p.name)).toEqual(['別タブのプリセット']);
+  });
 });

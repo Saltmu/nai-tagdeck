@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { backupImportMessage, parseBackup, toBackupJSON, type Backup } from '../lib/backup';
 import { dateStamp, downloadText } from '../lib/browser';
 import { useDialogs } from './Dialogs';
@@ -8,17 +8,40 @@ interface Props {
   onImport: (data: Backup) => Promise<void>;
   notify: (message: string) => void;
   importDisabled?: boolean;
+  /** 他タブから再読み込みされた回数。読み込み途中で増えたら保留中の確認を中止する。 */
+  reloadCount?: number;
 }
 
-export function BackupCard({ getData, onImport, notify, importDisabled = false }: Props) {
+export function BackupCard({ getData, onImport, notify, importDisabled = false, reloadCount = 0 }: Props) {
   const dialogs = useDialogs();
   const [error, setError] = useState<string | null>(null);
+  const onImportRef = useRef(onImport);
+  onImportRef.current = onImport;
+  const importDisabledRef = useRef(importDisabled);
+  importDisabledRef.current = importDisabled;
+  const reloadCountRef = useRef(reloadCount);
+  reloadCountRef.current = reloadCount;
+  const confirmAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    confirmAbortRef.current?.abort();
+    return () => { confirmAbortRef.current?.abort(); };
+  }, [reloadCount]);
 
   const handleFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
+    const startedReloadCount = reloadCountRef.current;
     const parsed = parseBackup(await file.text());
+    if (reloadCountRef.current !== startedReloadCount) {
+      setError('別のタブから最新データを読み込んだため、バックアップの読み込みを中止しました。もう一度選択してください');
+      return;
+    }
+    if (importDisabledRef.current) {
+      setError('保存データの読み込み中または同期ロック中のため、バックアップを読み込めません');
+      return;
+    }
     if (!parsed.ok) {
       setError(parsed.error);
       return;
@@ -26,13 +49,30 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false }
     setError(null);
     const { data, warnings, dictionaryErrors } = parsed;
     const message = backupImportMessage(file.name, data, warnings, dictionaryErrors);
-    const ok = await dialogs.confirm(message.summary, {
-      okLabel: '読み込む',
-      details: message.details || undefined,
-    });
-    if (!ok) return;
+    confirmAbortRef.current?.abort();
+    const controller = new AbortController();
+    confirmAbortRef.current = controller;
+    let ok = false;
     try {
-      await onImport(data);
+      ok = await dialogs.confirm(message.summary, {
+        okLabel: '読み込む',
+        details: message.details || undefined,
+        signal: controller.signal,
+      });
+    } finally {
+      if (confirmAbortRef.current === controller) confirmAbortRef.current = null;
+    }
+    if (!ok || controller.signal.aborted) return;
+    if (reloadCountRef.current !== startedReloadCount) {
+      setError('別のタブから最新データを読み込んだため、バックアップの読み込みを中止しました。もう一度選択してください');
+      return;
+    }
+    if (importDisabledRef.current) {
+      setError('保存データの読み込み中または同期ロック中のため、バックアップを読み込めません');
+      return;
+    }
+    try {
+      await onImportRef.current(data);
       notify('バックアップを読み込みました');
     } catch (err) {
       setError(`読み込めませんでした: ${String(err)}`);

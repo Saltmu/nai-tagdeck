@@ -532,6 +532,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             onShowFirstRun={firstRun.showGuide}
             firstRunDisabled={!firstRunReady || firstRun.busy}
             backupImportDisabled={!firstRunReady || tabSync.bridge.locked}
+            reloadCount={tabSync.reloadCount}
           />
         )}
       </main>

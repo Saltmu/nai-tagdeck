@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch } from 'react';
+import { useCallback, useRef, type Dispatch } from 'react';
 import type { Settings, Workspace } from '../types';
 import type { Dictionary } from './useDictionary';
 import type { PresetStore } from './usePresets';
@@ -19,6 +19,9 @@ interface Args {
 }
 
 export function useBackupTransfer({ dictionary, presets, workspace, dispatch, settings, updateSettings, generation, updateGeneration }: Args) {
+  const presetsRef = useRef(presets);
+  presetsRef.current = presets;
+
   const getBackup = useCallback(
     (): Backup => ({
       dictionary: dictionary.entries,
@@ -33,13 +36,14 @@ export function useBackupTransfer({ dictionary, presets, workspace, dispatch, se
   const importBackup = useCallback(
     async (data: Backup) => {
       await dictionary.importEntries(data.dictionary, 'merge');
-      presets.setPresets(mergePresets(presets.presets, data.presets));
-      presets.setActiveId(null);
+      const latestPresets = presetsRef.current;
+      latestPresets.setPresets(mergePresets(latestPresets.presets, data.presets));
+      latestPresets.setActiveId(null);
       dispatch({ type: 'replace', workspace: data.workspace });
       updateSettings(data.settings);
       updateGeneration(data.generation);
     },
-    [dictionary, presets, dispatch, updateSettings, updateGeneration],
+    [dictionary, dispatch, updateSettings, updateGeneration],
   );
 
   return { getBackup, importBackup };

@@ -198,4 +198,14 @@ describe('db single-revision sync guard', () => {
     expect(unhandled).toEqual([]);
     expect((await readSyncMeta())).toEqual(before.meta);
   });
+
+  it('queues dictionary writes before opening DB so an immediately following clearAllData removes them cleanly', async () => {
+    await readAllAppData();
+    const pendingWrite = putEntry(entry('race', 'should-be-cleared'));
+    const pendingClear = clearAllData();
+    await Promise.all([pendingWrite, pendingClear]);
+
+    const after = await readAllAppData();
+    expect(after.dictionary).toEqual([]);
+  });
 });

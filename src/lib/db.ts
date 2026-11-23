@@ -190,11 +190,13 @@ export async function listEntries(): Promise<DictEntry[]> {
 
 async function writeDictionary(
   mutate: (store: { put: (value: DictEntry) => Promise<unknown>; delete: (key: string) => Promise<unknown>; clear: () => Promise<unknown> }) => Promise<void>,
+  fallback?: (db: MinimalDB) => Promise<void>,
 ): Promise<void> {
   return enqueueWrite(async () => {
     const db = await open();
     if (!hasTransaction(db)) {
-      throw new Error('dictionary writes require a transaction');
+      await fallback?.(db);
+      return;
     }
     const tx = db.transaction(['dictionary', 'meta'], 'readwrite');
     // リクエスト失敗時に tx.done が単独で未処理拒否になるのを防ぐ
@@ -220,38 +222,28 @@ async function writeDictionary(
 }
 
 export async function putEntry(entry: DictEntry): Promise<void> {
-  const db = await open();
-  if (!hasTransaction(db)) {
-    await db.put('dictionary', entry);
-    return;
-  }
-  await writeDictionary(async (store) => { await store.put(entry); });
+  return writeDictionary(
+    async (store) => { await store.put(entry); },
+    async (db) => { await db.put('dictionary', entry); },
+  );
 }
 
 export async function putEntries(entries: readonly DictEntry[]): Promise<void> {
-  const db = await open();
-  if (!hasTransaction(db)) {
-    await Promise.all(entries.map((entry) => db.put('dictionary', entry)));
-    return;
-  }
-  await writeDictionary(async (store) => {
-    await Promise.all(entries.map((entry) => store.put(entry)));
-  });
+  return writeDictionary(
+    async (store) => { await Promise.all(entries.map((entry) => store.put(entry))); },
+    async (db) => { await Promise.all(entries.map((entry) => db.put('dictionary', entry))); },
+  );
 }
 
 export async function deleteEntry(id: string): Promise<void> {
-  const db = await open();
-  if (!hasTransaction(db)) {
-    await db.delete?.('dictionary', id);
-    return;
-  }
-  await writeDictionary(async (store) => { await store.delete(id); });
+  return writeDictionary(
+    async (store) => { await store.delete(id); },
+    async (db) => { await db.delete?.('dictionary', id); },
+  );
 }
 
 export async function replaceAllEntries(entries: readonly DictEntry[]): Promise<void> {
-  const db = await open();
-  if (!hasTransaction(db)) return;
-  await writeDictionary(async (store) => {
+  return writeDictionary(async (store) => {
     await store.clear();
     await Promise.all(entries.map((entry) => store.put(entry)));
   });
