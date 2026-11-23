@@ -1,6 +1,7 @@
 # NovelAI 画像生成 API メモ（フェーズ2用）
 
 調査日: 2026-10-05。対象モデル: **NovelAI Diffusion V5**（`nai-diffusion-5-full`）。
+未確認だった応答形式とヒント系フィールドは、2026-11-23 に OpenAPI（`https://image.novelai.net/docs/doc.json`）を取り直して照合した。この再確認では実生成をしていない。
 
 ## 出典
 
@@ -14,9 +15,9 @@
 `POST https://image.novelai.net/ai/generate-image`
 
 - 認証: `Authorization: Bearer <token>`
-- 既定のレスポンスは ZIP（中身は `image_0.png`）。**`Accept: application/json` を送ると JSON で返る**:
+- 既定のレスポンスは ZIP（中身は `image_0.png`）。2026-11-23 の OpenAPI は `produces` に `application/zip` と `application/json` を並べ、`Accept: application/json` のときは 201 で `image.ImageGenerationJsonResponse` を返すと書く:
   `{ "images": [{ "image": "<base64>", "index": 0, "seed": 123 }] }`
-  → JSON にすれば fflate は不要（V5 で JSON 応答が使えるかは要確認）。
+  （`image` は base64）。定義はモデル名で分かれていない。V5 でこの Accept を付けた実レスポンスは未取得。このツールは Accept を付けず、ZIP を `extractImages()` で読む。JSON で受け取れれば fflate は不要になる。
 - 規約: 生成リクエストは人の操作で開始すること。過大な負荷になる自動化は禁止。→ ボタン1回で1枚。自動の連続生成は作らない。
 - エラー時は `utils.JsonError`。`x-correlation-id` ヘッダー（英数字6文字）を付けると、500 エラーのときに問い合わせに使える。
 
@@ -40,7 +41,7 @@ V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在し�
 - **品質タグと UC プリセットはクライアント側で展開済み**:
   - `qualityPresetId: "light"` → `input` の末尾に `very aesthetic, amazing quality, no text` が付いている。
   - `ucPresetId: "heavy"` → `negative_prompt` の先頭に heavy の文面（`DEFAULT_NEGATIVE`）が入り、その後ろにユーザーが追加した語が続く。
-  - あわせて `tag_hint_qt: 3`、`tag_hint_uc_preset: 2` を送っている（OpenAPI の説明では、モデルにそのまま渡すヒント）。
+  - あわせて `tag_hint_qt: 3`、`tag_hint_uc_preset: 2` を送っている。2026-11-23 の OpenAPI ではどちらも説明のない `integer` である。説明がある近縁フィールドは `tag_hint_transparent_background` だけで、サーバは解釈せずモデルへ渡すヒントだと書かれている。
   - このツールでは品質タグとネガティブをタグ編集画面（ネガティブは専用タブ）で持ち、展開済みの文字列を送る。プリセット ID とヒントは送らない。
 - **キャラクター**: `characterPrompts[]`（`{ prompt, uc, center, enabled }`）と
   `v4_prompt.caption.char_captions[]` / `v4_negative_prompt.caption.char_captions[]` の両方に入れる。
@@ -53,7 +54,7 @@ V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在し�
 - **その他の値**: `use_order: true`、`legacy_uc: false`、`deliberate_euler_ancestral_bug: false`、`prefer_brownian: true`、
   `straight_alpha: true`、`add_original_image: true`、`autoSmea: false`、`normalize_reference_strength_multiple: true`。
   `image_format` は公式UIでは `"webp"` だが、このツールでは生成情報が埋め込まれる `"png"` を使う。
-- **上位の階層**: `use_new_shared_trial: true`（意味は未確認。公式UIに合わせて送る）。
+- **上位の階層**: `use_new_shared_trial: true`。2026-11-23 の `image.ImageGenerationRequest` にこのフィールドはない（`action`、`input`、`model`、`parameters`、`url`）。公式の意味は仕様にない。公式 UI に合わせて送る。
 - `ucPreset` / `qualityToggle`（以前の形式）は送っていない。
 
 ## Anlas を消費しない条件（Opus）
@@ -76,8 +77,10 @@ V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在し�
 
 - このツールの `buildGenerateRequest()` + `requestImages()`（multipart、`nai-diffusion-5-full`、PNG）でブラウザから直接生成できた。CORS も問題なし。
 
-## まだ確認が必要なこと（フェーズ2で実際に生成して確かめる）
+## まだ確認が必要なこと
 
-- 応答の形式（ZIP・JSON・画像そのもののどれでも読めるようにしてある。`extractImages()`）
-- `tag_hint_qt` / `tag_hint_uc_preset` を送らないと結果が変わるか（同じシードで公式UIと比べる）
-- `use_new_shared_trial` の意味
+2026-11-23 の OpenAPI 照合で仕様上わかったことと、実生成がないため残っていることを分ける。
+
+- 応答形式: 仕様は ZIP と、`Accept: application/json` の JSON。このツールの ZIP 経路は 2026-10-05 に V5 で生成して確認済み。JSON を V5 で受け取った実レスポンスはない。生の画像バイトは `produces` にない。`extractImages()` は ZIP・JSON・画像バイトのどれでも読む。
+- `tag_hint_qt` / `tag_hint_uc_preset` を送らないと画素が変わるかは、同じシードで公式 UI と比べる実生成が必要。仕様に効果の説明はない。
+- `use_new_shared_trial` の意味は公式仕様にない。オンとオフで挙動が変わるかは未確認。
