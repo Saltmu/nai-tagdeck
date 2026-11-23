@@ -8,14 +8,21 @@ import { deleteEntry, listEntries, putEntries, putEntry, replaceAllEntries } fro
 import { resetAppData } from '../src/lib/reset';
 import { clearTabSyncConflict, receiveTabSyncMessage } from '../src/lib/tabSync';
 
-vi.mock('../src/lib/db', () => ({
-  clearAllData: vi.fn(),
-  listEntries: vi.fn(),
-  putEntry: vi.fn(),
-  putEntries: vi.fn(),
-  deleteEntry: vi.fn(),
-  replaceAllEntries: vi.fn(),
-}));
+vi.mock('../src/lib/db', () => {
+  class StaleWriteError extends Error {
+    readonly name = 'StaleWriteError';
+    constructor(readonly scope: string) { super(`stale ${scope}`); }
+  }
+  return {
+    clearAllData: vi.fn(),
+    listEntries: vi.fn(),
+    putEntry: vi.fn(),
+    putEntries: vi.fn(),
+    deleteEntry: vi.fn(),
+    replaceAllEntries: vi.fn(),
+    StaleWriteError,
+  };
+});
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 

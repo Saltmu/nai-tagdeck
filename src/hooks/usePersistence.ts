@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { getKV, setKV, type KVKey } from '../lib/db';
+import { getKV, setKV, StaleWriteError, type KVKey } from '../lib/db';
 import { getDataResetSignal } from '../lib/reset';
-import { isTabSyncLocked, publishTabSync, startTabSync } from '../lib/tabSync';
+import { isTabSyncLocked, lockTabSyncFromStaleWrite, publishTabSync, setScopeDirty, startTabSync } from '../lib/tabSync';
 
 export interface PersistenceState {
   loaded: boolean;
@@ -64,10 +64,15 @@ export function usePersistence<T>(
     if (!current.loaded) return;
     if (synced.current?.key !== key) {
       synced.current = { key, value, inFlight: 0 };
+      setScopeDirty(key, false);
       return;
     }
     const tracker = synced.current;
-    if (tracker.inFlight === 0 && Object.is(tracker.value, value)) return;
+    if (tracker.inFlight === 0 && Object.is(tracker.value, value)) {
+      setScopeDirty(key, false);
+      return;
+    }
+    setScopeDirty(key, true);
 
     let active = true;
     let pending = true;
@@ -85,11 +90,17 @@ export function usePersistence<T>(
           if (resetSignal.aborted || isTabSyncLocked() || (!force && !active)) return;
           await setKV(key, value);
           tracker.value = value;
+          setScopeDirty(key, false);
           publishTabSync('updated', key);
           if (active && (stateRef.current.status !== 'idle' || stateRef.current.error !== null)) {
             setState({ key, loaded: true, status: 'idle', error: null, revision: stateRef.current.revision });
           }
         } catch (error) {
+          if (error instanceof StaleWriteError) {
+            setScopeDirty(key, true);
+            lockTabSyncFromStaleWrite(key);
+            return;
+          }
           if (active) setState({ key, loaded: true, status: 'error', error: `変更を保存できません (${key}): ${String(error)}`, revision: stateRef.current.revision });
         } finally {
           tracker.inFlight -= 1;

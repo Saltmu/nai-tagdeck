@@ -135,6 +135,25 @@ export function clearTabSyncConflict(): void {
   notifyConflict();
 }
 
+/** 版が古い書き込みを拒否したとき、通知を待たずに自動保存を止める。 */
+export function lockTabSyncFromStaleWrite(scope: SyncScope): void {
+  noteConflict({ type: 'updated', senderId: `stale:${tabId}`, scope, seq: ++seq, at: Date.now() });
+}
+
+const dirtyScopes = new Set<SyncScope>();
+
+export function setScopeDirty(scope: SyncScope, dirty: boolean): void {
+  if (dirty) dirtyScopes.add(scope);
+  else dirtyScopes.delete(scope);
+}
+
+/** 競合した範囲に、ロックで書けなかったこのタブの変更を足す。 */
+export function scopesToSave(current: TabSyncConflict): SyncScope[] {
+  const scopes = new Set(scopesToWrite(current));
+  for (const scope of dirtyScopes) scopes.add(scope);
+  return [...scopes];
+}
+
 /** ロック中の辞書書き込みを、リセット時と同じ中断として返す。 */
 export function assertTabSyncWritable(): void {
   if (!isTabSyncLocked()) return;
@@ -191,6 +210,7 @@ export function resetTabSyncForTests(options?: { preferStorage?: boolean }): voi
   listeners.clear();
   conflictListeners.clear();
   conflict = null;
+  dirtyScopes.clear();
   epoch = 0;
   seq = 0;
   preferStorage = options?.preferStorage ?? false;

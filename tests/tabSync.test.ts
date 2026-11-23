@@ -7,8 +7,11 @@ import {
   getTabSyncConflict,
   publishTabSync,
   receiveTabSyncMessage,
+  lockTabSyncFromStaleWrite,
   resetTabSyncForTests,
+  scopesToSave,
   scopesToWrite,
+  setScopeDirty,
   startTabSync,
   subscribeTabSync,
 } from '../src/lib/tabSync';
@@ -39,6 +42,15 @@ describe('tab sync', () => {
     for (const key of KV_KEYS) expect(scopes).toContain(key);
     expect(scopes).toContain('dictionary');
     expect(scopes).not.toContain('reset');
+    setScopeDirty('workspace', true);
+    const saved = scopesToSave(conflict!);
+    expect(saved).toContain('workspace');
+    expect(saved).not.toContain('reset');
+  });
+
+  it('locks when a write sees a newer stored revision', () => {
+    lockTabSyncFromStaleWrite('generation');
+    expect(getTabSyncConflict()).toEqual({ kind: 'updated', scopes: ['generation'] });
   });
 
   it('ignores malformed messages', () => {

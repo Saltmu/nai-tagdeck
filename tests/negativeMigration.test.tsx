@@ -3,10 +3,17 @@ import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useSettings, useWorkspace } from '../src/hooks/useWorkspace';
-import { clearAllData, getKV, setKV } from '../src/lib/db';
+import { clearAllData, getKV, setKV, StaleWriteError } from '../src/lib/db';
 import { resetAppData } from '../src/lib/reset';
+import { clearTabSyncConflict, getTabSyncConflict, receiveTabSyncMessage } from '../src/lib/tabSync';
 
-vi.mock('../src/lib/db', () => ({ clearAllData: vi.fn(), getKV: vi.fn(), setKV: vi.fn() }));
+vi.mock('../src/lib/db', () => {
+  class StaleWriteError extends Error {
+    readonly name = 'StaleWriteError';
+    constructor(readonly scope: string) { super(`stale ${scope}`); }
+  }
+  return { clearAllData: vi.fn(), getKV: vi.fn(), setKV: vi.fn(), StaleWriteError };
+});
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root;
 let current: ReturnType<typeof useWorkspace>;
@@ -22,7 +29,10 @@ beforeEach(() => {
   vi.mocked(setKV).mockReset().mockResolvedValue(undefined);
   root = createRoot(document.createElement('div'));
 });
-afterEach(async () => { await act(async () => root.unmount()); });
+afterEach(async () => {
+  await act(async () => root.unmount());
+  clearTabSyncConflict();
+});
 const render = async () => {
   await act(async () => root.render(<StrictMode><Harness /></StrictMode>));
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
@@ -77,6 +87,25 @@ it('does not write a migrated workspace after resetting during the legacy settin
   await act(async () => finishSettingsRead({ negativePrompt: 'old negative' }));
 
   expect(setKV).not.toHaveBeenCalled();
+});
+
+it('keeps a legacy migration in memory when another tab is newer', async () => {
+  receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'settings', seq: 1, at: 1 });
+  stored({ workspace: { base: { quality: [{ tag: 'masterpiece' }] } }, settings: { negativePrompt: 'lowres' } });
+  await render();
+  expect(current.loaded).toBe(true);
+  expect(current.workspace.negative.map((tag) => tag.tag)).toEqual(['lowres']);
+  expect(setKV).not.toHaveBeenCalled();
+});
+
+it('locks instead of failing when the migrated workspace write is already stale', async () => {
+  stored({ workspace: { base: { quality: [{ tag: 'masterpiece' }] } }, settings: { negativePrompt: 'lowres' } });
+  vi.mocked(setKV).mockRejectedValueOnce(new StaleWriteError('workspace'));
+  await render();
+  expect(current.loaded).toBe(true);
+  expect(current.persistence.status).toBe('idle');
+  expect(current.workspace.negative.map((tag) => tag.tag)).toEqual(['lowres']);
+  expect(getTabSyncConflict()?.scopes).toContain('workspace');
 });
 
 it('surfaces migration save failure and preserves legacy negativePrompt in settings until migration succeeds', async () => {

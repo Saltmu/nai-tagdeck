@@ -2,7 +2,8 @@ import { useCallback, useMemo, useReducer, useState, type Dispatch } from 'react
 import type { Settings, Workspace } from '../types';
 import { emptyWorkspace, hasNegative, normalizeWorkspace, workspaceReducer, type WorkspaceAction } from '../lib/workspace';
 import { migrateNegative } from '../lib/backup';
-import { getKV, setKV } from '../lib/db';
+import { getKV, setKV, StaleWriteError } from '../lib/db';
+import { isTabSyncLocked, lockTabSyncFromStaleWrite } from '../lib/tabSync';
 import { DEFAULT_SETTINGS, legacyNegativePrompt, normalizeSettings } from '../lib/settings';
 import { DEFAULT_GENERATION, normalizeGeneration, type GenerationSettings } from '../lib/generation';
 import { usePersistence, type PersistenceState } from './usePersistence';
@@ -22,7 +23,14 @@ export function useWorkspace(reloadRevision = 0): { workspace: Workspace; dispat
     const settings = await getKV<unknown>('settings');
     if (!isCurrent()) return;
     const migrated = migrateNegative(raw, settings);
-    await setKV('workspace', migrated);
+    if (!isTabSyncLocked()) {
+      try {
+        await setKV('workspace', migrated);
+      } catch (error) {
+        if (!(error instanceof StaleWriteError)) throw error;
+        lockTabSyncFromStaleWrite('workspace');
+      }
+    }
     if (isCurrent()) dispatch({ type: 'replace', workspace: migrated });
   }, 300, reloadRevision);
   return { workspace, dispatch, loaded: persistence.loaded, persistence };

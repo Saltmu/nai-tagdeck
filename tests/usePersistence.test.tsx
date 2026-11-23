@@ -3,11 +3,17 @@ import { act, StrictMode, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePersistence, type PersistenceState } from '../src/hooks/usePersistence';
-import { clearAllData, getKV, setKV, type KVKey } from '../src/lib/db';
+import { clearAllData, getKV, setKV, StaleWriteError, type KVKey } from '../src/lib/db';
 import { resetAppData } from '../src/lib/reset';
-import { clearTabSyncConflict, receiveTabSyncMessage } from '../src/lib/tabSync';
+import { clearTabSyncConflict, getTabSyncConflict, receiveTabSyncMessage, scopesToSave } from '../src/lib/tabSync';
 
-vi.mock('../src/lib/db', () => ({ clearAllData: vi.fn(), getKV: vi.fn(), setKV: vi.fn() }));
+vi.mock('../src/lib/db', () => {
+  class StaleWriteError extends Error {
+    readonly name = 'StaleWriteError';
+    constructor(readonly scope: string) { super(`stale ${scope}`); }
+  }
+  return { clearAllData: vi.fn(), getKV: vi.fn(), setKV: vi.fn(), StaleWriteError };
+});
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root;
 let state: PersistenceState;
@@ -231,6 +237,21 @@ describe('persistent state', () => {
     await act(async () => change('after unlock'));
     await tick();
     expect(setKV).toHaveBeenCalledExactlyOnceWith('workspace', 'after unlock');
+  });
+
+  it('locks and keeps the unsaved edit when the stored revision moved ahead', async () => {
+    vi.mocked(getKV).mockResolvedValue('saved');
+    vi.mocked(setKV).mockRejectedValueOnce(new StaleWriteError('workspace'));
+    await act(async () => root.render(<Harness />));
+    await act(async () => change('edited'));
+    await tick();
+    expect(state.status).toBe('idle');
+    expect(state.error).toBeNull();
+    const conflict = getTabSyncConflict();
+    expect(conflict?.scopes).toContain('workspace');
+    expect(scopesToSave(conflict!)).toContain('workspace');
+    await tick();
+    expect(setKV).toHaveBeenCalledTimes(1);
   });
 
   it('drops a queued write when another tab updates before it runs', async () => {

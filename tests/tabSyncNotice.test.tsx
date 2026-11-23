@@ -7,20 +7,29 @@ import { DialogProvider } from '../src/components/Dialogs';
 import { TabSyncNotice } from '../src/components/TabSyncNotice';
 import { useImages } from '../src/hooks/useImages';
 import { useTabSync } from '../src/hooks/useTabSync';
-import { getKV, listEntries, replaceAllEntries, setKV } from '../src/lib/db';
+import { getKV, listEntries, replaceAllEntries, replaceKV, setKV } from '../src/lib/db';
 import { requestImages } from '../src/lib/novelai';
 import { getTabSyncConflict, receiveTabSyncMessage, resetTabSyncForTests } from '../src/lib/tabSync';
 
-vi.mock('../src/lib/db', () => ({
-  getKV: vi.fn(),
-  setKV: vi.fn(),
-  listEntries: vi.fn(),
-  replaceAllEntries: vi.fn(),
-  putEntry: vi.fn(),
-  putEntries: vi.fn(),
-  deleteEntry: vi.fn(),
-  clearAllData: vi.fn(),
-}));
+vi.mock('../src/lib/db', () => {
+  class StaleWriteError extends Error {
+    readonly name = 'StaleWriteError';
+    constructor(readonly scope: string) { super(`stale ${scope}`); }
+  }
+  return {
+    getKV: vi.fn(),
+    setKV: vi.fn(),
+    listEntries: vi.fn(),
+    replaceAllEntries: vi.fn(),
+    replaceKV: vi.fn(),
+    readSyncEpoch: vi.fn(async () => 0),
+    putEntry: vi.fn(),
+    putEntries: vi.fn(),
+    deleteEntry: vi.fn(),
+    clearAllData: vi.fn(),
+    StaleWriteError,
+  };
+});
 vi.mock('../src/lib/novelai', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/novelai')>(),
   requestImages: vi.fn(),
@@ -49,6 +58,7 @@ beforeEach(() => {
   vi.mocked(setKV).mockResolvedValue(undefined);
   vi.mocked(listEntries).mockResolvedValue([]);
   vi.mocked(replaceAllEntries).mockResolvedValue(undefined);
+  vi.mocked(replaceKV).mockResolvedValue(undefined);
   vi.mocked(requestImages).mockResolvedValue([{ blob: new Blob(['png'], { type: 'image/png' }) }]);
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
   vi.stubGlobal('URL', class extends URL {
@@ -117,6 +127,7 @@ describe('TabSyncNotice', () => {
         confirmOverwrite: async () => false,
         reloadStores: async () => { setNote('after'); },
         saveLocal: async () => {},
+        readEpoch: async () => 0,
         resyncToken: () => {},
       });
       return (
@@ -149,6 +160,7 @@ describe('TabSyncNotice', () => {
         confirmOverwrite: async () => false,
         reloadStores: async () => {},
         saveLocal: async () => {},
+        readEpoch: async () => 0,
         resyncToken,
       });
       return <TabSyncNotice conflict={sync.conflict} busy={sync.busy} error={sync.error} onReload={sync.reloadLatest} onPrefer={sync.preferLocal} />;
@@ -189,12 +201,12 @@ describe('App tab sync', () => {
     const dialog = container.querySelector('dialog');
     expect(dialog?.textContent).toContain('別のタブでの変更を上書きし、このタブの内容を保存しますか？');
     await act(async () => button('上書きして保存', dialog!).click());
-    expect(setKV).toHaveBeenCalledWith('workspace', expect.objectContaining({
+    expect(replaceKV).toHaveBeenCalledWith('workspace', expect.objectContaining({
       base: expect.objectContaining({
         quality: expect.arrayContaining([expect.objectContaining({ tag: 'tab-sync-remote' })]),
       }),
-    }));
-    expect(replaceAllEntries).toHaveBeenCalled();
+    }), 0);
+    expect(replaceAllEntries).toHaveBeenCalledWith([], 0);
     expect(container.textContent).not.toContain('このタブの自動保存を停止しています');
   });
 

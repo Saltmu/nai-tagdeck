@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearAllData, getKV, KV_KEYS, listEntries, putEntry, setKV, type KVKey } from '../src/lib/db';
 import { clearAppStorage, resetAppData } from '../src/lib/reset';
-import { TAB_SYNC_STORAGE_KEY } from '../src/lib/tabSync';
+import { getTabSyncConflict, receiveTabSyncMessage, resetTabSyncForTests, TAB_SYNC_STORAGE_KEY } from '../src/lib/tabSync';
 import { loadCategoryOpen, saveCategoryOpen } from '../src/lib/categoryOpen';
 import { loadToken, saveToken } from '../src/lib/token';
 import { normalizeGeneration } from '../src/lib/generation';
@@ -18,7 +18,10 @@ class MemoryStorage {
 }
 
 describe('全設定とデータの削除', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetTabSyncForTests();
+  });
 
   it('辞書とすべてのKVを削除し、削除後も保存が使える', async () => {
     await putEntry({ id: 'tag', tag: 'solo', category: 'subject', alias: '', default_weight: 1, sort_order: 0, updated_at: '' });
@@ -82,6 +85,33 @@ describe('全設定とデータの削除', () => {
     const event = await received;
     expect(event.data).toMatchObject({ type: 'reset', scope: 'reset' });
     other.close();
+  });
+
+  it('自分の全削除のあと、その前からあったロックを外す', async () => {
+    const localStorage = new MemoryStorage();
+    const sessionStorage = new MemoryStorage();
+    vi.stubGlobal('window', { localStorage, sessionStorage });
+    receiveTabSyncMessage({ type: 'updated', senderId: 'other-tab', scope: 'workspace', seq: 1, at: 1 });
+    await resetAppData();
+    expect(getTabSyncConflict()).toBeNull();
+  });
+
+  it('全削除の途中で他タブの通知が来たら、ロックを残す', async () => {
+    const localStorage = new MemoryStorage();
+    const sessionStorage = new MemoryStorage();
+    vi.stubGlobal('window', { localStorage, sessionStorage });
+    const original = IDBDatabase.prototype.transaction;
+    IDBDatabase.prototype.transaction = function transaction(this: IDBDatabase, ...args: Parameters<IDBDatabase['transaction']>) {
+      const tx = original.apply(this, args);
+      receiveTabSyncMessage({ type: 'reset', senderId: 'other-tab', scope: 'reset', seq: 9, at: 9 });
+      return tx;
+    };
+    try {
+      await resetAppData();
+      expect(getTabSyncConflict()?.kind).toBe('reset');
+    } finally {
+      IDBDatabase.prototype.transaction = original;
+    }
   });
 
   it('ストレージの削除に失敗した場合は成功として扱わない', async () => {

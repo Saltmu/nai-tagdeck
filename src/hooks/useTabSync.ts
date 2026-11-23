@@ -12,8 +12,9 @@ interface TabSyncPorts {
   confirmOverwrite: () => Promise<boolean>;
   /** 画面を破棄せず、IndexedDB の最新値を読み直す。 */
   reloadStores: () => Promise<void>;
-  /** ロックを残したまま、このタブの内容を書き戻して他タブへ通知する。 */
-  saveLocal: (conflict: TabSyncConflict) => Promise<void>;
+  /** ロックを残したまま、このタブの内容を書き戻して他タブへ通知する。全削除の世代が変わっていたら失敗させる。 */
+  saveLocal: (conflict: TabSyncConflict, epoch: number) => Promise<void>;
+  readEpoch: () => Promise<number>;
   resyncToken: () => void;
 }
 
@@ -67,16 +68,21 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
     const current = getTabSyncConflict();
     if (!current || busyRef.current) return;
     void (async () => {
+      const storedEpoch = await portsRef.current.readEpoch();
       const ok = await portsRef.current.confirmOverwrite();
       const latest = getTabSyncConflict();
       if (!ok || !latest || busyRef.current) return;
+      if ((await portsRef.current.readEpoch()) !== storedEpoch) {
+        setError('別のタブでデータが削除されたため、保存を中止しました。内容を確認してからもう一度選んでください。');
+        return;
+      }
       busyRef.current = true;
       setBusy(true);
       setError(null);
-      const epoch = getTabSyncEpoch();
+      const syncEpoch = getTabSyncEpoch();
       try {
-        await portsRef.current.saveLocal(latest);
-        if (getTabSyncEpoch() === epoch) clearTabSyncConflict();
+        await portsRef.current.saveLocal(latest, storedEpoch);
+        if (getTabSyncEpoch() === syncEpoch) clearTabSyncConflict();
       } catch (caught) {
         setError(`このタブの内容を保存できません: ${String(caught)}`);
       } finally {

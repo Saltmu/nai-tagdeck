@@ -30,8 +30,8 @@ import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/p
 import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { TabSyncNotice } from './components/TabSyncNotice';
 import { useTabSync } from './hooks/useTabSync';
-import { replaceAllEntries, setKV, type KVKey } from './lib/db';
-import { publishTabSync, scopesToWrite, type SyncScope } from './lib/tabSync';
+import { readSyncEpoch, replaceAllEntries, replaceKV, type KVKey } from './lib/db';
+import { publishTabSync, scopesToSave, type SyncScope } from './lib/tabSync';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
 import { importedBaseForMode, type PromptImport } from './lib/promptImport';
@@ -115,6 +115,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   }, [kvStates]);
   const tabSync = useTabSync({
     confirmOverwrite: () => dialogs.confirm('別のタブでの変更を上書きし、このタブの内容を保存しますか？', { okLabel: '上書きして保存' }),
+    readEpoch: () => readSyncEpoch(),
     resyncToken: () => token.resync(),
     reloadStores: () => {
       const next = reloadRevisionRef.current + 1;
@@ -125,22 +126,25 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       setReloadRevision(next);
       return Promise.all([kvReady, dictionaryRef.current.reload()]).then(() => undefined);
     },
-    saveLocal: async (conflict) => {
-      for (const scope of scopesToWrite(conflict)) {
+    saveLocal: async (conflict, epoch) => {
+      const snapshots: Record<KVKey, unknown> = {
+        workspace: workspaceRef.current,
+        settings: settingsRef.current,
+        generation: generationRef.current,
+        presets: presetsRef.current.presets,
+        activePreset: presetsRef.current.activeId,
+      };
+      for (const scope of scopesToSave(conflict)) {
+        if ((await readSyncEpoch()) !== epoch) {
+          throw new Error('別のタブでデータが削除されました');
+        }
         if (scope === 'dictionary') {
-          await replaceAllEntries(entriesRef.current);
+          await replaceAllEntries(entriesRef.current, epoch);
           publishTabSync('updated', 'dictionary');
           continue;
         }
         if (!isKvScope(scope)) continue;
-        const snapshots: Record<KVKey, unknown> = {
-          workspace: workspaceRef.current,
-          settings: settingsRef.current,
-          generation: generationRef.current,
-          presets: presetsRef.current.presets,
-          activePreset: presetsRef.current.activeId,
-        };
-        await setKV(scope, snapshots[scope]);
+        await replaceKV(scope, snapshots[scope], epoch);
         publishTabSync('updated', scope);
       }
     },

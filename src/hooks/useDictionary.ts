@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DictEntry } from '../types';
-import { deleteEntry, listEntries, putEntry, putEntries, replaceAllEntries } from '../lib/db';
+import { deleteEntry, listEntries, putEntry, putEntries, replaceAllEntries, StaleWriteError } from '../lib/db';
 import { mergeEntries, sortEntries, type ImportMode } from '../lib/io';
 import { getDataResetSignal } from '../lib/reset';
 import { restoreInitialDictionary } from '../lib/sampleDictionary';
-import { assertTabSyncWritable, publishTabSync, startTabSync } from '../lib/tabSync';
+import { assertTabSyncWritable, lockTabSyncFromStaleWrite, publishTabSync, startTabSync } from '../lib/tabSync';
 
 export interface Dictionary {
   entries: DictEntry[];
@@ -34,6 +34,9 @@ export function useDictionary(): Dictionary {
       resetSignal.throwIfAborted();
       assertTabSyncWritable();
       return task();
+    }).catch((error: unknown) => {
+      if (error instanceof StaleWriteError) lockTabSyncFromStaleWrite('dictionary');
+      throw error;
     });
     writes.current = run.then(() => undefined, () => undefined);
     return run;
