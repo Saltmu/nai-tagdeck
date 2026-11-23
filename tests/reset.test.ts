@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearAllData, getKV, KV_KEYS, listEntries, putEntry, setKV, type KVKey } from '../src/lib/db';
 import { clearAppStorage, resetAppData } from '../src/lib/reset';
+import { resetTabSyncForTests, TAB_SYNC_STORAGE_KEY } from '../src/lib/tabSync';
 import { loadCategoryOpen, saveCategoryOpen } from '../src/lib/categoryOpen';
 import { loadToken, saveToken } from '../src/lib/token';
 import { normalizeGeneration } from '../src/lib/generation';
@@ -71,5 +72,19 @@ describe('全設定とデータの削除', () => {
   it('ストレージの削除に失敗した場合は成功として扱わない', async () => {
     vi.stubGlobal('window', { get localStorage() { throw new Error('storage unavailable'); } });
     await expect(resetAppData()).rejects.toThrow('storage unavailable');
+  });
+
+  it('全削除の完了後に他タブへ reset 通知を送る', async () => {
+    const localStorage = new MemoryStorage();
+    const sessionStorage = new MemoryStorage();
+    vi.stubGlobal('BroadcastChannel', undefined);
+    vi.stubGlobal('window', { localStorage, sessionStorage });
+    vi.stubGlobal('localStorage', localStorage);
+    resetTabSyncForTests({ preferStorage: true });
+    await resetAppData();
+    const raw = localStorage.getItem(TAB_SYNC_STORAGE_KEY);
+    expect(raw).not.toBeNull();
+    expect(JSON.parse(raw!)).toMatchObject({ type: 'reset' });
+    resetTabSyncForTests();
   });
 });
