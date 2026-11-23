@@ -23,7 +23,7 @@ import { useLatestImageNotice } from './hooks/useLatestImageNotice';
 import { useFirstRun } from './hooks/useFirstRun';
 import { confirmUnsavedChanges, type UnsavedChoice } from './components/confirmUnsaved';
 import { useDialogs } from './components/Dialogs';
-import { isEmptyWorkspace, overwritePreset, sameWorkspace, sameWorkTags } from './lib/presets';
+import { generationSaveForOverwrite, isEmptyWorkspace, overwritePreset, samePreset, sameWorkTags } from './lib/presets';
 import { isDefaultSettings } from './lib/settings';
 import { isDefaultGeneration, normalizeGeneration, sizeOf, type GenerationSettings, type SizeKey } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
@@ -216,7 +216,13 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     const negativeUnsaved = negativeChanges
       && !sameWorkTags(currentWorkspace.negative, defaultNegativeTags())
       && (active === null || active.workspace.negative === undefined);
-    const dirty = (active ? !sameWorkspace(active.workspace, currentWorkspace) : !isEmptyWorkspace(currentWorkspace)) || negativeUnsaved;
+    const dirty = (active
+      ? !samePreset(active, {
+          workspace: currentWorkspace,
+          generation: currentGeneration,
+          characterNegativePrompt: currentSettings.characterNegativePrompt,
+        })
+      : !isEmptyWorkspace(currentWorkspace)) || negativeUnsaved;
     const nextCharacterNegative = result.characterNegative !== undefined && result.characterNegative !== currentSettings.characterNegativePrompt
       ? result.characterNegative
       : null;
@@ -259,7 +265,15 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       }
     }
     if (choice === 'save' && active) {
-      store.setPresets(overwritePreset(store.presets, active.id, currentWorkspace));
+      store.setPresets(overwritePreset(
+        store.presets,
+        active.id,
+        currentWorkspace,
+        generationSaveForOverwrite(active, {
+          generation: currentGeneration,
+          characterNegativePrompt: currentSettings.characterNegativePrompt,
+        }),
+      ));
     }
     const nextMode = nextGeneration?.mode ?? currentGeneration.mode;
     const extras: UndoExtras = {};
@@ -382,6 +396,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onReadPng={openPromptImport}
               characterNegative={settings.characterNegativePrompt}
               onCharacterNegativeChange={handleCharacterNegativeChange}
+              generation={generation}
               canvasSize={sizeOf(generation.size)}
               shown={tab === 'editor'}
             />

@@ -1,14 +1,20 @@
-import { useEffect, useId, useMemo, useRef, useState, type Dispatch } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Workspace } from '../types';
 import type { PresetStore } from '../hooks/usePresets';
+import type { UndoExtras } from '../hooks/useTagUndo';
+import { modeLabel, type GenerationSettings } from '../lib/generation';
 import {
   createPreset,
   filterPresets,
+  generationSaveForOverwrite,
   isEmptyWorkspace,
   overwritePreset,
+  presetGenerationOf,
+  presetGenerationSummary,
+  presetLoadExtras,
   presetToWorkspace,
   renamePreset,
-  sameWorkspace,
+  samePreset,
   sortPresets,
   type Preset,
 } from '../lib/presets';
@@ -18,21 +24,35 @@ import { confirmUnsavedChanges } from './confirmUnsaved';
 import { useDialogs } from './Dialogs';
 import { EditorActions } from './EditorActions';
 import { MoreIcon } from './icons';
+import { PresetSaveDialog } from './PresetSaveDialog';
 
 interface Props {
   store: PresetStore;
   workspace: Workspace;
-  dispatch: Dispatch<WorkspaceAction>;
+  dispatch: (action: WorkspaceAction, extras?: UndoExtras) => void;
   notify: (message: string) => void;
+  generation: GenerationSettings;
+  characterNegativePrompt: string;
   onPickPng?: () => void;
 }
 
-export function PresetBar({ store, workspace, dispatch, notify, onPickPng }: Props) {
+export function PresetBar({
+  store,
+  workspace,
+  dispatch,
+  notify,
+  generation,
+  characterNegativePrompt,
+  onPickPng,
+}: Props) {
   const id = useId();
   const dialogs = useDialogs();
   const { presets, setPresets, activeId, setActiveId } = store;
   const active = presets.find((p) => p.id === activeId) ?? null;
-  const dirty = active ? !sameWorkspace(active.workspace, workspace) : !isEmptyWorkspace(workspace);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const dirty = active
+    ? !samePreset(active, { workspace, generation, characterNegativePrompt })
+    : !isEmptyWorkspace(workspace);
 
   /**
    * 保存していない編集を捨てる前に確認する。読み込み中のプリセットがあれば、上書き保存してから進むこともできる。
@@ -53,30 +73,44 @@ export function PresetBar({ store, workspace, dispatch, notify, onPickPng }: Pro
     const preset = presets.find((p) => p.id === presetId);
     if (!preset || preset.id === active?.id) return;
     if (!(await confirmDiscard(`「${preset.name}」を読み込みますか？`, '読み込む'))) return;
-    dispatch({ type: 'replace', workspace: presetToWorkspace(preset.workspace, workspace) });
+    dispatch(
+      { type: 'replace', workspace: presetToWorkspace(preset.workspace, workspace) },
+      presetLoadExtras(preset, { generation, characterNegativePrompt }),
+    );
     setActiveId(preset.id);
-    notify(`「${preset.name}」を読み込みました`);
+    notify(
+      preset.generation !== undefined
+        ? `「${preset.name}」を読み込みました（生成設定も反映）`
+        : `「${preset.name}」を読み込みました`,
+    );
   };
 
-  const saveAs = async () => {
-    const name = (await dialogs.prompt('プリセットの名前', active?.name ?? '', { okLabel: '保存' }))?.trim();
-    if (!name) return;
-    const same = presets.find((p) => p.name === name);
+  const saveAs = () => setSaveOpen(true);
+
+  const commitSave = async (choice: { name: string; includeGeneration: boolean }) => {
+    setSaveOpen(false);
+    const save = choice.includeGeneration ? { generation, characterNegativePrompt } : null;
+    const same = presets.find((p) => p.name === choice.name);
     if (same) {
-      if (!(await dialogs.confirm(`「${name}」はすでにあります。上書きしますか？`, { okLabel: '上書き' }))) return;
-      setPresets(overwritePreset(presets, same.id, workspace));
+      if (!(await dialogs.confirm(`「${choice.name}」はすでにあります。上書きしますか？`, { okLabel: '上書き' }))) return;
+      setPresets(overwritePreset(presets, same.id, workspace, save));
       setActiveId(same.id);
     } else {
-      const preset = createPreset(name, workspace);
+      const preset = createPreset(choice.name, workspace, save ?? undefined);
       setPresets(sortPresets([...presets, preset]));
       setActiveId(preset.id);
     }
-    notify(`プリセット「${name}」に保存しました`);
+    notify(`プリセット「${choice.name}」に保存しました`);
   };
 
   const overwrite = () => {
     if (!active) return;
-    setPresets(overwritePreset(presets, active.id, workspace));
+    setPresets(overwritePreset(
+      presets,
+      active.id,
+      workspace,
+      generationSaveForOverwrite(active, { generation, characterNegativePrompt }),
+    ));
     notify(`プリセット「${active.name}」に変更を上書きしました`);
   };
 
@@ -130,6 +164,15 @@ export function PresetBar({ store, workspace, dispatch, notify, onPickPng }: Pro
           ]}
         />
       </div>
+      {saveOpen && (
+        <PresetSaveDialog
+          initialName={active?.name ?? ''}
+          includeGeneration={active ? active.generation !== undefined : true}
+          summary={presetGenerationSummary(presetGenerationOf(generation))}
+          onCancel={() => setSaveOpen(false)}
+          onSave={commitSave}
+        />
+      )}
     </section>
   );
 }
@@ -251,6 +294,7 @@ function PresetSearch({ inputId, presets, active, onPick }: SearchProps) {
               onClick={() => pick(p)}
             >
               <span className="suggestion-tag">{p.name}</span>
+              {p.generation && <span className="chip preset-mode-chip">{modeLabel(p.generation.mode)}</span>}
             </li>
           ))}
         </ul>

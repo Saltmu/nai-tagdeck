@@ -1,0 +1,249 @@
+// @vitest-environment jsdom
+import { act, useMemo, useReducer, useRef, useState } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { DialogProvider } from '../src/components/Dialogs';
+import { PresetBar } from '../src/components/PresetBar';
+import { DEFAULT_GENERATION, type GenerationSettings } from '../src/lib/generation';
+import { createPreset, type Preset } from '../src/lib/presets';
+import { emptyWorkspace, workspaceReducer, type WorkspaceAction } from '../src/lib/workspace';
+import type { PresetStore } from '../src/hooks/usePresets';
+import { useTagUndo, type UndoExtras } from '../src/hooks/useTagUndo';
+import type { Workspace } from '../src/types';
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+let container: HTMLDivElement;
+let root: Root;
+const dialogMethods = ['showModal', 'close'] as const;
+const originalDialogMethods = dialogMethods.map((name) => Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, name));
+
+function button(text: string, scope: ParentNode = container): HTMLButtonElement {
+  const found = Array.from(scope.querySelectorAll('button')).find((node) => node.textContent?.trim() === text);
+  if (!found) throw new Error(`Button missing: ${text}`);
+  return found;
+}
+
+const click = (node: Element) => act(async () => (node as HTMLElement).click());
+
+function Harness({
+  initialWorkspace,
+  initialPresets,
+  initialActiveId,
+  initialGeneration,
+  initialNegative,
+}: {
+  initialWorkspace: Workspace;
+  initialPresets: Preset[];
+  initialActiveId: string | null;
+  initialGeneration: GenerationSettings;
+  initialNegative: string;
+}) {
+  const [workspace, rawDispatch] = useReducer(workspaceReducer, initialWorkspace);
+  const [presets, setPresets] = useState(initialPresets);
+  const [activeId, setActiveId] = useState(initialActiveId);
+  const [generation, setGeneration] = useState(initialGeneration);
+  const [characterNegativePrompt, setCharacterNegativePrompt] = useState(initialNegative);
+  const [toast, setToast] = useState('');
+  const generationRef = useRef(generation);
+  const negativeRef = useRef(characterNegativePrompt);
+  generationRef.current = generation;
+  negativeRef.current = characterNegativePrompt;
+  const extrasSync = useMemo(() => ({
+    capture: () => ({
+      characterNegativePrompt: negativeRef.current,
+      generation: { ...generationRef.current },
+    }),
+    restore: (extras: UndoExtras) => {
+      if (extras.characterNegativePrompt !== undefined) setCharacterNegativePrompt(extras.characterNegativePrompt);
+      if (extras.generation) setGeneration((current) => ({ ...current, ...extras.generation }));
+    },
+  }), []);
+  const history = useTagUndo(workspace, rawDispatch, { activeId, setActiveId }, extrasSync);
+  const store: PresetStore = {
+    presets,
+    setPresets,
+    activeId,
+    setActiveId,
+    persistence: [
+      { status: 'idle', loaded: true, error: null },
+      { status: 'idle', loaded: true, error: null },
+    ],
+  };
+  const dispatch = (action: WorkspaceAction) => history.dispatch(action);
+  return (
+    <DialogProvider>
+      <PresetBar
+        store={store}
+        workspace={workspace}
+        dispatch={history.dispatch}
+        notify={setToast}
+        generation={generation}
+        characterNegativePrompt={characterNegativePrompt}
+      />
+      <button type="button" onClick={() => setGeneration((current) => ({ ...current, mode: current.mode === 'furry' ? 'anime' : 'furry' }))}>
+        モード切替
+      </button>
+      <button type="button" onClick={() => setGeneration((current) => ({ ...current, seed: 123 }))}>シード変更</button>
+      <button type="button" onClick={() => setCharacterNegativePrompt('changed')}>ネガティブ変更</button>
+      <button type="button" onClick={() => dispatch({ type: 'add', target: 'base', category: 'quality', tag: 'hat' })}>タグ追加</button>
+      <button type="button" onClick={() => history.undo()}>テスト取消</button>
+      <output className="toast">{toast}</output>
+      <output className="state" data-mode={generation.mode} data-seed={String(generation.seed)} data-negative={characterNegativePrompt} />
+    </DialogProvider>
+  );
+}
+
+async function renderHarness(props: {
+  workspace?: Workspace;
+  presets?: Preset[];
+  activeId?: string | null;
+  generation?: GenerationSettings;
+  negative?: string;
+}) {
+  await act(async () => root.render(
+    <Harness
+      initialWorkspace={props.workspace ?? emptyWorkspace()}
+      initialPresets={props.presets ?? []}
+      initialActiveId={props.activeId ?? null}
+      initialGeneration={props.generation ?? { ...DEFAULT_GENERATION, mode: 'furry', seed: 7 }}
+      initialNegative={props.negative ?? 'lowres'}
+    />,
+  ));
+}
+
+const state = () => container.querySelector<HTMLOutputElement>('output.state')!;
+const saveDialog = () => Array.from(container.querySelectorAll('dialog')).find((dialog) => dialog.textContent?.includes('プリセットを保存'));
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  Object.defineProperties(HTMLDialogElement.prototype, {
+    showModal: { configurable: true, value: function (this: HTMLDialogElement) { this.open = true; } },
+    close: { configurable: true, value: function (this: HTMLDialogElement) { this.open = false; } },
+  });
+  container = document.createElement('div');
+  document.body.append(container);
+  root = createRoot(container);
+});
+
+afterEach(async () => {
+  await act(async () => root.unmount());
+  container.remove();
+  vi.unstubAllGlobals();
+  dialogMethods.forEach((name, index) => {
+    const descriptor = originalDialogMethods[index];
+    if (descriptor) Object.defineProperty(HTMLDialogElement.prototype, name, descriptor);
+    else Reflect.deleteProperty(HTMLDialogElement.prototype, name);
+  });
+});
+
+it('saves generation settings when asked and restores them without the seed', async () => {
+  const workspace = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'solo' });
+  await renderHarness({ workspace });
+  await click(button('新しいプリセットとして保存'));
+  const dialog = saveDialog();
+  if (!dialog) throw new Error('保存ダイアログがありません');
+  const name = dialog.querySelector('input[type="text"]') as HTMLInputElement;
+  const checkbox = dialog.querySelector('input[type="checkbox"]') as HTMLInputElement;
+  expect(document.activeElement).toBe(name);
+  expect(name.selectionStart).toBe(0);
+  expect(name.selectionEnd).toBe(0);
+  expect(checkbox.checked).toBe(true);
+  expect(dialog.textContent).toContain('ケモノ · 縦 832×1216 · 28 steps · スケール 5 · Euler Ancestral');
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  await act(async () => {
+    setter.call(name, 'ケモノ用');
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await click(button('保存', dialog));
+  expect(container.querySelector('.toast')?.textContent).toContain('プリセット「ケモノ用」に保存しました');
+
+  await click(button('新規'));
+  await click(button('モード切替'));
+  await click(button('ネガティブ変更'));
+  await click(button('シード変更'));
+  expect(state().dataset).toMatchObject({ mode: 'anime', seed: '123', negative: 'changed' });
+
+  const search = container.querySelector<HTMLInputElement>('.preset-search input')!;
+  await act(async () => { search.focus(); });
+  expect(container.textContent).toContain('ケモノ');
+  await click(container.querySelector('[role="option"]')!);
+  expect(container.querySelector('.toast')?.textContent).toContain('「ケモノ用」を読み込みました（生成設定も反映）');
+  expect(state().dataset).toMatchObject({ mode: 'furry', seed: '123', negative: 'lowres' });
+  expect(search.value).toBe('ケモノ用');
+
+  await act(async () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+  });
+  expect(state().dataset).toMatchObject({ mode: 'anime', seed: '123', negative: 'changed' });
+  expect(container.querySelector<HTMLInputElement>('.preset-search input')!.value).toBe('');
+
+  await act(async () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'y', ctrlKey: true, bubbles: true }));
+  });
+  expect(state().dataset).toMatchObject({ mode: 'furry', seed: '123', negative: 'lowres' });
+  expect(container.querySelector<HTMLInputElement>('.preset-search input')!.value).toBe('ケモノ用');
+});
+
+it('keeps a tag-only preset free of generation settings when overwriting', async () => {
+  const workspace = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'solo' });
+  const preset = createPreset('タグのみ', workspace);
+  await renderHarness({ workspace, presets: [preset], activeId: preset.id, generation: { ...DEFAULT_GENERATION, seed: 4 }, negative: 'blurry' });
+  await click(button('モード切替'));
+  await click(button('ネガティブ変更'));
+  expect(container.textContent).not.toContain('変更あり');
+  await click(button('タグ追加'));
+  expect(container.textContent).toContain('変更あり');
+  await click(button('変更を上書き'));
+  expect(container.textContent).not.toContain('変更あり');
+
+  await click(button('新規'));
+  const search = container.querySelector<HTMLInputElement>('.preset-search input')!;
+  await act(async () => { search.focus(); });
+  const option = container.querySelector('[role="option"]')!;
+  expect(option.textContent).toBe('タグのみ');
+  expect(option.querySelector('.preset-mode-chip')).toBeNull();
+  await click(option);
+  expect(state().dataset.mode).toBe('furry');
+  expect(state().dataset.negative).toBe('changed');
+  expect(container.querySelector('.toast')?.textContent).toBe('「タグのみ」を読み込みました');
+});
+
+it('overwrites generation on a generation preset and can remove it by saving the same name', async () => {
+  const workspace = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'solo' });
+  const preset = createPreset('基本', workspace, {
+    generation: { ...DEFAULT_GENERATION, mode: 'anime' },
+    characterNegativePrompt: 'blurry',
+  });
+  await renderHarness({
+    workspace,
+    presets: [preset],
+    activeId: preset.id,
+    generation: { ...DEFAULT_GENERATION, seed: 8 },
+    negative: 'blurry',
+  });
+  await click(button('シード変更'));
+  expect(container.textContent).not.toContain('変更あり');
+  await click(button('モード切替'));
+  expect(container.textContent).toContain('変更あり');
+  await click(button('変更を上書き'));
+  expect(container.textContent).not.toContain('変更あり');
+
+  await click(button('新しいプリセットとして保存'));
+  const dialog = saveDialog();
+  if (!dialog) throw new Error('保存ダイアログがありません');
+  const name = dialog.querySelector('input[type="text"]') as HTMLInputElement;
+  expect(name.value).toBe('基本');
+  expect(name.selectionStart).toBe(0);
+  expect(name.selectionEnd).toBe(name.value.length);
+  const checkbox = dialog.querySelector('input[type="checkbox"]') as HTMLInputElement;
+  expect(checkbox.checked).toBe(true);
+  await click(checkbox);
+  expect(dialog.textContent).not.toContain('steps');
+  await click(button('保存', dialog));
+  await click(button('上書き'));
+  const search = container.querySelector<HTMLInputElement>('.preset-search input')!;
+  await act(async () => { search.focus(); });
+  const option = container.querySelector('[role="option"]')!;
+  expect(option.querySelector('.preset-mode-chip')).toBeNull();
+});

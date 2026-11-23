@@ -1,4 +1,4 @@
-import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type KeyboardEvent } from 'react';
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import {
@@ -16,6 +16,7 @@ import { classifyEditorTag, createTagVectorIndex } from '../lib/tagClassificatio
 import { normalize } from '../lib/tagText';
 import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
+import { DEFAULT_GENERATION, type GenerationSettings } from '../lib/generation';
 import { CategorySection } from './CategorySection';
 import { NegativePane } from './NegativePane';
 import { CharacterCard } from './CharacterCard';
@@ -27,7 +28,7 @@ import { TagInput } from './TagInput';
 import type { PromptSource } from './PromptImportDialog';
 import { useDialogs } from './Dialogs';
 import type { PresetStore } from '../hooks/usePresets';
-
+import type { UndoExtras } from '../hooks/useTagUndo';
 import { useCharacterTabFocus } from '../hooks/useCharacterTabFocus';
 import { useEditorSelection } from '../hooks/useEditorSelection';
 import { usePngDrop } from '../hooks/usePngDrop';
@@ -40,7 +41,7 @@ const QUALITY_PICKS = ['masterpiece', 'best quality', 'amazing quality', 'very a
 
 interface Props {
   workspace: Workspace;
-  dispatch: Dispatch<WorkspaceAction>;
+  dispatch: (action: WorkspaceAction, extras?: UndoExtras) => void;
   history?: ComponentProps<typeof HistoryControls>;
   loaded: boolean;
   dictionary: Dictionary;
@@ -53,6 +54,8 @@ interface Props {
   /** 個別指定がないキャラクターに付けるネガティブ。 */
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
+  /** プリセットへ保存・復元する生成設定。 */
+  generation?: GenerationSettings;
   /** 位置ピッカーの縦横比に使う出力画像サイズ。 */
   canvasSize?: { width: number; height: number };
   /** 編集画面を開いている（false の間は他の画面を表示している）。 */
@@ -73,6 +76,7 @@ export function Editor({
   onReadPng,
   characterNegative,
   onCharacterNegativeChange,
+  generation = DEFAULT_GENERATION,
   canvasSize,
   shown,
 }: Props) {
@@ -251,7 +255,15 @@ export function Editor({
 
   return (
     <div className={`editor${dragging ? ' is-dragging' : ''}`} aria-busy={!loaded} {...dropProps}>
-      <PresetBar store={presets} workspace={workspace} dispatch={dispatch} notify={notify} onPickPng={onPickPng} />
+      <PresetBar
+        store={presets}
+        workspace={workspace}
+        dispatch={dispatch}
+        notify={notify}
+        generation={generation}
+        characterNegativePrompt={characterNegative}
+        onPickPng={onPickPng}
+      />
 
       <div
         ref={tabsRef}
