@@ -1,4 +1,4 @@
-import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import {
@@ -8,14 +8,16 @@ import {
   NEGATIVE,
   type WorkspaceAction,
 } from '../lib/workspace';
-import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
+import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS, categoryLabel } from '../lib/categories';
 import { saveCategoriesOpen } from '../lib/categoryOpen';
 import { buildPrompt } from '../lib/prompt';
 import { buildTagAliasMap, isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import { classifyEditorTag, createTagVectorIndex } from '../lib/tagClassification';
 import { normalize } from '../lib/tagText';
+import { findDuplicate } from '../lib/io';
 import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
+import { DEFAULT_GENERATION, type GenerationSettings } from '../lib/generation';
 import { CategorySection } from './CategorySection';
 import { NegativePane } from './NegativePane';
 import { CharacterCard } from './CharacterCard';
@@ -23,11 +25,12 @@ import type { PeerCharacterCenter } from './CharacterCenterPicker';
 import { HistoryControls } from './HistoryControls';
 import { PresetBar } from './PresetBar';
 import { TagFilterBar } from './TagFilterBar';
+import { RegisterTagDialog, type RegisterTagDraft } from './RegisterTagDialog';
 import { TagInput } from './TagInput';
 import type { PromptSource } from './PromptImportDialog';
 import { useDialogs } from './Dialogs';
 import type { PresetStore } from '../hooks/usePresets';
-
+import type { UndoExtras } from '../hooks/useTagUndo';
 import { useCharacterTabFocus } from '../hooks/useCharacterTabFocus';
 import { useEditorSelection } from '../hooks/useEditorSelection';
 import { usePngDrop } from '../hooks/usePngDrop';
@@ -40,7 +43,7 @@ const QUALITY_PICKS = ['masterpiece', 'best quality', 'amazing quality', 'very a
 
 interface Props {
   workspace: Workspace;
-  dispatch: Dispatch<WorkspaceAction>;
+  dispatch: (action: WorkspaceAction, extras?: UndoExtras) => void;
   history?: ComponentProps<typeof HistoryControls>;
   loaded: boolean;
   dictionary: Dictionary;
@@ -53,6 +56,12 @@ interface Props {
   /** 個別指定がないキャラクターに付けるネガティブ。 */
   characterNegative: string;
   onCharacterNegativeChange: (value: string) => void;
+  /** プリセットへ保存・復元する生成設定。 */
+  generation?: GenerationSettings;
+  /** 生成設定と共通キャラネガティブの読み込みが成功している。 */
+  settingsReady?: boolean;
+  /** 作業状態の読み込みと旧データの移行が終わっている。 */
+  workspaceReady?: boolean;
   /** 位置ピッカーの縦横比に使う出力画像サイズ。 */
   canvasSize?: { width: number; height: number };
   /** 編集画面を開いている（false の間は他の画面を表示している）。 */
@@ -73,6 +82,9 @@ export function Editor({
   onReadPng,
   characterNegative,
   onCharacterNegativeChange,
+  generation = DEFAULT_GENERATION,
+  settingsReady = true,
+  workspaceReady = true,
   canvasSize,
   shown,
 }: Props) {
@@ -86,20 +98,56 @@ export function Editor({
   } = useUnclassifiedSuggestions(workspace.base.unclassified);
 
   const { save } = dictionary;
-  const register = useCallback(
-    async (tag: WorkTag, category: CategoryKey) => {
-      await save({
+  const [registering, setRegistering] = useState<{ tag: WorkTag; category: CategoryKey } | null>(null);
+  const registerReturn = useRef<{ row: HTMLElement | null; section: HTMLElement | null } | null>(null);
+  const register = useCallback((tag: WorkTag, category: CategoryKey) => {
+    const active = document.activeElement;
+    const row = active instanceof Element ? active.closest('li.tag-row') : null;
+    const section = active instanceof Element ? active.closest('section.category') : null;
+    registerReturn.current = {
+      row: row instanceof HTMLElement ? row : null,
+      section: section instanceof HTMLElement ? section : null,
+    };
+    setRegistering({ tag, category });
+  }, []);
+  const closeRegistration = useCallback((saved: boolean) => {
+    if (!saved) registerReturn.current = null;
+    setRegistering(null);
+  }, []);
+  useEffect(() => {
+    if (registering || !registerReturn.current) return;
+    const { row, section } = registerReturn.current;
+    registerReturn.current = null;
+    const edit = row?.isConnected ? row.querySelector<HTMLElement>('button[aria-label$=" を編集"]') : null;
+    const add = section?.querySelector<HTMLInputElement>('input[aria-label$="にタグを追加"]');
+    (edit ?? add)?.focus();
+  }, [registering]);
+  const saveRegistration = useCallback(
+    async (draft: RegisterTagDraft): Promise<string | null> => {
+      const entry = {
         id: newId(),
-        tag: tag.tag,
-        category,
-        alias: '',
-        default_weight: tag.weight,
+        tag: draft.tag,
+        category: draft.category,
+        alias: draft.alias,
+        default_weight: draft.default_weight,
         sort_order: 0,
         updated_at: '',
-      });
-      notify(`「${tag.tag}」を辞書に登録しました`);
+      };
+      const dup = findDuplicate(dictionary.entries, entry);
+      if (dup) return `「${dup.tag}」は ${categoryLabel(dup.category)} に登録済みです`;
+      try {
+        await save(entry);
+      } catch (e) {
+        return `保存できませんでした: ${String(e)}`;
+      }
+      notify(
+        draft.alias
+          ? `「${draft.tag}」（${draft.alias}）を辞書に登録しました`
+          : `「${draft.tag}」を辞書に登録しました`,
+      );
+      return null;
     },
-    [save, notify],
+    [dictionary.entries, notify, save],
   );
 
   const { characters } = workspace;
@@ -244,14 +292,24 @@ export function Editor({
   };
 
   const { dragging, dropProps } = usePngDrop({
-    enabled: !!onPickPng && !!onReadPng,
+    enabled: !!onPickPng && !!onReadPng && !registering,
     onDropFile: (source) => onReadPng?.(source),
     onMultipleFiles: () => notify('PNG を1枚ずつドロップしてください'),
   });
 
   return (
     <div className={`editor${dragging ? ' is-dragging' : ''}`} aria-busy={!loaded} {...dropProps}>
-      <PresetBar store={presets} workspace={workspace} dispatch={dispatch} notify={notify} onPickPng={onPickPng} />
+      <PresetBar
+        store={presets}
+        workspace={workspace}
+        dispatch={dispatch}
+        notify={notify}
+        generation={generation}
+        characterNegativePrompt={characterNegative}
+        settingsReady={settingsReady}
+        workspaceReady={workspaceReady}
+        onPickPng={onPickPng}
+      />
 
       <div
         ref={tabsRef}
@@ -429,6 +487,15 @@ export function Editor({
       <p className="hint">
         保存 {characters.length}/{MAX_CHARACTERS} · 生成対象 {enabledCount}/{MAX_ENABLED_CHARACTERS}
       </p>
+      {registering && (
+        <RegisterTagDialog
+          tag={registering.tag.tag}
+          category={registering.category}
+          weight={registering.tag.weight}
+          onClose={closeRegistration}
+          onSave={saveRegistration}
+        />
+      )}
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { useTagUndo } from '../src/hooks/useTagUndo';
 import { TagInput } from '../src/components/TagInput';
 import { PresetBar } from '../src/components/PresetBar';
 import { emptyWorkspace, workspaceReducer } from '../src/lib/workspace';
-import type { SizeKey } from '../src/lib/generation';
+import { DEFAULT_GENERATION, type SizeKey } from '../src/lib/generation';
 import type { GeneratedImage } from '../src/hooks/useImages';
 import type { PresetStore } from '../src/hooks/usePresets';
 import type { Dictionary } from '../src/hooks/useDictionary';
@@ -596,7 +596,14 @@ describe('Listbox accessible labels', () => {
       root.render(
         <DialogProvider>
           <TagInput label="品質" entries={[]} onAdd={() => {}} />
-          <PresetBar store={mockPresets()} workspace={emptyWorkspace()} dispatch={() => {}} notify={() => {}} />
+          <PresetBar
+            store={mockPresets()}
+            workspace={emptyWorkspace()}
+            dispatch={() => {}}
+            notify={() => {}}
+            generation={DEFAULT_GENERATION}
+            characterNegativePrompt=""
+          />
         </DialogProvider>,
       ),
     );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type ChangeEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react';
 import type { CategoryKey, DictEntry } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import { CATEGORIES, categoryLabel, isCategoryKey } from '../lib/categories';
@@ -20,7 +20,7 @@ interface Props {
   reloadRevision: number;
 }
 
-const MAX_SHOWN = 300;
+const PAGE_SIZE = 300;
 const NEW = '__new__';
 
 function blankEntry(category: CategoryKey): DictEntry {
@@ -31,11 +31,18 @@ export function DictionaryView({ dictionary, notify, reloadRevision }: Props) {
   const dialogs = useDialogs();
   const { entries, loaded, save, saveMany, remove, importEntries, restoreInitial } = dictionary;
   const [query, setQuery] = useState('');
+  const [queryDraft, setQueryDraft] = useState('');
   const [filterCategory, setFilterCategory] = useState<CategoryKey | 'all'>('all');
+  const [pageIndex, setPageIndex] = useState(0);
+  const queryComposing = useRef(false);
+  const confirmingFilter = useRef(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ImportResult } | null>(null);
   const [restoring, setRestoring] = useState(false);
   const locked = useSyncExternalStore(subscribeTabSyncConflict, getTabSyncConflict, () => null) !== null;
+  const listRef = useRef<HTMLElement>(null);
+  const scrollToList = useRef(false);
   useEffect(() => {
     setEditingId(null);
     setPendingImport(null);
@@ -45,15 +52,103 @@ export function DictionaryView({ dictionary, notify, reloadRevision }: Props) {
     () => filterEntries(entries, query, filterCategory),
     [entries, filterCategory, query],
   );
-  const shown = filtered.slice(0, MAX_SHOWN);
+  const pageCount = Math.ceil(filtered.length / PAGE_SIZE);
+  const editedIndex = editingId && editingId !== NEW ? filtered.findIndex((entry) => entry.id === editingId) : -1;
+  // 辞書の更新で編集中の行が別ページへ動いても、その行を表示したままにする。ページを外すと入力が消える。
+  const editedPage = editedIndex >= 0 ? Math.floor(editedIndex / PAGE_SIZE) : null;
+  const clampedPage = pageCount === 0 ? 0 : Math.min(pageIndex, pageCount - 1);
+  const page = editedPage ?? clampedPage;
+  const pageStart = page * PAGE_SIZE;
+  const shown = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+  const hasPager = filtered.length > PAGE_SIZE;
+
+  useEffect(() => {
+    if (pageIndex !== page) setPageIndex(page);
+  }, [page, pageIndex]);
+
+  useLayoutEffect(() => {
+    if (!scrollToList.current) return;
+    scrollToList.current = false;
+    const list = listRef.current;
+    if (!list) return;
+    // ページ送りのボタンは一覧の末尾にもある。フォーカスを残すと画面がそこへ戻る。
+    // 一覧へ移すと、次の Tab は行の前にあるページ操作に入る。
+    list.focus({ preventScroll: true });
+    list.scrollIntoView({ block: 'start' });
+  });
+
+  const editLeavesFirstPage = (nextQuery: string, nextCategory: CategoryKey | 'all') => {
+    if (!editingId || editingId === NEW) return false;
+    return !filterEntries(entries, nextQuery, nextCategory)
+      .slice(0, PAGE_SIZE)
+      .some((entry) => entry.id === editingId);
+  };
+
+  const applyListFilter = async (nextQuery: string, nextCategory: CategoryKey | 'all') => {
+    if (nextQuery === query && nextCategory === filterCategory) {
+      setQueryDraft(query);
+      return;
+    }
+    // 保存の完了前に破棄させない。書き込みは続いている。
+    if (savingEdit && editLeavesFirstPage(nextQuery, nextCategory)) {
+      setQueryDraft(query);
+      return;
+    }
+    if (editLeavesFirstPage(nextQuery, nextCategory)) {
+      if (confirmingFilter.current) return;
+      confirmingFilter.current = true;
+      const ok = await dialogs.confirm('編集中の内容を破棄して絞り込みを変えますか？', {
+        okLabel: '破棄して絞り込む',
+        danger: true,
+      });
+      confirmingFilter.current = false;
+      if (!ok) {
+        setQueryDraft(query);
+        return;
+      }
+      setEditingId(null);
+    }
+    setQuery(nextQuery);
+    setQueryDraft(nextQuery);
+    setFilterCategory(nextCategory);
+    setPageIndex(0);
+  };
+
+  const showPage = async (next: number) => {
+    if (next === page || savingEdit) return;
+    if (editingId && editingId !== NEW) {
+      const ok = await dialogs.confirm('編集中の内容を破棄してページを移動しますか？', {
+        okLabel: '破棄して移動',
+        danger: true,
+      });
+      if (!ok) return;
+      setEditingId(null);
+    }
+    scrollToList.current = true;
+    setPageIndex(next);
+  };
+
+  const pageNav = (label: string) => (
+    <nav className="dict-pager" aria-label={label}>
+      <button type="button" className="btn" disabled={page === 0 || savingEdit} onClick={() => void showPage(page - 1)}>
+        前を表示
+      </button>
+      <button type="button" className="btn" disabled={page >= pageCount - 1 || savingEdit} onClick={() => void showPage(page + 1)}>
+        さらに表示
+      </button>
+    </nav>
+  );
 
   const handleSave = async (entry: DictEntry): Promise<string | null> => {
     const dup = findDuplicate(entries, entry);
     if (dup) return `「${dup.tag}」は ${categoryLabel(dup.category)} に登録済みです`;
+    setSavingEdit(true);
     try {
       await save(entry);
     } catch (e) {
       return `保存できませんでした: ${String(e)}`;
+    } finally {
+      setSavingEdit(false);
     }
     setEditingId(null);
     notify(`「${entry.tag}」を保存しました`);
@@ -142,13 +237,33 @@ export function DictionaryView({ dictionary, notify, reloadRevision }: Props) {
             className="grow"
             placeholder="タグ・日本語名で絞り込み"
             aria-label="辞書を絞り込む"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={queryDraft}
+            onCompositionStart={() => {
+              queryComposing.current = true;
+            }}
+            onCompositionEnd={(e) => {
+              queryComposing.current = false;
+              const next = e.currentTarget.value;
+              setQueryDraft(next);
+              void applyListFilter(next, filterCategory);
+            }}
+            onChange={(e) => {
+              const next = e.target.value;
+              setQueryDraft(next);
+              // 変換中の中間文字列では破棄確認を出さない。確定は compositionend で行う。
+              const native = e.nativeEvent;
+              if (queryComposing.current || ('isComposing' in native && native.isComposing)) return;
+              void applyListFilter(next, filterCategory);
+            }}
           />
           <select
             aria-label="カテゴリで絞り込む"
             value={filterCategory}
-            onChange={(e) => setFilterCategory(isCategoryKey(e.target.value) ? e.target.value : 'all')}
+            onChange={(e) => {
+              const next = isCategoryKey(e.target.value) ? e.target.value : 'all';
+              if (editLeavesFirstPage(query, next)) e.currentTarget.value = filterCategory;
+              void applyListFilter(query, next);
+            }}
           >
             <option value="all">すべてのカテゴリ</option>
             {CATEGORIES.map((c) => (
@@ -222,11 +337,12 @@ export function DictionaryView({ dictionary, notify, reloadRevision }: Props) {
           </button>
         </section>
       ) : (
-        <section className="card dict-list-card" aria-label="辞書の一覧">
+        <section ref={listRef} className="card dict-list-card" aria-label="辞書の一覧" tabIndex={-1}>
           <p className="dict-count">
             {filtered.length}件 / 全{entries.length}件
-            {filtered.length > MAX_SHOWN && `（先頭 ${MAX_SHOWN}件を表示。絞り込んでください）`}
+            {hasPager && `（${pageStart + 1}〜${pageStart + shown.length}件目）`}
           </p>
+          {hasPager && pageNav('一覧の上のページ')}
           <ul className="dict-list">
             {shown.map((entry) =>
               editingId === entry.id ? (
@@ -262,6 +378,7 @@ export function DictionaryView({ dictionary, notify, reloadRevision }: Props) {
               ),
             )}
           </ul>
+          {hasPager && pageNav('一覧の下のページ')}
         </section>
       )}
     </div>

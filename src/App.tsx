@@ -23,7 +23,7 @@ import { useLatestImageNotice } from './hooks/useLatestImageNotice';
 import { useFirstRun } from './hooks/useFirstRun';
 import { confirmUnsavedChanges, type UnsavedChoice } from './components/confirmUnsaved';
 import { useDialogs } from './components/Dialogs';
-import { isEmptyWorkspace, overwritePreset, sameWorkspace, sameWorkTags } from './lib/presets';
+import { generationSaveForOverwrite, isEmptyWorkspace, overwritePreset, samePreset, sameWorkTags } from './lib/presets';
 import { isDefaultSettings } from './lib/settings';
 import { isDefaultGeneration, normalizeGeneration, sizeOf, type GenerationSettings, type SizeKey } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
@@ -60,6 +60,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const { workspace, dispatch: rawDispatch, loaded, migrationHeld, persistence } = useWorkspace(reloadRevision);
   const [settings, updateSettings, settingsPersistence] = useSettings(loaded && !migrationHeld, reloadRevision);
   const [generation, updateGeneration, generationPersistence] = useGenerationSettings(reloadRevision);
+  // 読み込み成功だけを見る。書き込み失敗の error では、今の値をプリセットへ保存できなくしない。
+  const settingsReady = generationPersistence.loaded && settingsPersistence.loaded;
   const token = useToken();
   const presets = usePresets(reloadRevision);
   const toastRef = useRef<ToastHandle>(null);
@@ -349,7 +351,13 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     const negativeUnsaved = negativeChanges
       && !sameWorkTags(currentWorkspace.negative, defaultNegativeTags())
       && (active === null || active.workspace.negative === undefined);
-    const dirty = (active ? !sameWorkspace(active.workspace, currentWorkspace) : !isEmptyWorkspace(currentWorkspace)) || negativeUnsaved;
+    const dirty = (active
+      ? !samePreset(active, {
+          workspace: currentWorkspace,
+          generation: currentGeneration,
+          characterNegativePrompt: currentSettings.characterNegativePrompt,
+        })
+      : !isEmptyWorkspace(currentWorkspace)) || negativeUnsaved;
     const nextCharacterNegative = result.characterNegative !== undefined && result.characterNegative !== currentSettings.characterNegativePrompt
       ? result.characterNegative
       : null;
@@ -392,7 +400,15 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       }
     }
     if (choice === 'save' && active) {
-      store.setPresets(overwritePreset(store.presets, active.id, currentWorkspace));
+      const save = generationSaveForOverwrite(active, {
+        generation: currentGeneration,
+        characterNegativePrompt: currentSettings.characterNegativePrompt,
+      });
+      if (save && !settingsReady) {
+        show('生成設定を読み込めていないため、適用を中止しました');
+        return false;
+      }
+      store.setPresets(overwritePreset(store.presets, active.id, currentWorkspace, save));
     }
     const nextMode = nextGeneration?.mode ?? currentGeneration.mode;
     const extras: UndoExtras = {};
@@ -522,6 +538,9 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onReadPng={openPromptImport}
               characterNegative={settings.characterNegativePrompt}
               onCharacterNegativeChange={handleCharacterNegativeChange}
+              generation={generation}
+              settingsReady={settingsReady}
+              workspaceReady={loaded}
               canvasSize={sizeOf(generation.size)}
               shown={tab === 'editor'}
             />

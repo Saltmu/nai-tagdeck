@@ -1,5 +1,12 @@
 import type { WorkTag, Workspace } from '../types';
 import { PROMPT_CATEGORY_KEYS } from './categories';
+import {
+  modeLabel,
+  normalizeGeneration,
+  samplerLabel,
+  SIZE_PRESETS,
+  type GenerationSettings,
+} from './generation';
 import { newId, normalizeId } from './id';
 import { normalize } from './tagText';
 import { hasNegative, normalizeWorkspace } from './workspace';
@@ -7,12 +14,28 @@ import { hasNegative, normalizeWorkspace } from './workspace';
 /** プリセットのタグ一式。ネガティブ対応前に保存したものは negative を持たない。 */
 export type PresetWorkspace = Omit<Workspace, 'negative'> & Partial<Pick<Workspace, 'negative'>>;
 
+/** プリセットに任意で保存する生成設定。シードは含めない。 */
+export type PresetGeneration = Omit<GenerationSettings, 'seed'>;
+
 /** 作業中のタグ一式（ベース＋キャラクター＋ネガティブ）に名前を付けて保存したもの。 */
 export interface Preset {
   id: string;
   name: string;
   workspace: PresetWorkspace;
+  /** 生成設定も含めて保存した場合のみ。未設定なら読み込み時に作業中の生成設定を残す。 */
+  generation?: PresetGeneration;
+  /** 共通のキャラ用ネガティブも含めて保存した場合のみ。未設定なら作業中の値を残す。 */
+  characterNegativePrompt?: string;
   updated_at: string;
+}
+
+/**
+ * 新規保存や上書きで書き込む値。シードは保存時に除く。
+ * 共通キャラネガティブだけのプリセットは、generation を付けずに characterNegativePrompt だけ渡す。
+ */
+export interface PresetGenerationSave {
+  generation?: GenerationSettings;
+  characterNegativePrompt?: string;
 }
 
 /** ネガティブを持たない古いプリセットは、読み込み時に作業中のネガティブを残すため negative を省いたままにする。 */
@@ -31,6 +54,12 @@ export function sortPresets(presets: readonly Preset[]): Preset[] {
   return [...presets].sort((a, b) => a.name.localeCompare(b.name, 'ja'));
 }
 
+/** オブジェクト以外は保存しない。オブジェクトなら生成設定として補正し、シードは除く。 */
+function normalizePresetGeneration(raw: unknown): PresetGeneration | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  return presetGenerationOf(normalizeGeneration(raw));
+}
+
 export function normalizePresets(raw: unknown): Preset[] {
   if (!Array.isArray(raw)) return [];
   return sortPresets(
@@ -39,16 +68,47 @@ export function normalizePresets(raw: unknown): Preset[] {
       const p = item as Record<string, unknown>;
       const name = typeof p.name === 'string' ? p.name.trim() : '';
       if (!name) return [];
-      return [
-        {
-          id: normalizeId(p.id),
-          name,
-          workspace: normalizePresetWorkspace(p.workspace),
-          updated_at: typeof p.updated_at === 'string' ? p.updated_at : new Date().toISOString(),
-        },
-      ];
+      const preset: Preset = {
+        id: normalizeId(p.id),
+        name,
+        workspace: normalizePresetWorkspace(p.workspace),
+        updated_at: typeof p.updated_at === 'string' ? p.updated_at : new Date().toISOString(),
+      };
+      const generation = normalizePresetGeneration(p.generation);
+      if (generation) preset.generation = generation;
+      if (typeof p.characterNegativePrompt === 'string') {
+        preset.characterNegativePrompt = p.characterNegativePrompt;
+      }
+      return [preset];
     }),
   );
+}
+
+/** 保存用にシードを除いた生成設定。 */
+export function presetGenerationOf(generation: GenerationSettings): PresetGeneration {
+  const normalized = normalizeGeneration(generation);
+  return {
+    mode: normalized.mode,
+    size: normalized.size,
+    steps: normalized.steps,
+    scale: normalized.scale,
+    sampler: normalized.sampler,
+    noiseSchedule: normalized.noiseSchedule,
+    cfgRescale: normalized.cfgRescale,
+    dynamicThresholding: normalized.dynamicThresholding,
+  };
+}
+
+/** 保存ダイアログに出す、シードを含まない生成設定の要約。 */
+export function presetGenerationSummary(generation: PresetGeneration): string {
+  const size = SIZE_PRESETS.find((preset) => preset.key === generation.size)?.label ?? generation.size;
+  return [
+    modeLabel(generation.mode),
+    size,
+    `${generation.steps} steps`,
+    `スケール ${generation.scale}`,
+    samplerLabel(generation.sampler),
+  ].join(' · ');
 }
 
 /** 保存するときは複製して、編集中の状態と共有しないようにする。 */
@@ -56,14 +116,60 @@ function snapshot(workspace: Workspace): Workspace {
   return normalizeWorkspace(structuredClone(workspace));
 }
 
-export function createPreset(name: string, workspace: Workspace): Preset {
-  return { id: newId(), name: name.trim(), workspace: snapshot(workspace), updated_at: new Date().toISOString() };
+function withGenerationSave(preset: Preset, save: PresetGenerationSave | null | undefined): Preset {
+  if (save === undefined) return preset;
+  if (save === null) {
+    delete preset.generation;
+    delete preset.characterNegativePrompt;
+    return preset;
+  }
+  if (save.generation) preset.generation = presetGenerationOf(save.generation);
+  if (save.characterNegativePrompt !== undefined) preset.characterNegativePrompt = save.characterNegativePrompt;
+  return preset;
 }
 
-export function overwritePreset(presets: readonly Preset[], id: string, workspace: Workspace): Preset[] {
-  return presets.map((p) =>
-    p.id === id ? { ...p, workspace: snapshot(workspace), updated_at: new Date().toISOString() } : p,
+export function createPreset(name: string, workspace: Workspace, save?: PresetGenerationSave): Preset {
+  return withGenerationSave(
+    { id: newId(), name: name.trim(), workspace: snapshot(workspace), updated_at: new Date().toISOString() },
+    save,
   );
+}
+
+/**
+ * タグを上書きする。
+ * save に入っている項目だけ生成設定か共通キャラネガティブを書き換える。
+ * null ならその2つを外す。省略すると、もともと付いていた項目は変えない。
+ */
+export function overwritePreset(
+  presets: readonly Preset[],
+  id: string,
+  workspace: Workspace,
+  save?: PresetGenerationSave | null,
+): Preset[] {
+  return presets.map((p) =>
+    p.id === id
+      ? withGenerationSave(
+          { ...p, workspace: snapshot(workspace), updated_at: new Date().toISOString() },
+          save,
+        )
+      : p,
+  );
+}
+
+/**
+ * 変更の上書きで使う。
+ * 生成設定が無ければタグだけ更新する。共通キャラネガティブだけある場合は、その文字列だけ更新する。
+ */
+export function generationSaveForOverwrite(
+  preset: Pick<Preset, 'generation' | 'characterNegativePrompt'>,
+  current: { generation: GenerationSettings; characterNegativePrompt: string },
+): PresetGenerationSave | undefined {
+  if (preset.generation === undefined && preset.characterNegativePrompt === undefined) return undefined;
+  if (preset.generation === undefined) return { characterNegativePrompt: current.characterNegativePrompt };
+  return {
+    generation: current.generation,
+    characterNegativePrompt: current.characterNegativePrompt,
+  };
 }
 
 export function renamePreset(presets: readonly Preset[], id: string, name: string): Preset[] {
@@ -133,6 +239,56 @@ export function sameWorkspace(a: PresetWorkspace, b: PresetWorkspace): boolean {
     return false;
   }
   return true;
+}
+
+function samePresetGeneration(preset: PresetGeneration, current: GenerationSettings): boolean {
+  for (const key of Object.keys(preset) as (keyof PresetGeneration)[]) {
+    if (!Object.is(preset[key], current[key])) return false;
+  }
+  return true;
+}
+
+/**
+ * 読み込み中のプリセットと作業中の値が同じか。
+ * 生成設定と共通キャラネガティブは、プリセットが持っているときだけ比べる。シードは比べない。
+ */
+export function samePreset(
+  preset: Pick<Preset, 'workspace' | 'generation' | 'characterNegativePrompt'>,
+  current: { workspace: PresetWorkspace; generation: GenerationSettings; characterNegativePrompt: string },
+): boolean {
+  if (!sameWorkspace(preset.workspace, current.workspace)) return false;
+  if (preset.generation !== undefined && !samePresetGeneration(preset.generation, current.generation)) return false;
+  if (
+    preset.characterNegativePrompt !== undefined &&
+    preset.characterNegativePrompt !== current.characterNegativePrompt
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/** 読み込みで変える生成設定と共通キャラネガティブ。変わらない項目とシードは含めない。 */
+export function presetLoadExtras(
+  preset: Pick<Preset, 'generation' | 'characterNegativePrompt'>,
+  current: { generation: GenerationSettings; characterNegativePrompt: string },
+): { characterNegativePrompt?: string; generation?: Partial<GenerationSettings> } | undefined {
+  const extras: { characterNegativePrompt?: string; generation?: Partial<GenerationSettings> } = {};
+  if (preset.generation) {
+    const generation: Partial<GenerationSettings> = {};
+    for (const key of Object.keys(preset.generation) as (keyof PresetGeneration)[]) {
+      const value = preset.generation[key];
+      if (!Object.is(value, current.generation[key])) generation[key] = value as never;
+    }
+    if (Object.keys(generation).length > 0) extras.generation = generation;
+  }
+  if (
+    preset.characterNegativePrompt !== undefined &&
+    preset.characterNegativePrompt !== current.characterNegativePrompt
+  ) {
+    extras.characterNegativePrompt = preset.characterNegativePrompt;
+  }
+  if (extras.generation === undefined && extras.characterNegativePrompt === undefined) return undefined;
+  return extras;
 }
 
 /** ベースとキャラクターが空か。ネガティブは既定値が入っているので見ない。 */
