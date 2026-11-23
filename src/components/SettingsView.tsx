@@ -13,9 +13,21 @@ interface Props {
   onResetAll: () => void;
   onShowFirstRun: () => void;
   firstRunDisabled: boolean;
+  backupImportDisabled?: boolean;
+  reloadCount?: number;
 }
 
-export function SettingsView({ token, notify, getBackup, onImportBackup, onResetAll, onShowFirstRun, firstRunDisabled }: Props) {
+export function SettingsView({
+  token,
+  notify,
+  getBackup,
+  onImportBackup,
+  onResetAll,
+  onShowFirstRun,
+  firstRunDisabled,
+  backupImportDisabled = false,
+  reloadCount = 0,
+}: Props) {
   return (
     <div className="settings">
       <section className="card" aria-label="使い方">
@@ -70,7 +82,13 @@ export function SettingsView({ token, notify, getBackup, onImportBackup, onReset
         </div>
       </section>
       <TokenSettings token={token} notify={notify} />
-      <BackupCard getData={getBackup} onImport={onImportBackup} notify={notify} />
+      <BackupCard
+        getData={getBackup}
+        onImport={onImportBackup}
+        notify={notify}
+        importDisabled={backupImportDisabled}
+        reloadCount={reloadCount}
+      />
       <DangerZone onReset={onResetAll} />
       <section className="card" aria-labelledby="disclaimer-title">
         <h2 id="disclaimer-title" className="card-title">免責事項</h2>

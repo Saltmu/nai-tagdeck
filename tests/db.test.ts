@@ -76,4 +76,26 @@ describe('db connection recovery', () => {
     expect(openDBMock).toHaveBeenCalledTimes(2);
     expect(db2.get).toHaveBeenCalledWith('kv', 'settings');
   });
+
+  it('notifies blocked subscribers while upgrade is waiting and clears once open resolves', async () => {
+    let resolveOpen!: (db: ReturnType<typeof createFakeDB>) => void;
+    let callbacks: OpenDBCallbacks<unknown> | undefined;
+    openDBMock.mockImplementationOnce((_name: string, _ver: number, cbs?: OpenDBCallbacks<unknown>) => {
+      callbacks = cbs;
+      return new Promise((resolve) => { resolveOpen = resolve; });
+    });
+
+    const { getKV, subscribeDbBlocked } = await import('../src/lib/db');
+    const states: boolean[] = [];
+    const unsubscribe = subscribeDbBlocked((blocked) => states.push(blocked));
+
+    const pending = getKV('workspace');
+    callbacks?.blocked?.(1, 2, {} as IDBVersionChangeEvent);
+    expect(states).toEqual([false, true]);
+
+    resolveOpen(createFakeDB());
+    await pending;
+    expect(states).toEqual([false, true, false]);
+    unsubscribe();
+  });
 });

@@ -3,6 +3,7 @@ import { act, StrictMode, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePersistence, type PersistenceState } from '../src/hooks/usePersistence';
+import type { SyncBridge } from '../src/hooks/useTabSync';
 import { clearAllData, getKV, setKV, type KVKey } from '../src/lib/db';
 import { resetAppData } from '../src/lib/reset';
 
@@ -209,5 +210,105 @@ describe('persistent state', () => {
     await act(async () => change('new edit'));
     await tick();
     expect(setKV).toHaveBeenLastCalledWith('workspace', 'new edit');
+  });
+
+  it('pauses writes while sync bridge is locked and saves pending edits after unlock', async () => {
+    const onStaleWrite = vi.fn();
+    const onPersisted = vi.fn();
+    let locked = false;
+    const makeBridge = (): SyncBridge => ({
+      locked,
+      isLocked: () => locked,
+      onStaleWrite,
+      onPersisted,
+      snapshot: {
+        revision: 1,
+        data: {
+          dictionary: [],
+          kv: { workspace: 'saved', settings: undefined, generation: undefined, presets: undefined, activePreset: undefined },
+          meta: { rev: 1, epoch: 0 },
+        },
+      },
+      loadError: null,
+      committed: null,
+    });
+    function SyncHarness({ bridge }: { bridge: SyncBridge }) {
+      const [stored, setStored] = useState<unknown>('initial');
+      change = setStored;
+      value = stored;
+      state = usePersistence('workspace', stored, (raw) => setStored(raw), 20, bridge);
+      return null;
+    }
+
+    await act(async () => root.render(<SyncHarness bridge={makeBridge()} />));
+    expect(value).toBe('saved');
+    expect(state.loaded).toBe(true);
+    expect(setKV).not.toHaveBeenCalled();
+
+    // ロック中は編集＋visibilitychange＋pagehide でも書き込まない
+    locked = true;
+    await act(async () => root.render(<SyncHarness bridge={makeBridge()} />));
+    await act(async () => change('edited-while-locked'));
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('pagehide'));
+    await tick();
+    expect(setKV).not.toHaveBeenCalled();
+
+    // ロック解除後に未保存変更が自動で保存され onPersisted が呼ばれる
+    locked = false;
+    await act(async () => root.render(<SyncHarness bridge={makeBridge()} />));
+    await tick();
+    expect(setKV).toHaveBeenCalledExactlyOnceWith('workspace', 'edited-while-locked');
+    expect(onPersisted).toHaveBeenCalledOnce();
+
+    // StaleWriteError 時はエラー状態にせず onStaleWrite を呼ぶ
+    vi.mocked(setKV).mockRejectedValueOnce(Object.assign(new Error('stale'), { name: 'StaleWriteError', reason: 'updated' }));
+    await act(async () => change('stale-edit'));
+    await tick();
+    expect(onStaleWrite).toHaveBeenCalledWith('updated');
+    expect(state.error).toBeNull();
+  });
+
+  it('clears a previous autosave error when a preferred save commits the value', async () => {
+    let committed: SyncBridge['committed'] = null;
+    const makeBridge = (): SyncBridge => ({
+      locked: false,
+      isLocked: () => false,
+      onStaleWrite: vi.fn(),
+      onPersisted: vi.fn(),
+      snapshot: {
+        revision: 1,
+        data: {
+          dictionary: [],
+          kv: { workspace: 'saved', settings: undefined, generation: undefined, presets: undefined, activePreset: undefined },
+          meta: { rev: 1, epoch: 0 },
+        },
+      },
+      loadError: null,
+      committed,
+    });
+    function SyncHarness({ bridge }: { bridge: SyncBridge }) {
+      const [stored, setStored] = useState<unknown>('initial');
+      change = setStored;
+      value = stored;
+      state = usePersistence('workspace', stored, (raw) => setStored(raw), 20, bridge);
+      return null;
+    }
+
+    vi.mocked(setKV).mockRejectedValueOnce(new Error('quota'));
+    await act(async () => root.render(<SyncHarness bridge={makeBridge()} />));
+    await act(async () => change('failed-edit'));
+    await tick();
+    expect(state.status).toBe('error');
+    expect(state.error).toContain('quota');
+
+    committed = {
+      revision: 1,
+      kv: { workspace: 'failed-edit', settings: undefined, generation: undefined, presets: undefined, activePreset: undefined },
+    };
+    await act(async () => root.render(<SyncHarness bridge={makeBridge()} />));
+    expect(state.status).toBe('idle');
+    expect(state.error).toBeNull();
   });
 });

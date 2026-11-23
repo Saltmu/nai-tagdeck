@@ -28,6 +28,8 @@ import { isDefaultSettings } from './lib/settings';
 import { isDefaultGeneration, normalizeGeneration, sizeOf, type GenerationSettings, type SizeKey } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { SwUpdateNotice } from './components/SwUpdateNotice';
+import { TabSyncNotice } from './components/TabSyncNotice';
+import { useTabSync } from './hooks/useTabSync';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
 import { importedBaseForMode, type PromptImport } from './lib/promptImport';
@@ -44,14 +46,38 @@ const TABS: Array<{ key: Tab; label: string; icon: ReactNode }> = [
 ];
 
 export default function App({ onResetAll }: { onResetAll: () => void }) {
-  const dictionary = useDictionary();
-  const { workspace, dispatch: rawDispatch, loaded, persistence } = useWorkspace();
-  const [settings, updateSettings, settingsPersistence] = useSettings(loaded);
-  const [generation, updateGeneration, generationPersistence] = useGenerationSettings();
+  const dialogs = useDialogs();
+  const token = useToken();
+  const allLoadedRef = useRef(false);
+  const discardHistoryRef = useRef<() => void>(() => {});
+  const captureLocalRef = useRef<() => {
+    dictionary: ReturnType<typeof useDictionary>['entries'];
+    kv: {
+      workspace: unknown;
+      settings: unknown;
+      generation: unknown;
+      presets: unknown;
+      activePreset: unknown;
+    };
+  }>(() => ({
+    dictionary: [],
+    kv: { workspace: undefined, settings: undefined, generation: undefined, presets: [], activePreset: null },
+  }));
+  const tabSync = useTabSync({
+    confirmOverwrite: () =>
+      dialogs.confirm('別のタブでの変更を上書きし、このタブの内容を保存しますか？', { okLabel: '上書きして保存' }),
+    isReadyToSave: () => allLoadedRef.current,
+    captureLocal: () => captureLocalRef.current(),
+    onBeforeReloadApply: () => discardHistoryRef.current(),
+    resyncToken: () => token.resync?.(),
+  });
+  const dictionary = useDictionary(tabSync.bridge);
+  const { workspace, dispatch: rawDispatch, loaded, migrationHeld, persistence } = useWorkspace(tabSync.bridge);
+  const [settings, updateSettings, settingsPersistence] = useSettings(loaded && !migrationHeld, tabSync.bridge);
+  const [generation, updateGeneration, generationPersistence] = useGenerationSettings(tabSync.bridge);
   // 読み込み成功だけを見る。書き込み失敗の error では、今の値をプリセットへ保存できなくしない。
   const settingsReady = generationPersistence.loaded && settingsPersistence.loaded;
-  const token = useToken();
-  const presets = usePresets();
+  const presets = usePresets(tabSync.bridge);
   const toastRef = useRef<ToastHandle>(null);
   const show = useCallback((message: string, durationMs?: number) => {
     toastRef.current?.show(message, durationMs);
@@ -72,7 +98,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     if ((e.target as Element).closest('.dock')) return;
     if (window.matchMedia?.('(min-width: 1100px)').matches) setDockCollapse((n) => n + 1);
   };
-  const dialogs = useDialogs();
   const settingsRef = useRef(settings);
   const generationRef = useRef(generation);
   const workspaceRef = useRef(workspace);
@@ -83,6 +108,20 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   workspaceRef.current = workspace;
   presetsRef.current = presets;
   entriesRef.current = dictionary.entries;
+  const storesLoaded =
+    dictionary.loaded &&
+    [persistence, settingsPersistence, generationPersistence, ...presets.persistence].every((state) => state.loaded);
+  allLoadedRef.current = storesLoaded;
+  captureLocalRef.current = () => ({
+    dictionary: entriesRef.current,
+    kv: {
+      workspace: workspaceRef.current,
+      settings: settingsRef.current,
+      generation: generationRef.current,
+      presets: presetsRef.current.presets,
+      activePreset: presetsRef.current.activeId,
+    },
+  });
   const extrasSync = useMemo<UndoExtrasSync>(() => ({
     capture: () => ({
       characterNegativePrompt: settingsRef.current.characterNegativePrompt,
@@ -98,7 +137,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const tagUndo = useTagUndo(workspace, rawDispatch, {
     activeId: presets.activeId,
     setActiveId: presets.setActiveId,
-  }, extrasSync);
+  }, extrasSync, tabSync.busy);
+  discardHistoryRef.current = tagUndo.discardHistory;
   const dispatch = tagUndo.dispatch;
   // 辞書・プリセット・設定と同時に置き換える経路。履歴は描画を待たずに捨てる。
   // 描画前の Ctrl+Z が、読み込み前の作業状態だけを戻すのを防ぐ。
@@ -158,11 +198,28 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   );
 
   const { getBackup, importBackup } = useBackupTransfer({
-    dictionary, presets, workspace, dispatch: replaceWithoutHistory, settings, updateSettings, generation, updateGeneration,
+    dictionary,
+    presets,
+    workspace,
+    dispatch: replaceWithoutHistory,
+    settings,
+    updateSettings,
+    generation,
+    updateGeneration,
+    commitAll: tabSync.commitAll,
   });
   const openSettings = useCallback(() => setTab('settings'), []);
   const { blocker, startGenerate } = useGenerationControls({
-    generator, token: token.token, basePrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings: openSettings,
+    generator,
+    token: token.token,
+    basePrompt,
+    characterPrompts,
+    negativePrompt,
+    settings,
+    generation,
+    show,
+    onOpenSettings: openSettings,
+    shortcutsDisabled: tabSync.busy,
   });
   const latest = imageStore.images[0];
   const { unseenId, dismiss } = useLatestImageNotice(latest?.id, tab === 'generate');
@@ -319,7 +376,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
 
   return (
     <div className="app">
-      <header ref={headerRef} className="app-header" data-occludes>
+      <header ref={headerRef} className="app-header" data-occludes inert={tabSync.busy || undefined}>
         <h1 className="app-title" aria-label="nai-tagdeck">
           <img className="brand-icon" src={`${import.meta.env.BASE_URL}brand/icon.svg`} width="24" height="24" alt="" />
           <img className="brand-wordmark" src={`${import.meta.env.BASE_URL}brand/wordmark.svg`} width="108" height="24" alt="" />
@@ -370,6 +427,34 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         />
       </header>
       <SwUpdateNotice />
+      <TabSyncNotice
+        conflict={tabSync.conflict}
+        dbBlocked={tabSync.dbBlocked}
+        busy={tabSync.busy}
+        error={tabSync.error}
+        onReload={tabSync.reloadLatest}
+        onPrefer={tabSync.preferLocal}
+      />
+
+      {tabSync.loadError && (
+        <p className="error-banner" role="alert">
+          {tabSync.loadError}。再読み込みして再試行してください。
+        </p>
+      )}
+
+      {tabSync.migrationError && (
+        <div className="error-banner" role="alert">
+          <span>{tabSync.migrationError}</span>{' '}
+          <button
+            type="button"
+            className="btn btn-small"
+            onClick={tabSync.retryMigration}
+            disabled={tabSync.busy || tabSync.bridge.locked}
+          >
+            移行を再試行
+          </button>
+        </div>
+      )}
 
       {dictionary.error && (
         <p className="error-banner" role="alert">
@@ -377,10 +462,15 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         </p>
       )}
 
-      {[persistence, settingsPersistence, generationPersistence, ...presets.persistence].filter((state) => state.error).map((state) => (
+      {[
+        ...(tabSync.migrationError ? [] : [persistence]),
+        settingsPersistence,
+        generationPersistence,
+        ...presets.persistence,
+      ].filter((state) => state.error).map((state) => (
         <p className="error-banner" role="alert" key={state.error}>{state.error}。再読み込みして再試行してください。</p>
       ))}
-      <main className="app-main">
+      <main className="app-main" inert={tabSync.busy || undefined}>
         {/* 編集と生成は、広い画面では左右に並べ、狭い画面ではタブで切り替える（どちらも表示したまま CSS で隠す） */}
         <div className="workbench" data-tab={tab} hidden={!showWorkbench}>
           <div className="pane pane-editor">
@@ -452,7 +542,14 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             />
           </div>
         </div>
-        {tab === 'dictionary' && <DictionaryView dictionary={dictionary} notify={show} />}
+        {tab === 'dictionary' && (
+          <DictionaryView
+            dictionary={dictionary}
+            notify={show}
+            locked={tabSync.bridge.locked}
+            reloadCount={tabSync.reloadCount}
+          />
+        )}
         {tab === 'settings' && (
           <SettingsView
             token={token}
@@ -462,6 +559,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             onResetAll={onResetAll}
             onShowFirstRun={firstRun.showGuide}
             firstRunDisabled={!firstRunReady || firstRun.busy}
+            backupImportDisabled={!storesLoaded || tabSync.bridge.locked}
+            reloadCount={tabSync.reloadCount}
           />
         )}
       </main>

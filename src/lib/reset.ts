@@ -1,4 +1,5 @@
-import { clearAllData } from './db';
+import * as db from './db';
+import { publishTabSync } from './tabSync';
 
 let pendingWrites = new AbortController();
 
@@ -23,5 +24,7 @@ export async function resetAppData(): Promise<void> {
   pendingWrites = new AbortController();
   clearAppStorage(window.localStorage);
   clearAppStorage(window.sessionStorage);
-  await clearAllData();
+  await db.clearAllData();
+  const meta = 'getBaseMeta' in db && typeof db.getBaseMeta === 'function' ? db.getBaseMeta() ?? undefined : undefined;
+  publishTabSync('reset', meta);
 }

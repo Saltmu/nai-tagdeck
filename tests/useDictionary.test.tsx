@@ -128,4 +128,20 @@ describe('useDictionary', () => {
     });
     expect(dict.entries.map((e) => e.tag)).toEqual(['ok-tag']);
   });
+
+  it('rejects dictionary writes and merges before initial load completes', async () => {
+    let resolveLoad!: (entries: DictEntry[]) => void;
+    vi.mocked(listEntries).mockImplementationOnce(() => new Promise((r) => { resolveLoad = r; }));
+    await act(async () => root.render(<Harness />));
+    expect(dict.loaded).toBe(false);
+
+    await expect(dict.importEntries([entry('1', 'incoming')], 'merge')).rejects.toThrow('読み込みが完了していない');
+    await expect(dict.save(entry('2', 'direct'))).rejects.toThrow('読み込みが完了していない');
+    expect(replaceAllEntries).not.toHaveBeenCalled();
+    expect(putEntry).not.toHaveBeenCalled();
+
+    await act(async () => resolveLoad([entry('0', 'existing')]));
+    expect(dict.loaded).toBe(true);
+    expect(dict.entries.map((e) => e.tag)).toEqual(['existing']);
+  });
 });

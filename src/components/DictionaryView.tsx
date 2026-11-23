@@ -15,6 +15,10 @@ import { useDialogs } from './Dialogs';
 interface Props {
   dictionary: Dictionary;
   notify: (message: string) => void;
+  /** 他タブ更新による保存ロック中は削除・読み込みを止める。 */
+  locked?: boolean;
+  /** 他タブから辞書を再読み込みした回数。増えたときだけ編集下書きを閉じる。 */
+  reloadCount?: number;
 }
 
 const PAGE_SIZE = 300;
@@ -24,7 +28,7 @@ function blankEntry(category: CategoryKey): DictEntry {
   return { id: newId(), tag: '', category, alias: '', default_weight: 1, sort_order: 0, updated_at: '' };
 }
 
-export function DictionaryView({ dictionary, notify }: Props) {
+export function DictionaryView({ dictionary, notify, locked = false, reloadCount = 0 }: Props) {
   const dialogs = useDialogs();
   const { entries, loaded, save, saveMany, remove, importEntries, restoreInitial } = dictionary;
   const [query, setQuery] = useState('');
@@ -37,8 +41,25 @@ export function DictionaryView({ dictionary, notify }: Props) {
   const [savingEdit, setSavingEdit] = useState(false);
   const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ImportResult } | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const writeDisabled = !loaded || locked;
+  const reloadCountRef = useRef(reloadCount);
+  reloadCountRef.current = reloadCount;
+  const mountedRef = useRef(true);
+  const fileReadSeqRef = useRef(0);
   const listRef = useRef<HTMLElement>(null);
   const scrollToList = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (reloadCount === 0) return;
+    fileReadSeqRef.current += 1;
+    setEditingId(null);
+    setPendingImport(null);
+  }, [reloadCount]);
 
   const filtered = useMemo(
     () => filterEntries(entries, query, filterCategory),
@@ -149,7 +170,12 @@ export function DictionaryView({ dictionary, notify }: Props) {
 
   const handleDelete = async (entry: DictEntry) => {
     if (!(await dialogs.confirm(`「${entry.tag}」を辞書から削除しますか？`, { okLabel: '削除', danger: true }))) return;
-    await remove(entry.id);
+    try {
+      await remove(entry.id);
+    } catch (e) {
+      notify(`削除できませんでした: ${String(e)}`);
+      return;
+    }
     notify(`「${entry.tag}」を削除しました`);
   };
 
@@ -181,15 +207,24 @@ export function DictionaryView({ dictionary, notify }: Props) {
     const file = e.target.files?.[0];
     e.target.value = ''; // 同じファイルを選び直せるように
     if (!file) return;
+    const startedReloadCount = reloadCountRef.current;
+    const readSeq = ++fileReadSeqRef.current;
     const text = await file.text();
+    if (!mountedRef.current || reloadCountRef.current !== startedReloadCount || fileReadSeqRef.current !== readSeq) {
+      return;
+    }
     setPendingImport({ fileName: file.name, result: parseImportFile(file.name, text) });
   };
 
   const handleImport = async (mode: ImportMode) => {
     if (!pendingImport) return;
-    const total = await importEntries(pendingImport.result.entries, mode);
-    setPendingImport(null);
-    notify(`読み込みました（辞書は ${total}件）`);
+    try {
+      const total = await importEntries(pendingImport.result.entries, mode);
+      setPendingImport(null);
+      notify(`読み込みました（辞書は ${total}件）`);
+    } catch (e) {
+      notify(`読み込めませんでした: ${String(e)}`);
+    }
   };
 
   const exportAs = (format: 'json' | 'csv') => {
@@ -257,11 +292,11 @@ export function DictionaryView({ dictionary, notify }: Props) {
           </select>
         </div>
         <div className="toolbar-row">
-          <button type="button" className="btn btn-primary" onClick={() => setEditingId(NEW)}>
+          <button type="button" className="btn btn-primary" disabled={writeDisabled} onClick={() => setEditingId(NEW)}>
             ＋ 新規登録
           </button>
           <span className="spacer" />
-          <button type="button" className="btn" disabled={!loaded || restoring || !!dictionary.error} onClick={handleRestore}>
+          <button type="button" className="btn" disabled={writeDisabled || restoring || !!dictionary.error} onClick={handleRestore}>
             {restoring ? '復元中…' : '初期カテゴリを復元'}
           </button>
           <button type="button" className="btn" disabled={entries.length === 0} onClick={() => exportAs('json')}>
@@ -276,6 +311,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
               type="file"
               className="visually-hidden"
               accept=".json,.csv,application/json,text/csv"
+              disabled={writeDisabled}
               onChange={handleFile}
             />
           </label>
@@ -290,6 +326,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
           existingCount={entries.length}
           onImport={handleImport}
           onCancel={() => setPendingImport(null)}
+          disabled={writeDisabled}
         />
       )}
 
@@ -351,7 +388,7 @@ export function DictionaryView({ dictionary, notify }: Props) {
                     <button type="button" className="btn btn-small" onClick={() => setEditingId(entry.id)}>
                       編集
                     </button>
-                    <button type="button" className="btn btn-small btn-danger" onClick={() => handleDelete(entry)}>
+                    <button type="button" className="btn btn-small btn-danger" disabled={writeDisabled} onClick={() => handleDelete(entry)}>
                       削除
                     </button>
                   </div>
