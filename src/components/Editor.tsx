@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type KeyboardEvent } from 'react';
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type Dispatch, type KeyboardEvent } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import {
@@ -6,19 +6,18 @@ import {
   MAX_CHARACTERS,
   MAX_ENABLED_CHARACTERS,
   NEGATIVE,
-  defaultNegativeTags,
   type WorkspaceAction,
 } from '../lib/workspace';
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { saveCategoriesOpen } from '../lib/categoryOpen';
 import { buildPrompt } from '../lib/prompt';
 import { buildTagAliasMap, isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
-import { classifyEditorTag, createTagVectorIndex, type PromptTagCategory } from '../lib/tagClassification';
-import { DEFAULT_CHARACTER_NEGATIVE } from '../lib/novelai';
+import { classifyEditorTag, createTagVectorIndex } from '../lib/tagClassification';
 import { normalize } from '../lib/tagText';
 import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
-import { CategorySection, type BaseCategorySuggestion } from './CategorySection';
+import { CategorySection } from './CategorySection';
+import { NegativePane } from './NegativePane';
 import { CharacterCard } from './CharacterCard';
 import type { PeerCharacterCenter } from './CharacterCenterPicker';
 import { HistoryControls } from './HistoryControls';
@@ -29,35 +28,15 @@ import type { PromptSource } from './PromptImportDialog';
 import { useDialogs } from './Dialogs';
 import type { PresetStore } from '../hooks/usePresets';
 
+import { useCharacterTabFocus } from '../hooks/useCharacterTabFocus';
 import { useEditorSelection } from '../hooks/useEditorSelection';
 import { usePngDrop } from '../hooks/usePngDrop';
 import { useScrollMemory } from '../hooks/useScrollMemory';
+import { useStickyEditorTabs } from '../hooks/useStickyEditorTabs';
+import { useUnclassifiedSuggestions } from '../hooks/useUnclassifiedSuggestions';
 
 /** ベースの品質でよく使うタグ（公式の Quality Tags と定番）。ボタンで付け外しする。 */
 const QUALITY_PICKS = ['masterpiece', 'best quality', 'amazing quality', 'very aesthetic', 'absurdres', 'no text'] as const;
-
-/** 消えたキャラのタブ、生成チェック、カードにフォーカスがあったか。履歴ボタンなど残っている要素は対象外。 */
-function focusWasInRemovedCharacter(element: HTMLElement | null): boolean {
-  if (!element || element.isConnected) return false;
-  return element.closest('.editor-tab-wrap, .character') !== null;
-}
-
-function focusOnEditorTab(element: EventTarget | null): element is HTMLElement {
-  return element instanceof HTMLElement
-    && element.getAttribute('role') === 'tab'
-    && element.closest('.editor-tablist') !== null;
-}
-
-function disabledCharacterCheck(element: EventTarget | null): element is HTMLInputElement {
-  return element instanceof HTMLInputElement && element.classList.contains('editor-tab-check') && element.disabled;
-}
-
-/** 生成枠が埋まり、フォーカスしていたチェックが無効になったか。無効のまま残る環境でも対象にする。 */
-function focusLeftDisabledCharacterCheck(element: HTMLElement | null): boolean {
-  if (!disabledCharacterCheck(element)) return false;
-  const active = document.activeElement;
-  return active == null || active === document.body || active === element;
-}
 
 interface Props {
   workspace: Workspace;
@@ -100,39 +79,11 @@ export function Editor({
   const vectorIndex = useMemo(() => createTagVectorIndex(dictionary.entries), [dictionary.entries]);
   const knownTags = vectorIndex.byTag;
   const isKnown = useCallback((tag: string) => knownTags.has(normalize(tag)), [knownTags]);
-  const [baseSuggestions, setBaseSuggestions] = useState<Record<string, BaseCategorySuggestion>>({});
-  // 上部入力欄で追加した直後の行 ID が確定したタイミングで候補を結び付ける（PNG 取り込み等の別行へ引き継がないため）
-  const pendingBaseSuggestions = useRef<Map<string, PromptTagCategory | null>>(new Map());
-  const [pendingSuggestionVersion, setPendingSuggestionVersion] = useState(0);
-  const clearBaseSuggestion = useCallback((tag: string) => {
-    const key = normalize(tag);
-    pendingBaseSuggestions.current.set(key, null);
-    setPendingSuggestionVersion((v) => v + 1);
-  }, []);
-
-  useLayoutEffect(() => {
-    if (pendingBaseSuggestions.current.size === 0) return;
-    const pending = pendingBaseSuggestions.current;
-    pendingBaseSuggestions.current = new Map();
-    const byTag = new Map(workspace.base.unclassified.map((t) => [normalize(t.tag), t.id]));
-    setBaseSuggestions((prev) => {
-      let next: Record<string, BaseCategorySuggestion> | null = null;
-      for (const [key, suggested] of pending) {
-        const rowId = byTag.get(key);
-        if (!rowId) continue;
-        if (suggested) {
-          const current = (next ?? prev)[rowId];
-          if (current?.tag === key && current.category === suggested) continue;
-          next ??= { ...prev };
-          next[rowId] = { tag: key, category: suggested };
-        } else if (rowId in (next ?? prev)) {
-          next ??= { ...prev };
-          delete next[rowId];
-        }
-      }
-      return next ?? prev;
-    });
-  }, [workspace.base.unclassified, pendingSuggestionVersion]);
+  const {
+    suggestions: baseSuggestions,
+    noteSuggestion,
+    clearSuggestion: clearBaseSuggestion,
+  } = useUnclassifiedSuggestions(workspace.base.unclassified);
 
   const { save } = dictionary;
   const register = useCallback(
@@ -191,23 +142,6 @@ export function Editor({
   );
 
   const { selected, select } = useEditorSelection(characters.map((c) => c.id), loaded);
-  const focusCopiedTab = useRef(false);
-  const copiedTabId = useRef<string | null>(null);
-  const knownCharacterIds = useRef(characters.map((c) => c.id));
-  const lastFocused = useRef<HTMLElement | null>(null);
-  const pendingRemovedTabFocus = useRef(false);
-  const pendingAddedTabFocus = useRef<string | null>(null);
-  const dispatchForCard = useCallback((action: WorkspaceAction) => {
-    if (action.type === 'duplicateCharacter') focusCopiedTab.current = true;
-    dispatch(action);
-  }, [dispatch]);
-  useEffect(() => {
-    const onFocusIn = (event: FocusEvent) => {
-      if (event.target instanceof HTMLElement) lastFocused.current = event.target;
-    };
-    document.addEventListener('focusin', onFocusIn);
-    return () => document.removeEventListener('focusin', onFocusIn);
-  }, []);
   const negativeSelected = selected === NEGATIVE;
   const activeIndex = characters.findIndex((c) => c.id === selected);
   const active = activeIndex >= 0 ? characters[activeIndex] : undefined;
@@ -248,10 +182,7 @@ export function Editor({
       return pickedCategory;
     }
     const routed = classifyEditorTag(tag, vectorIndex, promptCategories, active ? 'auto' : 'suggest');
-    if (!active) {
-      pendingBaseSuggestions.current.set(normalize(tag), routed.suggestedCategory);
-      setPendingSuggestionVersion((v) => v + 1);
-    }
+    if (!active) noteSuggestion(tag, routed.suggestedCategory);
     return routed.category;
   };
   const addPromptTag = (tag: string, weight: number, pickedCategory?: CategoryKey) => {
@@ -288,74 +219,13 @@ export function Editor({
     ? paneTagLists.reduce((sum, tags) => sum + visibleWorkTags(tags, tagFilter, aliasMap).length, 0)
     : null;
 
-  // 編集対象のタブはスクロールしてもヘッダーの直下に残す。張り付いている間だけ見た目を変え、
-  // スクロール位置の調整（visibleBounds）でも上を隠すものとして扱う
-  const tabsRef = useRef<HTMLDivElement>(null);
-  const [tabsStuck, setTabsStuck] = useState(false);
-  useEffect(() => {
-    const tabs = tabsRef.current;
-    if (!tabs) return;
-    const header = document.querySelector<HTMLElement>('.app-header');
-    const update = () => {
-      const top = header ? header.getBoundingClientRect().bottom : 0;
-      tabs.style.top = `${top}px`;
-      setTabsStuck(tabs.getBoundingClientRect().top <= top + 0.5 && window.scrollY > 0);
-    };
-    update();
-    window.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', update);
-    const ro = new ResizeObserver(update);
-    if (header) ro.observe(header, { box: 'border-box' });
-    return () => {
-      window.removeEventListener('scroll', update);
-      window.removeEventListener('resize', update);
-      ro.disconnect();
-    };
-  }, []);
+  const { tabsRef, tabsStuck } = useStickyEditorTabs();
 
   // ベース・ネガティブ・各キャラごとにスクロール位置を覚え、タブを切り替えたときや他の画面から戻ったときに戻す
   useScrollMemory(selected, shown, tabsRef);
 
   const id = useId();
-  const tabRefs = useRef(new Map<string, HTMLButtonElement | null>());
-  useLayoutEffect(() => {
-    const ids = characters.map((c) => c.id);
-    const prev = knownCharacterIds.current;
-    const added = ids.filter((characterId) => !prev.includes(characterId));
-    knownCharacterIds.current = ids;
-    const addedId = added.at(-1) ?? null;
-    const checkDisabled = focusLeftDisabledCharacterCheck(lastFocused.current);
-    if (focusWasInRemovedCharacter(lastFocused.current) || (checkDisabled && !addedId)) {
-      pendingRemovedTabFocus.current = true;
-    }
-    if (focusCopiedTab.current) {
-      focusCopiedTab.current = false;
-      copiedTabId.current = addedId;
-    } else if (addedId && (focusOnEditorTab(lastFocused.current) || checkDisabled)) {
-      pendingAddedTabFocus.current = addedId;
-    }
-    const copied = copiedTabId.current;
-    const restored = pendingAddedTabFocus.current;
-    const focusFree = document.activeElement == null
-      || document.activeElement === document.body
-      || disabledCharacterCheck(document.activeElement);
-    if (copied && selected === copied) {
-      copiedTabId.current = null;
-      pendingAddedTabFocus.current = null;
-      pendingRemovedTabFocus.current = false;
-      tabRefs.current.get(copied)?.focus();
-    } else if (restored && selected === restored) {
-      pendingAddedTabFocus.current = null;
-      if (focusOnEditorTab(document.activeElement) || focusFree) tabRefs.current.get(restored)?.focus();
-    } else if (pendingRemovedTabFocus.current) {
-      const ready = selected === BASE || selected === NEGATIVE || ids.includes(selected);
-      if (ready) {
-        pendingRemovedTabFocus.current = false;
-        if (focusFree) tabRefs.current.get(selected)?.focus();
-      }
-    }
-    lastFocused.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  }, [characters, selected]);
+  const { tabRefs, dispatchForCard } = useCharacterTabFocus(characters, selected, dispatch);
   const tabKeys = useMemo(() => [BASE, NEGATIVE, ...characters.map((c) => c.id)], [characters]);
   const panelId = `${id}-panel`;
   const onTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -559,112 +429,6 @@ export function Editor({
       <p className="hint">
         保存 {characters.length}/{MAX_CHARACTERS} · 生成対象 {enabledCount}/{MAX_ENABLED_CHARACTERS}
       </p>
-    </div>
-  );
-}
-
-interface NegativePaneProps {
-  tags: WorkTag[];
-  dispatch: Dispatch<WorkspaceAction>;
-  entries: Dictionary['entries'];
-  syntax: WeightSyntax;
-  isKnown: (tag: string) => boolean;
-  onCopy: (text: string, label: string) => void;
-  notify: (message: string) => void;
-  onRegister: (tag: WorkTag, category: CategoryKey) => void;
-  characterNegative: string;
-  onCharacterNegativeChange: (value: string) => void;
-  filter: TagFilter;
-  aliasMap: ReadonlyMap<string, readonly string[]>;
-}
-
-/** ネガティブはカテゴリに分けず、1つの並びで編集する。 */
-function NegativePane({
-  tags,
-  dispatch,
-  entries,
-  syntax,
-  isKnown,
-  onCopy,
-  notify,
-  onRegister,
-  characterNegative,
-  onCharacterNegativeChange,
-  filter,
-  aliasMap,
-}: NegativePaneProps) {
-  const id = useId();
-  const [characterOpen, setCharacterOpen] = useState(false);
-  const defaults = useMemo(() => defaultNegativeTags(), []);
-  const hasAllDefaults = defaults.every((d) => tags.some((t) => t.enabled && normalize(t.tag) === normalize(d.tag)));
-
-  const addDefaults = () => {
-    if (defaults.length === 0) return;
-    dispatch({
-      type: 'addMany',
-      items: defaults.map((d) => ({ target: NEGATIVE, category: 'negative', tag: d.tag, weight: d.weight })),
-    });
-  };
-
-  return (
-    <div className="editor-pane negative-pane">
-      <CategorySection
-        target={NEGATIVE}
-        category="negative"
-        title="ネガティブ（Undesired Content）"
-        tags={tags}
-        dispatch={dispatch}
-        entries={entries}
-        syntax={syntax}
-        isKnown={isKnown}
-        onCopy={onCopy}
-        notify={notify}
-        onRegister={onRegister}
-        filter={filter}
-        aliasMap={aliasMap}
-      />
-      <div className="negative-actions">
-        <button type="button" className="btn btn-small" disabled={hasAllDefaults} onClick={addDefaults}>
-          既定のタグを追加
-        </button>
-        <p className="hint">
-          既定は公式UIの UC プリセット「heavy」と同じタグです。足りないものだけ追加し、OFF のものは ON に戻します。NSFW を生成するときは nsfw を OFF にしてください。
-        </p>
-      </div>
-
-      <div className="card negative-section">
-        <button
-          type="button"
-          className="disclosure"
-          aria-expanded={characterOpen}
-          aria-controls={`${id}-character`}
-          onClick={() => setCharacterOpen((value) => !value)}
-        >
-          <span className="disclosure-icon" aria-hidden="true" />
-          キャラクター用のネガティブ
-        </button>
-        <div id={`${id}-character`} className="setting" hidden={!characterOpen}>
-          <div className="setting-head">
-            <label htmlFor={`${id}-character-text`}>個別のネガティブを指定していない ON のキャラクターに付けます</label>
-            <button
-              type="button"
-              className="btn btn-small"
-              disabled={characterNegative === DEFAULT_CHARACTER_NEGATIVE}
-              onClick={() => onCharacterNegativeChange(DEFAULT_CHARACTER_NEGATIVE)}
-            >
-              既定値に戻す
-            </button>
-          </div>
-          <textarea
-            id={`${id}-character-text`}
-            rows={2}
-            spellCheck={false}
-            autoCapitalize="off"
-            value={characterNegative}
-            onChange={(e) => onCharacterNegativeChange(e.target.value)}
-          />
-        </div>
-      </div>
     </div>
   );
 }
