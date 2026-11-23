@@ -1,8 +1,15 @@
+import { MAX_TEXT_BYTES, TEXT_KEYS, type PngMetadata, type TextKey, uncompress, utf8 } from './pngShared';
+import { MAX_STEALTH_PIXELS, MIN_STEALTH_PIXELS, readStealthPngMetadata } from './stealthPng';
+
+export type { PngMetadata, TextKey };
+
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-const TEXT_KEYS = ['Software', 'Source', 'Comment'] as const;
-type TextKey = (typeof TEXT_KEYS)[number];
-const MAX_TEXT_BYTES = 1024 * 1024;
-const utf8 = new TextDecoder('utf-8', { fatal: true });
+
+interface IhdrInfo {
+  width: number;
+  height: number;
+  colorType: number;
+}
 
 function latin1(bytes: Uint8Array): string {
   let text = '';
@@ -18,30 +25,6 @@ function separator(bytes: Uint8Array, start = 0): number {
   return index;
 }
 
-async function uncompress(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
-  const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate')).getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      size += value.length;
-      if (size > MAX_TEXT_BYTES) throw new Error('PNG のメタデータが大きすぎます');
-      chunks.push(value);
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-  }
-  const result = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return result;
-}
-
 async function decodeText(type: string, data: Uint8Array<ArrayBuffer>, start: number): Promise<string> {
   const compressed = type === 'zTXt' || (type === 'iTXt' && data[start] === 1);
   if (type !== 'tEXt') {
@@ -53,26 +36,78 @@ async function decodeText(type: string, data: Uint8Array<ArrayBuffer>, start: nu
     if (type === 'iTXt') start = separator(data, separator(data, start) + 1) + 1;
   }
   const payload = data.subarray(start);
-  const bytes = compressed ? await uncompress(payload) : payload;
+  const bytes = compressed ? await uncompress(payload, 'deflate') : payload;
   if (type === 'iTXt') return utf8.decode(bytes);
   return latin1(bytes);
 }
 
-export async function readPngMetadata(blob: Blob): Promise<Partial<Record<TextKey, string>>> {
+function hasAlphaChannel(ihdr: IhdrInfo | undefined, hasTrns: boolean): ihdr is IhdrInfo {
+  if (!ihdr || ihdr.width <= 0 || ihdr.height <= 0) return false;
+  return ihdr.colorType === 4 || ihdr.colorType === 6 || hasTrns;
+}
+
+function stripChunkRanges(blob: Blob, ranges: ReadonlyArray<readonly [number, number]>): Blob {
+  const parts: Blob[] = [];
+  let cursor = 0;
+  for (const [start, end] of ranges) {
+    if (start > cursor) parts.push(blob.slice(cursor, start));
+    cursor = end;
+  }
+  if (cursor < blob.size) parts.push(blob.slice(cursor));
+  return new Blob(parts, { type: blob.type || 'image/png' });
+}
+
+export async function readPngMetadata(blob: Blob): Promise<PngMetadata> {
   const buffer = await blob.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   if (!PNG_SIGNATURE.every((byte, i) => bytes[i] === byte)) throw new Error('PNG 画像を選んでください');
 
   const view = new DataView(buffer);
-  const metadata: Partial<Record<TextKey, string>> = {};
+  const metadata: PngMetadata = {};
+  let ihdr: IhdrInfo | undefined;
+  let hasTrns = false;
+  const exifRanges: Array<[number, number]> = [];
+
   for (let offset = PNG_SIGNATURE.length; offset + 12 <= bytes.length;) {
+    const chunkStart = offset;
     const length = view.getUint32(offset);
     const start = offset + 8;
     const end = start + length;
     if (length > 0x7fffffff || end + 4 > bytes.length) break;
     const type = latin1(bytes.subarray(offset + 4, start));
     offset = end + 4;
-    if (type === 'IEND' && length === 0) return metadata;
+
+    if (type === 'IHDR' && !ihdr && length === 13) {
+      ihdr = {
+        width: view.getUint32(start),
+        height: view.getUint32(start + 4),
+        colorType: bytes[start + 9]!,
+      };
+      continue;
+    }
+    if (type === 'tRNS') {
+      hasTrns = true;
+      continue;
+    }
+    if (type === 'eXIf') {
+      exifRanges.push([chunkStart, offset]);
+      continue;
+    }
+    if (type === 'IEND' && length === 0) {
+      if (metadata.Comment !== undefined) return metadata;
+      if (hasAlphaChannel(ihdr, hasTrns)) {
+        const pixels = ihdr.width * ihdr.height;
+        if (pixels > MAX_STEALTH_PIXELS) {
+          throw new Error('画像サイズが大きすぎるため、Stealth PNG のメタデータを読み取れません');
+        }
+        if (pixels >= MIN_STEALTH_PIXELS) {
+          const decodeBlob = exifRanges.length > 0 ? stripChunkRanges(blob, exifRanges) : blob;
+          const stealth = await readStealthPngMetadata(decodeBlob);
+          if (stealth) return { ...metadata, ...stealth };
+        }
+      }
+      return metadata;
+    }
     if (type !== 'tEXt' && type !== 'zTXt' && type !== 'iTXt') continue;
 
     const data = bytes.subarray(start, end);

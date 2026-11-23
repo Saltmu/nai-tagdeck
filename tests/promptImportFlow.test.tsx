@@ -116,7 +116,7 @@ it('retains the workspace on cancel or error, then applies a drop and only the s
   expect(preview()).toBe('existing');
   await click(button('キャンセル', container.querySelector('dialog')!));
   await drop(imageFile(pngFixture(), 'missing.png'));
-  expect(container.querySelector('dialog [role="alert"]')?.textContent).toContain('Comment');
+  expect(container.querySelector('dialog [role="alert"]')?.textContent).toContain('生成情報');
   expect(preview()).toBe('existing');
   await click(button('閉じる', container.querySelector('dialog')!));
 
