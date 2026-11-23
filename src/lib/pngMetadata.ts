@@ -46,15 +46,15 @@ function hasAlphaChannel(ihdr: IhdrInfo | undefined, hasTrns: boolean): ihdr is 
   return ihdr.colorType === 4 || ihdr.colorType === 6 || hasTrns;
 }
 
-function stripChunkRanges(bytes: Uint8Array<ArrayBuffer>, ranges: ReadonlyArray<readonly [number, number]>): Blob {
-  const parts: Uint8Array<ArrayBuffer>[] = [];
+function stripChunkRanges(blob: Blob, ranges: ReadonlyArray<readonly [number, number]>): Blob {
+  const parts: Blob[] = [];
   let cursor = 0;
   for (const [start, end] of ranges) {
-    if (start > cursor) parts.push(bytes.subarray(cursor, start));
+    if (start > cursor) parts.push(blob.slice(cursor, start));
     cursor = end;
   }
-  if (cursor < bytes.length) parts.push(bytes.subarray(cursor));
-  return new Blob(parts, { type: 'image/png' });
+  if (cursor < blob.size) parts.push(blob.slice(cursor));
+  return new Blob(parts, { type: blob.type || 'image/png' });
 }
 
 export async function readPngMetadata(blob: Blob): Promise<PngMetadata> {
@@ -101,7 +101,7 @@ export async function readPngMetadata(blob: Blob): Promise<PngMetadata> {
           throw new Error('画像サイズが大きすぎるため、Stealth PNG のメタデータを読み取れません');
         }
         if (pixels >= MIN_STEALTH_PIXELS) {
-          const decodeBlob = exifRanges.length > 0 ? stripChunkRanges(bytes, exifRanges) : blob;
+          const decodeBlob = exifRanges.length > 0 ? stripChunkRanges(blob, exifRanges) : blob;
           const stealth = await readStealthPngMetadata(decodeBlob);
           if (stealth) return { ...metadata, ...stealth };
         }

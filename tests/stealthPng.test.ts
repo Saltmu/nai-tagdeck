@@ -342,9 +342,17 @@ describe('Stealth PNG decoding', () => {
     expect(metadata2).toEqual({ Software: 'NovelAI', Comment: '{"prompt":"a"}' });
     expect(fallback.createBitmap).toHaveBeenCalledTimes(3);
     expect(fallback.createBitmap.mock.calls[2]?.[1]).toBeUndefined();
+
+    const decodeFailure = vi.fn(async () => {
+      throw new DOMException('The source image could not be decoded.', 'EncodingError');
+    });
+    vi.stubGlobal('createImageBitmap', decodeFailure);
+    await expect(readStealthPngMetadata(new Blob([new Uint8Array(0)], { type: 'image/png' })))
+      .rejects.toThrow('PNG の画像データを展開できませんでした');
+    expect(decodeFailure).toHaveBeenCalledTimes(1);
   });
 
-  it('strips eXIf chunks so browsers without imageOrientation:none support keep stored pixel order', async () => {
+  it('strips eXIf chunks via blob.slice so browsers without imageOrientation:none support keep stored pixel order', async () => {
     const stealthJson = JSON.stringify({
       Software: 'NovelAI',
       Comment: JSON.stringify({ prompt: 'exif safe tag' }),
@@ -385,7 +393,10 @@ describe('Stealth PNG decoding', () => {
       return originalCreateElement(tagName);
     }) as typeof document.createElement);
 
-    const imported = await readPromptImport(new Blob([realPng], { type: 'image/png' }), []);
+    const pngBlob = new Blob([realPng], { type: 'image/png' });
+    const sliceSpy = vi.spyOn(pngBlob, 'slice');
+    const imported = await readPromptImport(pngBlob, []);
+    expect(sliceSpy).toHaveBeenCalled();
     expect(imported.base.unclassified.map((t) => t.tag)).toEqual(['exif safe tag']);
     expect(close).toHaveBeenCalledOnce();
   });

@@ -186,6 +186,7 @@ async function decodeImageBitmap(blob: Blob): Promise<ImageBitmap> {
       return options ? await createImageBitmap(blob, options) : await createImageBitmap(blob);
     } catch (error) {
       lastError = error;
+      if (!options || !(error instanceof TypeError)) throw error;
     }
   }
   throw lastError;
