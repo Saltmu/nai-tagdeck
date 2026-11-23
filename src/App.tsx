@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type MouseEvent, type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
 import { SettingsView } from './components/SettingsView';
@@ -8,12 +8,12 @@ import { Gallery } from './components/Gallery';
 import { GenerateDock } from './components/GenerateDock';
 import { QuickGenerate } from './components/QuickGenerate';
 import { LatestPreview } from './components/LatestPreview';
-import { PromptImportDialog, type PromptSource } from './components/PromptImportDialog';
+import { PromptImportDialog } from './components/PromptImportDialog';
 import { useDictionary } from './hooks/useDictionary';
 import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWorkspace';
 import { Toast, type ToastHandle } from './components/Toast';
 import { useToken } from './hooks/useToken';
-import { useTagUndo, type UndoExtras, type UndoExtrasSync } from './hooks/useTagUndo';
+import { useTagUndo, type UndoExtrasSync } from './hooks/useTagUndo';
 import { useImages } from './hooks/useImages';
 import { useGenerator } from './hooks/useGenerator';
 import { usePresets } from './hooks/usePresets';
@@ -21,19 +21,18 @@ import { useBackupTransfer } from './hooks/useBackupTransfer';
 import { useGenerationControls } from './hooks/useGenerationControls';
 import { useLatestImageNotice } from './hooks/useLatestImageNotice';
 import { useFirstRun } from './hooks/useFirstRun';
-import { confirmUnsavedChanges, type UnsavedChoice } from './components/confirmUnsaved';
+import { usePromptImportApply } from './hooks/usePromptImportApply';
 import { useDialogs } from './components/Dialogs';
-import { generationSaveForOverwrite, isEmptyWorkspace, overwritePreset, samePreset, sameWorkTags } from './lib/presets';
+import { isEmptyWorkspace } from './lib/presets';
 import { isDefaultSettings } from './lib/settings';
-import { isDefaultGeneration, normalizeGeneration, sizeOf, type GenerationSettings, type SizeKey } from './lib/generation';
+import { isDefaultGeneration, sizeOf, type SizeKey } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { TabSyncNotice } from './components/TabSyncNotice';
 import { useTabSync } from './hooks/useTabSync';
 import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
-import { importedBaseForMode, type PromptImport } from './lib/promptImport';
-import { defaultNegativeTags, type WorkspaceAction } from './lib/workspace';
+import type { WorkspaceAction } from './lib/workspace';
 import type { WeightSyntax } from './types';
 
 type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
@@ -89,9 +88,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const imageStore = useImages({ onEvict });
   const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
-  const [promptSource, setPromptSource] = useState<PromptSource | null>(null);
-  const confirmAbortRef = useRef<AbortController | null>(null);
-  const pngInput = useRef<HTMLInputElement>(null);
   // 広い画面では、画像エリアをクリックしたらドックを閉じる（バーは初期表示と同じ形で残る）
   const [dockCollapse, setDockCollapse] = useState(0);
   const hideDockOnImageClick = (e: MouseEvent<HTMLDivElement>) => {
@@ -224,16 +220,18 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const latest = imageStore.images[0];
   const { unseenId, dismiss } = useLatestImageNotice(latest?.id, tab === 'generate');
   const showLatest = tab === 'editor' && !!latest && unseenId === latest.id;
-  const pickPng = useMemo(
-    () => (firstRunReady ? () => pngInput.current?.click() : undefined),
-    [firstRunReady],
-  );
-  const openPromptImport = useCallback(
-    (source: PromptSource) => {
-      if (firstRunReady) setPromptSource(source);
-    },
-    [firstRunReady],
-  );
+  const promptImport = usePromptImportApply({
+    ready: firstRunReady,
+    settingsReady,
+    workspace,
+    presets,
+    settings,
+    generation,
+    dictionaryEntries: dictionary.entries,
+    dispatch,
+    openEditor,
+    notify: show,
+  });
   const handleCharacterNegativeChange = useCallback(
     (characterNegativePrompt: string) => updateSettings({ characterNegativePrompt }),
     [updateSettings],
@@ -250,109 +248,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     updateGeneration({ seed: null });
     show('シードをランダムに戻しました');
   }, [updateGeneration, show]);
-  useEffect(() => {
-    if (!firstRunReady && promptSource !== null) setPromptSource(null);
-    return () => { confirmAbortRef.current?.abort(); };
-  }, [firstRunReady, promptSource]);
-  const applyPrompt = async (result: PromptImport, applyGeneration: boolean) => {
-    const currentWorkspace = workspaceRef.current;
-    const store = presetsRef.current;
-    const currentSettings = settingsRef.current;
-    const currentGeneration = generationRef.current;
-    const currentEntries = entriesRef.current;
-    const active = store.presets.find((preset) => preset.id === store.activeId) ?? null;
-    const nextGeneration = applyGeneration ? normalizeGeneration({ ...currentGeneration, ...result.generation.values }) : null;
-    const generationPatch: Partial<GenerationSettings> = {};
-    if (nextGeneration) {
-      for (const key of Object.keys(result.generation.values) as (keyof GenerationSettings)[]) {
-        const value = nextGeneration[key];
-        if (value !== undefined && !Object.is(value, currentGeneration[key])) generationPatch[key] = value as never;
-      }
-    }
-    const generationChanges = Object.keys(generationPatch).length > 0;
-    const negativeChanges = result.negative !== undefined && !sameWorkTags(result.negative, currentWorkspace.negative);
-    // 古いプリセットはネガティブを持たず、空の作業状態もネガティブを見ない。PNG が編集済みの全体ネガティブを置き換えるときだけ、ここで確認する。
-    const negativeUnsaved = negativeChanges
-      && !sameWorkTags(currentWorkspace.negative, defaultNegativeTags())
-      && (active === null || active.workspace.negative === undefined);
-    const dirty = (active
-      ? !samePreset(active, {
-          workspace: currentWorkspace,
-          generation: currentGeneration,
-          characterNegativePrompt: currentSettings.characterNegativePrompt,
-        })
-      : !isEmptyWorkspace(currentWorkspace)) || negativeUnsaved;
-    const nextCharacterNegative = result.characterNegative !== undefined && result.characterNegative !== currentSettings.characterNegativePrompt
-      ? result.characterNegative
-      : null;
-    let choice: UnsavedChoice | null = 'proceed';
-    if (dirty) {
-      const also = [
-        negativeChanges ? '全体ネガティブ' : '',
-        nextCharacterNegative !== null ? '共通のキャラ用ネガティブ' : '',
-        generationChanges ? '生成設定' : '',
-      ].filter(Boolean);
-      const action = also.length > 0
-        ? `画像のプロンプトを適用しますか？作業中のベースとキャラクターを置き換え、${also.join('と')}も更新します。`
-        : '画像のプロンプトを適用しますか？作業中のベースとキャラクターを置き換えます。';
-      confirmAbortRef.current?.abort();
-      const controller = new AbortController();
-      confirmAbortRef.current = controller;
-      try {
-        choice = await confirmUnsavedChanges(dialogs, {
-          dirty,
-          activeName: active?.name ?? null,
-          action,
-          okLabel: '適用',
-          signal: controller.signal,
-        });
-      } finally {
-        if (confirmAbortRef.current === controller) confirmAbortRef.current = null;
-      }
-      if (!choice || controller.signal.aborted) return false;
-      // 確認を開いている間にバックアップや辞書更新などで状態が変わっていたら、古い前提のまま適用せずプレビューへ戻す。
-      if (
-        currentWorkspace !== workspaceRef.current
-        || store.presets !== presetsRef.current.presets
-        || store.activeId !== presetsRef.current.activeId
-        || currentSettings !== settingsRef.current
-        || currentGeneration !== generationRef.current
-        || currentEntries !== entriesRef.current
-      ) {
-        show('確認中に内容が更新されたため、適用を中止しました。もう一度適用してください');
-        return false;
-      }
-    }
-    if (choice === 'save' && active) {
-      const save = generationSaveForOverwrite(active, {
-        generation: currentGeneration,
-        characterNegativePrompt: currentSettings.characterNegativePrompt,
-      });
-      if (save && !settingsReady) {
-        show('生成設定を読み込めていないため、適用を中止しました');
-        return false;
-      }
-      store.setPresets(overwritePreset(store.presets, active.id, currentWorkspace, save));
-    }
-    const nextMode = nextGeneration?.mode ?? currentGeneration.mode;
-    const extras: UndoExtras = {};
-    if (nextCharacterNegative !== null) extras.characterNegativePrompt = nextCharacterNegative;
-    if (generationChanges) extras.generation = generationPatch;
-    dispatch({
-      type: 'replace',
-      workspace: {
-        base: importedBaseForMode(result, nextMode),
-        characters: result.characters,
-        negative: result.negative ?? currentWorkspace.negative,
-      },
-    }, extras);
-    store.setActiveId(null);
-    openEditor();
-    show(choice === 'save' && active
-      ? `プリセット「${active.name}」に変更を上書きし、画像のプロンプトを読み込みました`
-      : '画像のプロンプトを読み込みました');
-    return true;
-  };
 
   const headerRef = useRef<HTMLElement>(null);
   // 固定ヘッダーの高さに合わせて .app の上余白を揃える（Android Firefox での sticky ちらつき回避のため fixed 化）
@@ -484,8 +379,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onCopy={copy}
               notify={show}
               presets={presets}
-              onPickPng={pickPng}
-              onReadPng={openPromptImport}
+              onPickPng={promptImport.pickPng}
+              onReadPng={promptImport.openPromptImport}
               characterNegative={settings.characterNegativePrompt}
               onCharacterNegativeChange={handleCharacterNegativeChange}
               generation={generation}
@@ -507,8 +402,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onUseSeed={applySeed}
               onDownloaded={imageStore.markDownloaded}
               onTogglePin={imageStore.togglePinned}
-              onPickPng={pickPng}
-              onReadPng={openPromptImport}
+              onPickPng={promptImport.pickPng}
+              onReadPng={promptImport.openPromptImport}
             />
             {/* プロンプトと生成設定は下部のドックにまとめ、画像を広く見せる */}
             <GenerateDock
@@ -566,22 +461,18 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       </main>
 
       <input
-        ref={pngInput}
+        ref={promptImport.pngInputRef}
         type="file"
         accept="image/png,.png"
         hidden
-        onChange={(e) => {
-          const file = e.currentTarget.files?.[0];
-          e.currentTarget.value = '';
-          if (file) openPromptImport({ blob: file, name: file.name });
-        }}
+        onChange={promptImport.onPngFileChange}
       />
-      {promptSource && firstRunReady && (
+      {promptImport.promptSource && firstRunReady && (
         <PromptImportDialog
-          source={promptSource}
+          source={promptImport.promptSource}
           entries={dictionary.entries}
-          onCancel={() => setPromptSource(null)}
-          onApply={applyPrompt}
+          onCancel={promptImport.closePromptImport}
+          onApply={promptImport.applyPrompt}
         />
       )}
 

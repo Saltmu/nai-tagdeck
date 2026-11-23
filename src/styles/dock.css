@@ -46,6 +46,7 @@
 }
 
 .dock-toggle svg {
+  margin: auto;
   transition: transform 0.2s ease;
 }
 
