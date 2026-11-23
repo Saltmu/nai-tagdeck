@@ -4,7 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readPngMetadata } from '../src/lib/pngMetadata';
 import { MAX_TEXT_BYTES, uncompress } from '../src/lib/pngShared';
 import { readPromptImport } from '../src/lib/promptImport';
-import { MAX_STEALTH_PIXELS, extractStealthMetadata, readStealthPngMetadata } from '../src/lib/stealthPng';
+import {
+  MAX_STEALTH_PIXELS,
+  MAX_STEALTH_TILE_DIM,
+  MAX_STEALTH_TILE_PIXELS,
+  extractStealthMetadata,
+  readStealthPngMetadata,
+} from '../src/lib/stealthPng';
 import { caption, pngFixture } from './promptImportFixture';
 
 const PNG_SIGNATURE = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -143,6 +149,22 @@ function decodeRgbaFromPng(pngBytes: Uint8Array, applyExifRotation: boolean) {
   return { width: height, height: width, rgba: rotated };
 }
 
+function sliceRgbaRect(
+  rgba: Uint8ClampedArray,
+  imageWidth: number,
+  sx: number,
+  sy: number,
+  sw: number,
+  sh: number,
+): Uint8ClampedArray<ArrayBuffer> {
+  const out = new Uint8ClampedArray(sw * sh * 4);
+  for (let row = 0; row < sh; row++) {
+    const srcStart = ((sy + row) * imageWidth + sx) * 4;
+    out.set(rgba.subarray(srcStart, srcStart + sw * 4), row * sw * 4);
+  }
+  return out;
+}
+
 function stubCanvasAndBitmap(
   rgba: Uint8ClampedArray,
   width: number,
@@ -161,12 +183,21 @@ function stubCanvasAndBitmap(
   });
   vi.stubGlobal('createImageBitmap', createBitmap);
 
-  const drawImage = vi.fn();
-  const getImageData = vi.fn(() => ({ data: rgba, width, height, colorSpace: 'srgb' as const }));
+  let currentTile = new Uint8ClampedArray(0);
+  const clearRect = vi.fn();
+  const drawImage = vi.fn((_img: ImageBitmap, sx = 0, sy = 0, sw = width, sh = height) => {
+    currentTile = sliceRgbaRect(rgba, width, sx, sy, sw, sh);
+  });
+  const getImageData = vi.fn((_x: number, _y: number, sw: number, sh: number) => ({
+    data: currentTile,
+    width: sw,
+    height: sh,
+    colorSpace: 'srgb' as const,
+  }));
   const canvas = {
     width: 0,
     height: 0,
-    getContext: vi.fn(() => ({ drawImage, getImageData })),
+    getContext: vi.fn(() => ({ clearRect, drawImage, getImageData })),
   };
   const originalCreateElement = document.createElement.bind(document);
   vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
@@ -174,7 +205,7 @@ function stubCanvasAndBitmap(
     return originalCreateElement(tagName);
   }) as typeof document.createElement);
 
-  return { createBitmap, close, drawImage, getImageData, canvas };
+  return { createBitmap, close, clearRect, drawImage, getImageData, canvas };
 }
 
 afterEach(() => {
@@ -313,7 +344,7 @@ describe('Stealth PNG decoding', () => {
     expect(fallback.createBitmap.mock.calls[2]?.[1]).toBeUndefined();
   });
 
-  it('preserves stored pixel order via imageOrientation:none on a real EXIF-oriented RGBA PNG fixture', async () => {
+  it('strips eXIf chunks so browsers without imageOrientation:none support keep stored pixel order', async () => {
     const stealthJson = JSON.stringify({
       Software: 'NovelAI',
       Comment: JSON.stringify({ prompt: 'exif safe tag' }),
@@ -325,11 +356,13 @@ describe('Stealth PNG decoding', () => {
 
     const close = vi.fn();
     let decoded!: ReturnType<typeof decodeRgbaFromPng>;
-    vi.stubGlobal('createImageBitmap', vi.fn(async (blob: Blob, init?: ImageBitmapOptions) => {
+    // Simulate a browser that ignores imageOrientation: 'none' whenever an eXIf chunk is present.
+    vi.stubGlobal('createImageBitmap', vi.fn(async (blob: Blob) => {
       const bytes = new Uint8Array(await blob.arrayBuffer());
-      decoded = decodeRgbaFromPng(bytes, init?.imageOrientation !== 'none');
+      decoded = decodeRgbaFromPng(bytes, true);
       return { width: decoded.width, height: decoded.height, close } as unknown as ImageBitmap;
     }));
+    let currentTile = new Uint8ClampedArray(0);
     const originalCreateElement = document.createElement.bind(document);
     vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
       if (tagName === 'canvas') {
@@ -337,8 +370,15 @@ describe('Stealth PNG decoding', () => {
           width: 0,
           height: 0,
           getContext: () => ({
-            drawImage: vi.fn(),
-            getImageData: () => ({ data: decoded.rgba, width: decoded.width, height: decoded.height }),
+            clearRect: vi.fn(),
+            drawImage: (_img: ImageBitmap, sx: number, sy: number, sw: number, sh: number) => {
+              currentTile = sliceRgbaRect(decoded.rgba, decoded.width, sx, sy, sw, sh);
+            },
+            getImageData: (_x: number, _y: number, sw: number, sh: number) => ({
+              data: currentTile,
+              width: sw,
+              height: sh,
+            }),
           }),
         } as unknown as HTMLCanvasElement;
       }
@@ -348,6 +388,87 @@ describe('Stealth PNG decoding', () => {
     const imported = await readPromptImport(new Blob([realPng], { type: 'image/png' }), []);
     expect(imported.base.unclassified.map((t) => t.tag)).toEqual(['exif safe tag']);
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('reads large and tall Stealth PNGs in bounded canvas tiles without exceeding browser canvas limits', async () => {
+    const stealthJson = JSON.stringify({
+      Software: 'NovelAI',
+      Comment: JSON.stringify({ prompt: 'tiled tag' }),
+    });
+    const payload = gzipSync(Buffer.from(stealthJson));
+
+    // Case 1: Tall image (> MAX_STEALTH_TILE_DIM) spanning multiple vertical tiles and column wraps.
+    const tallWidth = 20;
+    const tallHeight = MAX_STEALTH_TILE_DIM + 200;
+    const tallPayload = Buffer.from(JSON.stringify({
+      Software: 'NovelAI',
+      Comment: JSON.stringify({ prompt: `tiled tag, ${'extra_tag '.repeat(60)}` }),
+    }));
+    expect((19 + tallPayload.length) * 8).toBeGreaterThan(tallHeight);
+    const tallRgba = encodeStealthRgba(tallWidth, tallHeight, 'stealth_pnginfo', tallPayload);
+    const tallStub = stubCanvasAndBitmap(tallRgba, tallWidth, tallHeight);
+    const tallPng = makePng({ width: tallWidth, height: tallHeight, colorType: 6 });
+
+    const tallImported = await readPromptImport(new Blob([tallPng], { type: 'image/png' }), []);
+    expect(tallImported.base.unclassified[0]?.tag).toBe('tiled tag');
+    expect(tallStub.drawImage.mock.calls.length).toBeGreaterThan(1);
+    for (const [, , , sw, sh] of tallStub.drawImage.mock.calls) {
+      expect(sw).toBeLessThanOrEqual(MAX_STEALTH_TILE_DIM);
+      expect(sh).toBeLessThanOrEqual(MAX_STEALTH_TILE_DIM);
+      expect(sw * sh).toBeLessThanOrEqual(MAX_STEALTH_TILE_PIXELS);
+    }
+
+    // Case 2: 4800 x 4000 (>16.7M iOS canvas limit, <= MAX_STEALTH_PIXELS) via column-strip tiles.
+    const largeWidth = 4800;
+    const largeHeight = 4000;
+    const headerBytes = new Uint8Array(19 + payload.length);
+    for (let i = 0; i < 15; i++) headerBytes[i] = 'stealth_pngcomp'.charCodeAt(i);
+    new DataView(headerBytes.buffer).setUint32(15, payload.length * 8);
+    headerBytes.set(payload, 19);
+
+    const close = vi.fn();
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: largeWidth, height: largeHeight, close } as unknown as ImageBitmap)));
+    let tilePixels = new Uint8ClampedArray(0);
+    const tileSizes: Array<[number, number]> = [];
+    const originalCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+      if (tagName === 'canvas') {
+        return {
+          width: 0,
+          height: 0,
+          getContext: () => ({
+            clearRect: vi.fn(),
+            drawImage: (_img: ImageBitmap, sx: number, sy: number, sw: number, sh: number) => {
+              tileSizes.push([sw, sh]);
+              tilePixels = new Uint8ClampedArray(sw * sh * 4);
+              for (let row = 0; row < sh; row++) {
+                const y = sy + row;
+                for (let col = 0; col < sw; col++) {
+                  const x = sx + col;
+                  const bitIdx = x * largeHeight + y;
+                  const byteIdx = Math.floor(bitIdx / 8);
+                  const bitInByte = 7 - (bitIdx % 8);
+                  const lsb = byteIdx < headerBytes.length ? (headerBytes[byteIdx]! >> bitInByte) & 1 : 0;
+                  tilePixels[(row * sw + col) * 4 + 3] = 254 | lsb;
+                }
+              }
+            },
+            getImageData: (_x: number, _y: number, sw: number, sh: number) => ({ data: tilePixels, width: sw, height: sh }),
+          }),
+        } as unknown as HTMLCanvasElement;
+      }
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+
+    const largePng = makePng({ width: largeWidth, height: largeHeight, colorType: 6 });
+    const largeImported = await readPromptImport(new Blob([largePng], { type: 'image/png' }), []);
+    expect(largeImported.base.unclassified.map((t) => t.tag)).toEqual(['tiled tag']);
+    expect(tileSizes.length).toBeGreaterThanOrEqual(1);
+    for (const [sw, sh] of tileSizes) {
+      expect(sw * sh).toBeLessThanOrEqual(MAX_STEALTH_TILE_PIXELS);
+      expect(sw).toBeLessThanOrEqual(MAX_STEALTH_TILE_DIM);
+      expect(sh).toBeLessThanOrEqual(MAX_STEALTH_TILE_DIM);
+    }
   });
 
   it('skips pixel decoding when Comment text chunk exists or alpha is absent, and reports pixel-limit errors explicitly', async () => {

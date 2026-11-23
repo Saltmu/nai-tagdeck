@@ -6,8 +6,12 @@ const MAGIC_BYTES = 15;
 const LENGTH_BYTES = 4;
 export const MIN_STEALTH_PIXELS = (MAGIC_BYTES + LENGTH_BYTES) * 8;
 export const MAX_STEALTH_PIXELS = 33_554_432;
+export const MAX_STEALTH_TILE_PIXELS = 1_048_576;
+export const MAX_STEALTH_TILE_DIM = 4096;
 
-function createByteReader(rgba: Uint8Array | Uint8ClampedArray, width: number, height: number) {
+type ByteReader = (count: number) => Uint8Array<ArrayBuffer>;
+
+function createRgbaByteReader(rgba: Uint8Array | Uint8ClampedArray, width: number, height: number): ByteReader {
   let x = 0;
   let y = 0;
   const nextBit = (): number => {
@@ -32,19 +36,73 @@ function createByteReader(rgba: Uint8Array | Uint8ClampedArray, width: number, h
   };
 }
 
-/** RGBA ピクセル配列から NovelAI 互換の Stealth PNG メタデータを抽出する。 */
-export async function extractStealthMetadata(
-  rgba: Uint8Array | Uint8ClampedArray,
+function createCanvasByteReader(
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  bitmap: ImageBitmap,
   width: number,
   height: number,
-): Promise<PngMetadata | undefined> {
-  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || rgba.length < width * height * 4) {
-    throw new Error('Stealth PNG のピクセルデータが不正です');
-  }
-  const totalBits = width * height;
+): ByteReader {
+  let x = 0;
+  let y = 0;
+  let tileX = -1;
+  let tileY = -1;
+  let tileW = 0;
+  let tileH = 0;
+  let tileData: Uint8ClampedArray = new Uint8ClampedArray(0);
+
+  const loadTile = (targetX: number, targetY: number) => {
+    tileH = Math.min(height - targetY, MAX_STEALTH_TILE_DIM);
+    tileW = tileH === height
+      ? Math.min(width - targetX, MAX_STEALTH_TILE_DIM, Math.max(1, Math.floor(MAX_STEALTH_TILE_PIXELS / tileH)))
+      : 1;
+    tileX = targetX;
+    tileY = targetY;
+    if (canvas.width !== tileW) canvas.width = tileW;
+    if (canvas.height !== tileH) canvas.height = tileH;
+    try {
+      ctx.clearRect(0, 0, tileW, tileH);
+      ctx.drawImage(bitmap, tileX, tileY, tileW, tileH, 0, 0, tileW, tileH);
+      tileData = ctx.getImageData(0, 0, tileW, tileH).data;
+    } catch (error) {
+      throw new Error('画像サイズが大きすぎるため、Stealth PNG のメタデータを読み取れません', { cause: error });
+    }
+    if (tileData.length < tileW * tileH * 4) {
+      throw new Error('画像サイズが大きすぎるため、Stealth PNG のメタデータを読み取れません');
+    }
+  };
+
+  const nextBit = (): number => {
+    if (x < tileX || x >= tileX + tileW || y < tileY || y >= tileY + tileH) {
+      loadTile(x, y);
+    }
+    const localX = x - tileX;
+    const localY = y - tileY;
+    const alpha = tileData[(localY * tileW + localX) * 4 + 3]!;
+    y += 1;
+    if (y === height) {
+      y = 0;
+      x += 1;
+    }
+    return alpha & 1;
+  };
+
+  return (count: number): Uint8Array<ArrayBuffer> => {
+    const out = new Uint8Array(count);
+    for (let i = 0; i < count; i++) {
+      let byte = 0;
+      for (let bit = 0; bit < 8; bit++) {
+        byte = (byte << 1) | nextBit();
+      }
+      out[i] = byte;
+    }
+    return out;
+  };
+}
+
+async function decodeStealthFromReader(readBytes: ByteReader, totalBits: number): Promise<PngMetadata | undefined> {
   if (totalBits < MIN_STEALTH_PIXELS) return undefined;
 
-  const readBytes = createByteReader(rgba, width, height);
   const magic = String.fromCharCode(...readBytes(MAGIC_BYTES));
   if (magic !== MAGIC_COMP && magic !== MAGIC_INFO) return undefined;
 
@@ -103,6 +161,18 @@ export async function extractStealthMetadata(
   return metadata;
 }
 
+/** RGBA ピクセル配列から NovelAI 互換の Stealth PNG メタデータを抽出する。 */
+export async function extractStealthMetadata(
+  rgba: Uint8Array | Uint8ClampedArray,
+  width: number,
+  height: number,
+): Promise<PngMetadata | undefined> {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || rgba.length < width * height * 4) {
+    throw new Error('Stealth PNG のピクセルデータが不正です');
+  }
+  return decodeStealthFromReader(createRgbaByteReader(rgba, width, height), width * height);
+}
+
 const BITMAP_OPTION_VARIANTS: ReadonlyArray<ImageBitmapOptions | undefined> = [
   { premultiplyAlpha: 'none', colorSpaceConversion: 'none', imageOrientation: 'none' },
   { imageOrientation: 'none' },
@@ -141,13 +211,9 @@ export async function readStealthPngMetadata(blob: Blob): Promise<PngMetadata | 
       throw new Error('画像サイズが大きすぎるため、Stealth PNG のメタデータを読み取れません');
     }
     canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
     const ctx = canvas.getContext('2d', { willReadFrequently: true }) ?? canvas.getContext('2d');
     if (!ctx) return undefined;
-    ctx.drawImage(bitmap, 0, 0);
-    const { data } = ctx.getImageData(0, 0, width, height);
-    return await extractStealthMetadata(data, width, height);
+    return await decodeStealthFromReader(createCanvasByteReader(canvas, ctx, bitmap, width, height), width * height);
   } finally {
     bitmap?.close?.();
     if (canvas) {

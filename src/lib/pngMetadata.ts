@@ -46,6 +46,17 @@ function hasAlphaChannel(ihdr: IhdrInfo | undefined, hasTrns: boolean): ihdr is 
   return ihdr.colorType === 4 || ihdr.colorType === 6 || hasTrns;
 }
 
+function stripChunkRanges(bytes: Uint8Array<ArrayBuffer>, ranges: ReadonlyArray<readonly [number, number]>): Blob {
+  const parts: Uint8Array<ArrayBuffer>[] = [];
+  let cursor = 0;
+  for (const [start, end] of ranges) {
+    if (start > cursor) parts.push(bytes.subarray(cursor, start));
+    cursor = end;
+  }
+  if (cursor < bytes.length) parts.push(bytes.subarray(cursor));
+  return new Blob(parts, { type: 'image/png' });
+}
+
 export async function readPngMetadata(blob: Blob): Promise<PngMetadata> {
   const buffer = await blob.arrayBuffer();
   const bytes = new Uint8Array(buffer);
@@ -55,8 +66,10 @@ export async function readPngMetadata(blob: Blob): Promise<PngMetadata> {
   const metadata: PngMetadata = {};
   let ihdr: IhdrInfo | undefined;
   let hasTrns = false;
+  const exifRanges: Array<[number, number]> = [];
 
   for (let offset = PNG_SIGNATURE.length; offset + 12 <= bytes.length;) {
+    const chunkStart = offset;
     const length = view.getUint32(offset);
     const start = offset + 8;
     const end = start + length;
@@ -76,6 +89,10 @@ export async function readPngMetadata(blob: Blob): Promise<PngMetadata> {
       hasTrns = true;
       continue;
     }
+    if (type === 'eXIf') {
+      exifRanges.push([chunkStart, offset]);
+      continue;
+    }
     if (type === 'IEND' && length === 0) {
       if (metadata.Comment !== undefined) return metadata;
       if (hasAlphaChannel(ihdr, hasTrns)) {
@@ -84,7 +101,8 @@ export async function readPngMetadata(blob: Blob): Promise<PngMetadata> {
           throw new Error('画像サイズが大きすぎるため、Stealth PNG のメタデータを読み取れません');
         }
         if (pixels >= MIN_STEALTH_PIXELS) {
-          const stealth = await readStealthPngMetadata(blob);
+          const decodeBlob = exifRanges.length > 0 ? stripChunkRanges(bytes, exifRanges) : blob;
+          const stealth = await readStealthPngMetadata(decodeBlob);
           if (stealth) return { ...metadata, ...stealth };
         }
       }
