@@ -50,7 +50,7 @@ export interface AppDataSnapshot {
 }
 
 export interface AppDataReplacement {
-  dictionary: readonly DictEntry[];
+  dictionary: readonly DictEntry[] | ((current: DictEntry[]) => readonly DictEntry[]);
   kv: Record<KVKey, unknown>;
 }
 
@@ -349,15 +349,18 @@ export async function replaceAllAppData(
     }
     const nextMeta: SyncMeta = { rev: current.rev + 1, epoch: current.epoch };
     try {
+      const dictStore = tx.objectStore('dictionary');
+      const nextDictionary = typeof replacement.dictionary === 'function'
+        ? replacement.dictionary(mapStoredEntries(await dictStore.getAll()))
+        : replacement.dictionary;
       const kvStore = tx.objectStore('kv');
       for (const key of KV_KEYS) {
         const value = replacement.kv[key];
         if (value === undefined) await kvStore.delete(key);
         else await kvStore.put(value, key);
       }
-      const dictStore = tx.objectStore('dictionary');
       await dictStore.clear();
-      await Promise.all(replacement.dictionary.map((entry) => dictStore.put(entry)));
+      await Promise.all(nextDictionary.map((entry) => dictStore.put(entry)));
       await metaStore.put(nextMeta, SYNC_META_KEY);
       await tx.done;
     } catch (error) {

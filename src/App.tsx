@@ -442,13 +442,32 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         </p>
       )}
 
+      {tabSync.migrationError && (
+        <div className="error-banner" role="alert">
+          <span>{tabSync.migrationError}</span>{' '}
+          <button
+            type="button"
+            className="btn btn-small"
+            onClick={tabSync.retryMigration}
+            disabled={tabSync.busy || tabSync.bridge.locked}
+          >
+            移行を再試行
+          </button>
+        </div>
+      )}
+
       {dictionary.error && (
         <p className="error-banner" role="alert">
           {dictionary.error}
         </p>
       )}
 
-      {[persistence, settingsPersistence, generationPersistence, ...presets.persistence].filter((state) => state.error).map((state) => (
+      {[
+        ...(tabSync.migrationError ? [] : [persistence]),
+        settingsPersistence,
+        generationPersistence,
+        ...presets.persistence,
+      ].filter((state) => state.error).map((state) => (
         <p className="error-banner" role="alert" key={state.error}>{state.error}。再読み込みして再試行してください。</p>
       ))}
       <main className="app-main" inert={tabSync.busy || undefined}>

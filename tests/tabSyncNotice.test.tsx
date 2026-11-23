@@ -70,6 +70,8 @@ const flush = async (ms = 50) => {
 async function writeFromOtherTab(
   patch: {
     workspace?: unknown;
+    settings?: unknown;
+    presets?: unknown;
     dictionary?: Array<{ id: string; tag: string; category: string; alias: string; default_weight: number; sort_order: number; updated_at: string }>;
   },
   notify = true,
@@ -80,6 +82,8 @@ async function writeFromOtherTab(
     const raw = (await tx.objectStore('meta').get('sync')) as { rev?: number; epoch?: number } | undefined;
     const next = { rev: (raw?.rev ?? 0) + 1, epoch: raw?.epoch ?? 0 };
     if (patch.workspace !== undefined) await tx.objectStore('kv').put(patch.workspace, 'workspace');
+    if (patch.settings !== undefined) await tx.objectStore('kv').put(patch.settings, 'settings');
+    if (patch.presets !== undefined) await tx.objectStore('kv').put(patch.presets, 'presets');
     if (patch.dictionary !== undefined) {
       await tx.objectStore('dictionary').clear();
       for (const entry of patch.dictionary) await tx.objectStore('dictionary').put(entry);
@@ -713,5 +717,232 @@ describe('multi-tab sync notice & conflict resolution', () => {
     });
     peer.close();
     expect(container.querySelector('.tab-sync')?.textContent).toContain('別のタブでデータが更新されました');
+  });
+
+  it('prevents pending autosave timers and pagehide from overwriting a restored backup', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'masterpiece' });
+    await writeFromOtherTab({ workspace: initialWs }, false);
+    await mountApp();
+
+    // 編集してデバウンス保存を保留させる（300ms 経過前に復元を開始する）
+    await click(button('best quality'));
+    await click(button('設定'));
+
+    let releaseReplace!: () => void;
+    const realReplace = dbModule.replaceAllAppData;
+    const replaceSpy = vi.spyOn(dbModule, 'replaceAllAppData').mockImplementationOnce(async (replacement, expected) => {
+      await new Promise<void>((resolve) => { releaseReplace = resolve; });
+      return realReplace(replacement, expected);
+    });
+
+    const backupWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'from-backup' });
+    const backupJson = JSON.stringify({
+      app: 'nai-tagdeck',
+      kind: 'backup',
+      version: 1,
+      dictionary: [],
+      presets: [],
+      workspace: backupWs,
+      settings: { weightSyntax: 'numeric', characterNegativePrompt: 'lowres, aliasing, ' },
+      generation: { mode: 'anime', size: 'portrait', steps: 28, scale: 5, sampler: 'k_euler_ancestral', noiseSchedule: 'karras', seed: null, cfgRescale: 0, dynamicThresholding: false },
+    });
+    const input = container.querySelector<HTMLInputElement>('.backup-actions input[type="file"]')!;
+    const file = new File([backupJson], 'backup.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => backupJson });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+    await flush(30);
+    const confirm = container.querySelector<HTMLDialogElement>('dialog.app-dialog-confirm');
+    await click(button('読み込む', confirm!));
+    await flush(20);
+
+    // 復元コミット中に pagehide とデバウンス満了の両方が起きても古い作業状態は書き込まれない
+    await act(async () => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    await flush(350);
+
+    await act(async () => { releaseReplace(); });
+    await flush(100);
+    replaceSpy.mockRestore();
+
+    const stored = await readAllAppData();
+    expect((stored.kv.workspace as typeof backupWs).base.quality.map((t) => t.tag)).toEqual(['from-backup']);
+  });
+
+  it('merges a backup against pending dictionary writes so a newly saved entry is not lost', async () => {
+    await writeFromOtherTab({
+      dictionary: [{ id: 'd1', tag: 'initial-dict', category: 'quality', alias: '', default_weight: 1, sort_order: 0, updated_at: '2026-01-01' }],
+    }, false);
+    await mountApp();
+
+    // 辞書追加の DB 書き込みを途中で止めておく
+    let releasePut!: () => void;
+    const realPut = dbModule.putEntries;
+    const putSpy = vi.spyOn(dbModule, 'putEntries').mockImplementationOnce(async (entries) => {
+      await new Promise<void>((resolve) => { releasePut = resolve; });
+      return realPut(entries);
+    });
+
+    await click(button('辞書'));
+    await click(button('＋ 新規登録'));
+    const form = container.querySelector<HTMLFormElement>('section[aria-label="新規登録"] form')!;
+    const tagInput = form.querySelector<HTMLInputElement>('input')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(tagInput, 'pending-new-entry');
+      tagInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await flush(20);
+
+    // 辞書保存が完了する前に設定タブからバックアップを復元する
+    await click(button('設定'));
+    const backupWs = emptyWorkspace();
+    const backupJson = JSON.stringify({
+      app: 'nai-tagdeck',
+      kind: 'backup',
+      version: 1,
+      dictionary: [{ id: 'd2', tag: 'backup-entry', category: 'quality', alias: '', default_weight: 1, sort_order: 0, updated_at: '2026-01-02' }],
+      presets: [],
+      workspace: backupWs,
+      settings: { weightSyntax: 'numeric', characterNegativePrompt: 'lowres, aliasing, ' },
+      generation: { mode: 'anime', size: 'portrait', steps: 28, scale: 5, sampler: 'k_euler_ancestral', noiseSchedule: 'karras', seed: null, cfgRescale: 0, dynamicThresholding: false },
+    });
+    const input = container.querySelector<HTMLInputElement>('.backup-actions input[type="file"]')!;
+    const file = new File([backupJson], 'backup.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => backupJson });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+    await flush(30);
+    const confirm = container.querySelector<HTMLDialogElement>('dialog.app-dialog-confirm');
+    await click(button('読み込む', confirm!));
+    await flush(20);
+
+    // 保留中の辞書書き込みを解放すると、その後に復元がトランザクション内マージされる
+    await act(async () => { releasePut(); });
+    await flush(100);
+    putSpy.mockRestore();
+
+    const stored = await readAllAppData();
+    expect(stored.dictionary.map((e) => e.tag).sort()).toEqual(['backup-entry', 'initial-dict', 'pending-new-entry']);
+  });
+
+  it('keeps saved data visible and retryable when startup legacy workspace migration fails', async () => {
+    const legacyWs = {
+      base: {
+        ...emptyWorkspace().base,
+        quality: [{ id: 'q1', tag: 'legacy-saved-tag', enabled: true, weight: 1 }],
+      },
+      characters: [],
+    };
+    await writeFromOtherTab({
+      dictionary: [{ id: 'd1', tag: 'saved-dict-tag', category: 'quality', alias: '', default_weight: 1, sort_order: 0, updated_at: '2026-01-01' }],
+      workspace: legacyWs,
+      settings: { weightSyntax: 'numeric', negativePrompt: 'bad hands', characterNegativePrompt: 'lowres, aliasing, ' },
+      presets: [{ id: 'p1', name: '保存済みプリセット', workspace: emptyWorkspace(), updated_at: '2026-01-01' }],
+    }, false);
+
+    // 起動時の移行保存だけ失敗させる
+    const failSetKv = vi.spyOn(dbModule, 'setKV').mockRejectedValueOnce(new Error('quota exceeded'));
+    await mountApp();
+    failSetKv.mockRestore();
+
+    // 移行エラーと再試行ボタンが出るが、読み込めた辞書・作業タグは画面に表示されたまま
+    expect(container.querySelector('.error-banner')?.textContent).toContain('quota exceeded');
+    expect(container.querySelector('output.preview-text')?.textContent).toContain('legacy-saved-tag');
+    await click(button('辞書'));
+    expect(container.textContent).toContain('saved-dict-tag');
+
+    // 移行未完了の間は workspace の自動保存が走らず、settings の旧ネガティブも消えない
+    await click(button('編集'));
+    await click(button('best quality'));
+    await flush(400);
+    const beforeRetry = await readAllAppData();
+    expect((beforeRetry.kv.workspace as Record<string, unknown>).negative).toBeUndefined();
+    expect((beforeRetry.kv.settings as Record<string, unknown>).negativePrompt).toBe('bad hands');
+
+    // 再試行すると移行保存が完了しエラーが消える
+    await click(button('移行を再試行'));
+    await flush(100);
+    expect(container.querySelector('.error-banner')).toBeNull();
+    const afterRetry = await readAllAppData();
+    expect((afterRetry.kv.workspace as { negative: Array<{ tag: string }> }).negative.map((t) => t.tag)).toContain('bad hands');
+  });
+
+  it('reconciles peer notifications already covered by the initial or reloaded snapshot', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'from-peer' });
+    await writeFromOtherTab({ workspace: initialWs }, false);
+    const latestMeta = (await readAllAppData()).meta;
+
+    // 初回読み込みの最中に、その読み込み結果で既にカバーされる通知が到着しても起動後にロックが残らない
+    let releaseRead!: () => void;
+    const realRead = dbModule.readAllAppData;
+    const readSpy = vi.spyOn(dbModule, 'readAllAppData').mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => { releaseRead = resolve; });
+      return realRead();
+    });
+
+    await act(async () => {
+      root.render(
+        <DialogProvider>
+          <App onResetAll={() => {}} />
+        </DialogProvider>,
+      );
+    });
+    await flush(20);
+
+    const peer = new FakeBroadcastChannel('nai-tagdeck:sync');
+    await act(async () => {
+      peer.postMessage({
+        type: 'updated',
+        senderId: 'other-tab',
+        seq: 1,
+        at: Date.now(),
+        meta: latestMeta,
+      });
+    });
+    expect(container.querySelector('.tab-sync')).not.toBeNull();
+
+    await act(async () => { releaseRead(); });
+    await flush(80);
+    readSpy.mockRestore();
+    expect(container.querySelector('.tab-sync')).toBeNull();
+
+    // 再読み込みの最中に到着した通知も、再読み込み結果の rev でカバーされていればロックを解除する
+    const ws2 = workspaceReducer(initialWs, { type: 'add', target: 'base', category: 'quality', tag: 'peer-rev-2' });
+    await act(async () => {
+      await writeFromOtherTab({ workspace: ws2 }, true);
+    });
+    const meta2 = (await readAllAppData()).meta;
+    await flush(30);
+    expect(container.querySelector('.tab-sync')).not.toBeNull();
+
+    let releaseReload!: () => void;
+    const reloadSpy = vi.spyOn(dbModule, 'readAllAppData').mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => { releaseReload = resolve; });
+      return realRead();
+    });
+    await click(button('最新のデータを読み込む'));
+    await flush(20);
+
+    await act(async () => {
+      peer.postMessage({
+        type: 'updated',
+        senderId: 'other-tab',
+        seq: 2,
+        at: Date.now(),
+        meta: meta2,
+      });
+    });
+    await act(async () => { releaseReload(); });
+    await flush(80);
+    reloadSpy.mockRestore();
+    peer.close();
+
+    expect(container.querySelector('.tab-sync')).toBeNull();
+    expect(container.querySelector('output.preview-text')?.textContent).toContain('peer-rev-2');
   });
 });

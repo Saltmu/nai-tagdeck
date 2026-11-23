@@ -42,6 +42,13 @@ export function useWorkspace(sync?: SyncBridge): {
         : await getKV<unknown>('settings');
       if (!isCurrent()) return;
       const migrated = migrateNegative(raw, rawSettings);
+      const migrationError = syncRef.current?.snapshot?.migrationError;
+      if (migrationError) {
+        // 移行の保存に失敗しても読み込めたデータは画面とバックアップ書き出しに使えるよう反映し、書き込みだけ止める
+        setMigrationHeld(true);
+        dispatch({ type: 'replace', workspace: migrated });
+        throw new Error(migrationError);
+      }
       let held = syncRef.current?.isLocked() ?? false;
       if (!held) {
         try {

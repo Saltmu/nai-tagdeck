@@ -19,7 +19,9 @@ interface Args {
   generation: GenerationSettings;
   updateGeneration: (patch: Partial<GenerationSettings>) => void;
   /** 1 トランザクションで辞書と全 KV をコミットしてから他タブへ通知する経路。 */
-  commitAll?: (replacement: AppDataReplacement) => Promise<boolean>;
+  commitAll?: (
+    prepare: AppDataReplacement | (() => Promise<AppDataReplacement> | AppDataReplacement),
+  ) => Promise<boolean>;
 }
 
 export function useBackupTransfer({
@@ -59,28 +61,29 @@ export function useBackupTransfer({
       }
       importingRef.current = true;
       try {
-        const latestDict = dictionaryRef.current;
-        const latestPresets = presetsRef.current;
-        const mergedPresets = mergePresets(latestPresets.presets, data.presets);
         if (commitAllRef.current) {
-          if (!latestDict.loaded) {
-            throw new Error('辞書の読み込みが完了していないため保存できません');
-          }
-          const mergedDictionary = mergeEntries(latestDict.entries, data.dictionary, 'merge');
-          const committed = await commitAllRef.current({
-            dictionary: mergedDictionary,
-            kv: {
-              workspace: data.workspace,
-              presets: mergedPresets,
-              activePreset: null,
-              settings: data.settings,
-              generation: data.generation,
-            },
+          const committed = await commitAllRef.current(async () => {
+            // 進行中の辞書編集が書き終わってから、トランザクション内の最新辞書へマージする
+            await dictionaryRef.current.flush?.();
+            if (!dictionaryRef.current.loaded) {
+              throw new Error('辞書の読み込みが完了していないため保存できません');
+            }
+            const mergedPresets = mergePresets(presetsRef.current.presets, data.presets);
+            return {
+              dictionary: (current) => mergeEntries(current, data.dictionary, 'merge'),
+              kv: {
+                workspace: data.workspace,
+                presets: mergedPresets,
+                activePreset: null,
+                settings: data.settings,
+                generation: data.generation,
+              },
+            };
           });
           // commitAll が true のときは useTabSync の snapshot 経由で全ストアへ反映済み
           if (committed) return;
         }
-        await latestDict.importEntries(data.dictionary, 'merge');
+        await dictionaryRef.current.importEntries(data.dictionary, 'merge');
         const currentPresets = presetsRef.current;
         currentPresets.setPresets(mergePresets(currentPresets.presets, data.presets));
         currentPresets.setActiveId(null);

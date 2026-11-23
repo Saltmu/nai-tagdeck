@@ -53,6 +53,7 @@ export function usePersistence<T>(
   committedRef.current = committed;
   const committedRevision = committed?.revision ?? 0;
   const locked = sync?.locked ?? false;
+  const autosaveEpoch = sync?.autosaveEpoch ?? 0;
 
   // 単独利用（sync なし）: 従来どおり getKV で読み込む
   useEffect(() => {
@@ -104,6 +105,7 @@ export function usePersistence<T>(
       })
       .catch((error: unknown) => {
         if (isCurrent()) {
+          synced.current = null;
           setState({ key, loaded: false, status: 'error', error: `保存データを読み込めません (${key}): ${String(error)}`, appliedRevision: rev });
         }
       });
@@ -134,22 +136,30 @@ export function usePersistence<T>(
     }
     const tracker = synced.current;
     if (tracker.inFlight === 0 && Object.is(tracker.value, value)) return;
-    if (locked || syncRef.current?.isLocked()) return;
+    if (locked || syncRef.current?.isLocked() || syncRef.current?.isAutosaveSuspended?.()) return;
 
+    const effectEpoch = syncRef.current?.getAutosaveEpoch?.() ?? autosaveEpoch;
     let active = true;
     let pending = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
+    const isInvalidated = () =>
+      resetSignal.aborted ||
+      (syncRef.current?.isLocked() ?? false) ||
+      (syncRef.current?.isAutosaveSuspended?.() ?? false) ||
+      (syncRef.current?.getAutosaveEpoch?.() ?? autosaveEpoch) !== effectEpoch;
+
     const enqueueWrite = (force: boolean) => {
-      if (!pending || resetSignal.aborted || syncRef.current?.isLocked()) return;
+      if (!pending || isInvalidated()) return;
       pending = false;
       clearTimeout(timer);
       tracker.inFlight += 1;
       // 遅い保存が新しい値を上書きしないよう、順番に書き込む。
       writes.current = writes.current.then(async () => {
         try {
-          if (resetSignal.aborted || syncRef.current?.isLocked() || (!force && !active)) return;
+          if (isInvalidated() || (!force && !active)) return;
           await setKV(key, value);
+          if ((syncRef.current?.getAutosaveEpoch?.() ?? autosaveEpoch) !== effectEpoch) return;
           tracker.value = value;
           onSavedRef.current?.();
           syncRef.current?.onPersisted();
@@ -185,7 +195,7 @@ export function usePersistence<T>(
       window.removeEventListener('pagehide', onPageHide);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [key, value, current.loaded, current.appliedRevision, hasSync, snapshotRevision, delayMs, resetSignal, locked]);
+  }, [key, value, current.loaded, current.appliedRevision, hasSync, snapshotRevision, delayMs, resetSignal, locked, autosaveEpoch]);
 
   return current;
 }

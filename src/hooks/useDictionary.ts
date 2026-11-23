@@ -16,6 +16,8 @@ export interface Dictionary {
   remove: (id: string) => Promise<void>;
   importEntries: (incoming: DictEntry[], mode: ImportMode) => Promise<number>;
   restoreInitial: () => Promise<number>;
+  /** 進行中の辞書書き込みキューがすべて終わるまで待つ。 */
+  flush?: () => Promise<void>;
 }
 
 export function useDictionary(sync?: SyncBridge): Dictionary {
@@ -136,5 +138,13 @@ export function useDictionary(sync?: SyncBridge): Dictionary {
     return merged.length;
   }), [enqueue]);
 
-  return { entries, loaded, error, save, saveMany, remove, importEntries, restoreInitial };
+  const flush = useCallback(async () => {
+    let pending: Promise<void>;
+    do {
+      pending = writes.current;
+      await pending;
+    } while (writes.current !== pending);
+  }, []);
+
+  return { entries, loaded, error, save, saveMany, remove, importEntries, restoreInitial, flush };
 }
