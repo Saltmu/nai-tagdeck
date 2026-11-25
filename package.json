@@ -11,7 +11,8 @@
     "lint": "biome lint .",
     "test": "vitest run",
     "eval:classification": "node scripts/eval-tag-classification.mjs",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "deploy:linux": "bash scripts/deploy-linux.sh"
   },
   "dependencies": {
     "fflate": "^0.8.3",

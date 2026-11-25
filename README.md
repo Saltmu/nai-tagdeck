@@ -84,25 +84,19 @@ npm run dev
 `npm run build` で作った `dist/` の中身を、静的サイトとして配信します。アセットは相対パスのため、サブディレクトリにも配置できます。公開環境ではサーバー側で HTTPS へリダイレクトを設定します。HTTPS で配信すると、Service Worker によるオフライン編集を利用できます。
 
 <details>
-<summary>GitHub Actions から SFTP でアップロード</summary>
+<summary>GitHub Actions から FTPS でアップロード</summary>
 
-公開サーバーで SFTP の公開鍵認証またはパスワード認証が利用できる場合に使えます。国外 IP からのパスワード認証を制限しているホスティング（さくらのレンタルサーバの国外IPアドレスフィルタ等）では、公開鍵認証（`DEPLOY_SSH_KEY`）を使用してください。GitHub の **Settings → Environments** で `production` を作成し、Variables と Secrets を登録します。
+公開サーバーで FTPS（明示的 TLS、21番）のパスワード認証が利用できる場合に使えます。さくらのレンタルサーバ「ライトプラン」では SSH が使えず（SSH はスタンダードプラン以上）、SFTP は使えません。そのためこのリポジトリのデプロイは FTPS です。GitHub の **Settings → Environments** で `production` を作成し、Variables と Secrets を登録します。Actions は `environment: production` を使うため、シークレットは production 環境側に登録する必要があります。リポジトリ側のシークレットだけでは使われません。
 
 | 種別 | 名前 | 設定値 |
 | --- | --- | --- |
-| Variable | `DEPLOY_HOST` | WinSCP の SFTP 接続先ホスト名 |
-| Variable | `DEPLOY_PORT` | SFTP ポート（省略時は 22） |
-| Secret | `DEPLOY_USER` | SFTP ユーザー名 |
-| Variable | `DEPLOY_DIR` | `/home/user/www/nai-tagdeck` のような、SFTP で見える既存の公開ディレクトリの絶対パス |
-| Secret | `DEPLOY_SSH_KEY` | SFTP 公開鍵認証用の秘密鍵（パスフレーズなし、OpenSSH 形式。WinSCP の `.ppk` 形式は不可）。`DEPLOY_PASSWORD` より優先して使用 |
-| Secret | `DEPLOY_PASSWORD` | SFTP ユーザーのパスワード（`DEPLOY_SSH_KEY` 未設定時に使用） |
-| Variable | `DEPLOY_HOST_FINGERPRINT` | WinSCP の「タブ → サーバー／プロトコル情報」またはホスティング事業者で確認済みの SFTP サーバーの SHA-256 指紋（`SHA256:…`） |
+| Variable | `DEPLOY_HOST` | WinSCP の FTP 接続先ホスト名 |
+| Variable | `DEPLOY_PORT` | FTPS ポート（省略時は 21） |
+| Secret | `DEPLOY_USER` | FTPS ユーザー名 |
+| Variable | `DEPLOY_DIR` | `/home/user/www/nai-tagdeck` のような、FTPS で見える既存の公開ディレクトリの絶対パス |
+| Secret | `DEPLOY_PASSWORD` | FTPS ユーザーのパスワード |
 
-公開鍵認証を使う場合は、事前にデプロイ先のサーバーで `DEPLOY_USER` に対応する公開鍵を許可しておく必要があります（通常は `~/.ssh/authorized_keys` へ追記、さくらのレンタルサーバでは[公開鍵認証の設定手順](https://help.sakura.ad.jp/rs/2804/)を参照して公開鍵を登録します）。
-
-実行時に公開サーバーのホスト鍵を取得し、登録済みの指紋に一致する鍵で SFTP 接続を検証します。以前の `DEPLOY_KNOWN_HOSTS` 変数は削除できます。
-
-`DEPLOY_HOST_FINGERPRINT` が未設定の状態で dry-run を実行すると、ランナーから観測した指紋の候補だけをログに表示します。この実行では SFTP ログインや配付のプレビューは行いません。WinSCP またはホスティング事業者で照合した指紋を登録してから、再度 dry-run を実行します。
+以前の SFTP 用の設定（`DEPLOY_SSH_KEY` シークレットと `DEPLOY_HOST_FINGERPRINT` 変数）は、deploy.yml の FTPS 化が終わってから削除できます。**現時点の `.github/workflows/deploy.yml` はまだ SFTP 版のため、Actions を使う間は `DEPLOY_PORT` 22、`DEPLOY_SSH_KEY`、`DEPLOY_HOST_FINGERPRINT` が引き続き必要です。** deploy.yml の FTPS 化はワークフロー更新権限の都合でこの PR には含まれていないため、反映されるまでは削除しないでください。以前の `DEPLOY_KNOWN_HOSTS` 変数はすでに不要です。FTPS 化後は TLS 証明書を lftp が検証します。
 
 **Actions → Deploy nai-tagdeck → Run workflow** で `main` を選び、まず **Preview files without uploading** をオンにしたまま実行します。接続と転送予定を確認したら、チェックを外して再実行します。毎回テストとビルドを実行し、ハッシュ付きアセットを先に送ります。サイズが同じアセットは再送しません。その後にページを公開し、配信された `index.html` と `sw.js` がビルドと一致してから、`dist/` に無いファイルを削除します。サーバー側の `.htaccess` と `robots.txt` は残します。公開直前に古いページを開いていたタブは、古いスクリプトが削除されると再読み込みするまで開けないことがあります。
 
@@ -114,6 +108,19 @@ npm run dev
 1. [設定例](deploy/config.example.json) を `deploy/config.local.json` にコピーし、WinSCP の保存済みセッション名と公開先ディレクトリを設定します。
 2. `npm run deploy -- --dry` で、アップロードと削除の対象を確認します。
 3. `npm run deploy` でテスト・ビルドを実行し、公開先を `dist/` に同期します。公開先だけにあるファイルは削除対象です。サーバーで管理する `.htaccess` などは `keep` に指定します。
+
+</details>
+
+<details>
+<summary>Linux から FTPS でアップロード</summary>
+
+Windows の WinSCP 版（`npm run deploy`）は Linux では使えません。Linux では `scripts/deploy-linux.sh`（`npm run deploy:linux`）を使います。GitHub Actions 版（`deploy.yml`、lftp）とは別の経路ですが、転送の順序（アセット先行 → ページ公開 → `index.html` / `sw.js` の一致確認 → 古いアセット削除）と、サーバー側の `.htaccess` / `robots.txt` を残す点は同じです。
+
+1. [設定例](deploy/config.linux.example) を `deploy/config.linux.local` にコピーし、接続先と認証方法を設定します（Git 管理外のためコミットされません）。
+2. `npm run deploy:linux -- --dry` で、アップロードと削除の対象を確認します。
+3. `npm run deploy:linux` でテスト・ビルドを実行し、公開先を `dist/` に同期します。`--skip-build` でテスト・ビルドを省略できます。
+
+転送は FTPS（明示的 TLS、21番）のパスワード認証（`DEPLOY_PASSWORD`、未設定なら対話入力）です。さくらのレンタルサーバ「ライトプラン」では SSH が使えず SFTP は使えないため、FTPS を使います。TLS 証明書は検証します。国外IPアドレスフィルタが有効だと、ログイン後のファイル操作が制限される場合があるため、フィルタが有効なときはサーバーコントロールパネルで無効にするか、国内の IP から実行してください。
 
 </details>
 

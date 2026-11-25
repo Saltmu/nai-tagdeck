@@ -1,0 +1,28 @@
+# Linux デプロイ用の設定例。deploy/config.linux.local にコピーして値を書く。
+# このファイル（config.linux.local）は *.local で Git 管理外。絶対にコミットしないこと。
+# パスワードをリポジトリに入れないこと。
+#
+# 使い方:
+#   cp deploy/config.linux.example deploy/config.linux.local
+#   # config.linux.local を編集する
+#   npm run deploy:linux -- --dry   # 確認のみ
+#   npm run deploy:linux            # 本番デプロイ
+#
+# 転送は FTPS（明示的 TLS、21番）です。SFTP は使いません。
+# さくらのレンタルサーバ「ライトプラン」では SSH が使えず（SSH はスタンダード
+# プラン以上）、SFTP の口がそもそもありません。ライトでは FTPS がデプロイの経路です。
+
+# FTPS 接続先ホスト名（必須）
+DEPLOY_HOST=s-shin.sakura.ne.jp
+# FTPS ポート（省略時は 21）
+DEPLOY_PORT=21
+# FTPS ユーザー名（必須）
+DEPLOY_USER=
+# 公開ディレクトリの絶対パス（必須）
+DEPLOY_DIR=/home/s-shin/www/shishio/nai-tagdeck
+
+# --- 認証（FTPS パスワード認証） ---
+# FTPS ユーザーのパスワード。未設定の場合は対話式のターミナルで入力を求める。
+# 国外IPアドレスフィルタが有効だと、ログイン後のファイル操作が制限される場合がある。
+# その場合はサーバーコントロールパネルでフィルタを無効にするか、国内の IP から実行すること。
+# DEPLOY_PASSWORD=
