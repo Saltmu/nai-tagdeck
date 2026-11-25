@@ -24,8 +24,9 @@ const SYNC_META_KEY = 'sync' as const;
 
 /**
  * 版 2 で同期メタ専用の meta ストアを追加し、ガード未導入の版 1 タブからの書き込みを拒む。
+ * 版 3 で欠けているストアを補う。版 2 のまま meta が無い DB でもアップグレードで復旧する。
  */
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 /** IndexedDB の kv ストアにアプリが書くキー。 */
 export const KV_KEYS = ['workspace', 'settings', 'generation', 'presets', 'activePreset'] as const;
@@ -135,12 +136,17 @@ function getDB(): Promise<IDBPDatabase<TagDeckDB>> {
   if (!dbPromise) {
     let opened: IDBPDatabase<TagDeckDB> | null = null;
     const promise = openDB<TagDeckDB>(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion) {
-        if (oldVersion < 1) {
+      upgrade(db) {
+        // oldVersion に関係なく欠けているストアを補う。版 2 のまま meta が無い
+        // DB でも、版 3 へのアップグレードで meta が作られ起動時の読み込みが復旧する。
+        // 新規 DB では 3 ストアとも無いのですべて作られ、従来の挙動は変わらない。
+        if (!db.objectStoreNames.contains('dictionary')) {
           db.createObjectStore('dictionary', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('kv')) {
           db.createObjectStore('kv');
         }
-        if (oldVersion < 2 && !db.objectStoreNames.contains('meta')) {
+        if (!db.objectStoreNames.contains('meta')) {
           db.createObjectStore('meta');
         }
       },

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OpenDBCallbacks } from 'idb';
+import type { IDBPDatabase, OpenDBCallbacks } from 'idb';
 
 const openDBMock = vi.hoisted(() => vi.fn());
 vi.mock('idb', () => ({ openDB: openDBMock }));
@@ -8,6 +8,7 @@ function createFakeDB() {
   const kv = new Map<string, unknown>();
   return {
     get: vi.fn(async (_store: string, key: string) => kv.get(key)),
+    getAll: vi.fn(async (_store: string) => []),
     put: vi.fn(async (_store: string, value: unknown, key: string) => {
       kv.set(key, value);
     }),
@@ -97,5 +98,72 @@ describe('db connection recovery', () => {
     await pending;
     expect(states).toEqual([false, true, false]);
     unsubscribe();
+  });
+
+  it('repairs a version 2 database missing the meta store on upgrade to version 3', async () => {
+    // スマホで起きた状態: DB は版 2 なのに meta ストアが無い。
+    // 旧 upgrade は oldVersion < 2 のときだけ meta を作るため、この状態では
+    // 再読み込みでも meta が作られず、起動時の readAllAppData が
+    // NotFoundError で毎回コケていた。
+    const createdStores: string[] = [];
+    const storeNames = new Set(['dictionary', 'kv']);
+    const upgradeDb = {
+      objectStoreNames: { contains: (name: string) => storeNames.has(name) },
+      createObjectStore: vi.fn((name: string) => {
+        createdStores.push(name);
+        storeNames.add(name);
+        return undefined as unknown as IDBObjectStore;
+      }),
+    } as unknown as IDBPDatabase<unknown>;
+    const db = createFakeDB();
+    openDBMock.mockImplementationOnce(
+      async (_name: string, _ver: number, cbs?: OpenDBCallbacks<unknown>) => {
+        cbs?.upgrade?.(upgradeDb, 2, 3, undefined as never, {} as IDBVersionChangeEvent);
+        return db;
+      },
+    );
+
+    const { DB_VERSION, readAllAppData } = await import('../src/lib/db');
+    expect(DB_VERSION).toBe(3);
+
+    const snapshot = await readAllAppData();
+    expect(openDBMock).toHaveBeenCalledWith('nai-tagdeck', 3, expect.any(Object));
+    expect(createdStores).toContain('meta');
+    expect(storeNames.has('meta')).toBe(true);
+    expect(snapshot).toEqual({
+      dictionary: [],
+      kv: {
+        workspace: undefined,
+        settings: undefined,
+        generation: undefined,
+        presets: undefined,
+        activePreset: undefined,
+      },
+      meta: { rev: 0, epoch: 0 },
+    });
+  });
+
+  it('creates all stores for a fresh database', async () => {
+    const createdStores: string[] = [];
+    const storeNames = new Set<string>();
+    const upgradeDb = {
+      objectStoreNames: { contains: (name: string) => storeNames.has(name) },
+      createObjectStore: vi.fn((name: string) => {
+        createdStores.push(name);
+        storeNames.add(name);
+        return undefined as unknown as IDBObjectStore;
+      }),
+    } as unknown as IDBPDatabase<unknown>;
+    const db = createFakeDB();
+    openDBMock.mockImplementationOnce(
+      async (_name: string, _ver: number, cbs?: OpenDBCallbacks<unknown>) => {
+        cbs?.upgrade?.(upgradeDb, 0, 3, undefined as never, {} as IDBVersionChangeEvent);
+        return db;
+      },
+    );
+
+    const { readAllAppData } = await import('../src/lib/db');
+    await readAllAppData();
+    expect(createdStores).toEqual(['dictionary', 'kv', 'meta']);
   });
 });
