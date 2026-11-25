@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type MouseEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Editor } from './components/Editor';
 import { DictionaryView } from './components/DictionaryView';
 import { SettingsView } from './components/SettingsView';
@@ -30,10 +30,11 @@ import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/p
 import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { TabSyncNotice } from './components/TabSyncNotice';
 import { useTabSync } from './hooks/useTabSync';
-import { BookIcon, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
+import { BookIcon, BrandIcon, BrandWordmark, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
+import { applyTheme } from './lib/theme';
 import type { WorkspaceAction } from './lib/workspace';
-import type { WeightSyntax } from './types';
+import type { ThemePreference, WeightSyntax } from './types';
 
 type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
 
@@ -74,6 +75,13 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const { workspace, dispatch: rawDispatch, loaded, migrationHeld, persistence } = useWorkspace(tabSync.bridge);
   const [settings, updateSettings, settingsPersistence] = useSettings(loaded && !migrationHeld, tabSync.bridge);
   const [generation, updateGeneration, generationPersistence] = useGenerationSettings(tabSync.bridge);
+  // 設定の読み込みが終わってからテーマを反映する。読み込み前に既定値で上書きすると、
+  // theme-init.js が設定した data-theme がちらついて消えてしまう。
+  // バックアップ復元・他タブ同期で settings.theme が変わったときもここで追従する。
+  useEffect(() => {
+    if (!settingsPersistence.loaded) return;
+    return applyTheme(settings.theme);
+  }, [settings.theme, settingsPersistence.loaded]);
   // 読み込み成功だけを見る。書き込み失敗の error では、今の値をプリセットへ保存できなくしない。
   const settingsReady = generationPersistence.loaded && settingsPersistence.loaded;
   const presets = usePresets(tabSync.bridge);
@@ -236,6 +244,10 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     (characterNegativePrompt: string) => updateSettings({ characterNegativePrompt }),
     [updateSettings],
   );
+  const handleThemeChange = useCallback(
+    (theme: ThemePreference) => updateSettings({ theme }),
+    [updateSettings],
+  );
   const handleSyntaxChange = useCallback(
     (weightSyntax: WeightSyntax) => updateSettings({ weightSyntax }),
     [updateSettings],
@@ -273,8 +285,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     <div className="app">
       <header ref={headerRef} className="app-header" data-occludes inert={tabSync.busy || undefined}>
         <h1 className="app-title" aria-label="nai-tagdeck">
-          <img className="brand-icon" src={`${import.meta.env.BASE_URL}brand/icon.svg`} width="24" height="24" alt="" />
-          <img className="brand-wordmark" src={`${import.meta.env.BASE_URL}brand/wordmark.svg`} width="108" height="24" alt="" />
+          <BrandIcon className="brand-icon" width={24} height={24} />
+          <BrandWordmark className="brand-wordmark" width={108} height={24} />
         </h1>
         <nav className="tabbar" aria-label="画面切り替え" data-occludes>
           {TABS.map((t) => (
@@ -449,6 +461,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
           <SettingsView
             token={token}
             notify={show}
+            theme={settings.theme}
+            onThemeChange={handleThemeChange}
             getBackup={getBackup}
             onImportBackup={importBackup}
             onResetAll={onResetAll}
