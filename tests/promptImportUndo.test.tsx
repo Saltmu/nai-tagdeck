@@ -319,6 +319,42 @@ it('saves the current preset before applying the image prompt', async () => {
   expect(preview()).toBe('existing');
 });
 
+it('restores a metadata-less history image via fallback and undoes the import', async () => {
+  const { requestImages } = await import('../src/lib/novelai');
+  vi.mocked(requestImages).mockResolvedValueOnce([{ blob: new Blob([pngFixture()]) }]);
+  sessionStorage.setItem('nai-tagdeck.token', 'test-token');
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<DialogProvider><DialogSpy /><App onResetAll={() => {}} /></DialogProvider>));
+  await click(button('生成'));
+  await click(button('生成する（Ctrl+Enter）'));
+  expect(container.querySelector('.thumb-btn')).not.toBeNull();
+
+  await click(button('編集'));
+  await click(button('existing を削除'));
+  expect(preview()).toBe('ONのタグがありません');
+
+  await click(button('生成'));
+  await click(container.querySelector<HTMLButtonElement>('.thumb-btn')!);
+  await click(button('プロンプトを読み込む', container.querySelector('.viewer')!));
+  const dialog = container.querySelector('.prompt-import-dialog');
+  if (!dialog) throw new Error('取り込みダイアログがありません');
+  expect(dialog.textContent).toContain('履歴に保持していた送信情報から読み込みました');
+  await click(dialog.querySelector('input[type="checkbox"]')!);
+  await click(button('適用', dialog));
+  await click(button('反映せずに適用', chooseDialog()!));
+  expect(preview()).toBe('existing');
+
+  await click(button('existing を削除'));
+  expect(preview()).toBe('ONのタグがありません');
+  await click(button('元に戻す'));
+  expect(preview()).toBe('existing');
+  await click(button('元に戻す'));
+  expect(preview()).toBe('ONのタグがありません');
+  await click(button('やり直す'));
+  expect(preview()).toBe('existing');
+});
+
 it('closes the preview dialog natively before unmounting when no confirmation is needed', async () => {
   await click(button('変更を上書き'));
   const dialog = await dropImport();

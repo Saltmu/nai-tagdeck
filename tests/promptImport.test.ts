@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import type { GeneratedImage } from '../src/hooks/useImages';
 import { parseBackup, toBackupJSON } from '../src/lib/backup';
 import { DEFAULT_GENERATION } from '../src/lib/generation';
 import { createPreset, presetToWorkspace, sameWorkspace } from '../src/lib/presets';
 import { buildCharacterPrompts, buildPrompt } from '../src/lib/prompt';
-import { importedBaseForMode, readPromptImport } from '../src/lib/promptImport';
+import { importedBaseForMode, promptImportFromGeneratedImage, readPromptImport, readPromptImportWithFallback } from '../src/lib/promptImport';
 import { restoreInitialDictionary } from '../src/lib/sampleDictionary';
 import { DEFAULT_SETTINGS } from '../src/lib/settings';
 import { BASE, emptyWorkspace, normalizeWorkspace, workspaceReducer } from '../src/lib/workspace';
@@ -246,5 +247,135 @@ describe('NovelAI PNG import', () => {
     expect((await read({ prompt: 'a', scale: 10 })).generation.values.scale).toBe(10);
     expect((await read({ prompt: 'a', scale: -0.1 })).generation.skipped).toContain('ガイダンス');
     expect((await read({ prompt: 'a', scale: 10.1 })).generation.skipped).toContain('ガイダンス');
+  });
+});
+
+function generatedImage(overrides: Partial<GeneratedImage> = {}): GeneratedImage {
+  return {
+    id: 'img-1',
+    url: 'blob:mock',
+    blob: new Blob(['x'], { type: 'image/png' }),
+    seed: 42,
+    width: 1024,
+    height: 1024,
+    prompt: 'blazer, standing',
+    characterPrompts: ['girl'],
+    negativePrompt: 'lowres',
+    characterDetails: [{ prompt: 'girl', negative: 'lowres' }],
+    params: {
+      mode: 'anime', steps: 28, scale: 5, sampler: 'k_euler_ancestral',
+      noiseSchedule: 'karras', cfgRescale: 0.5, dynamicThresholding: true,
+    },
+    createdAt: 0,
+    downloaded: false,
+    pinned: false,
+    ...overrides,
+  };
+}
+
+const FALLBACK_NOTE = '画像から生成情報を読み取れなかったため、履歴に保持していた送信情報から読み込みました。';
+
+describe('GeneratedImage fallback import', () => {
+  it('restores base, character, negative and generation settings from structured history', () => {
+    const result = promptImportFromGeneratedImage(generatedImage(), [entry('blazer', 'outfit'), entry('standing', 'pose')]);
+    expect(result.base.outfit.map((t) => t.tag)).toEqual(['blazer']);
+    expect(result.base.pose.map((t) => t.tag)).toEqual(['standing']);
+    expect(result.characters[0]?.tags.unclassified.map((t) => t.tag)).toEqual(['girl']);
+    expect(result.negative?.map((t) => t.tag)).toEqual(['lowres']);
+    expect(result.characterNegative).toBe('lowres');
+    expect(result.characters[0]?.negative).toBeUndefined();
+    expect(result.generation.values).toEqual({
+      mode: 'anime', seed: 42, size: 'square', steps: 28, scale: 5,
+      sampler: 'k_euler_ancestral', noiseSchedule: 'karras', cfgRescale: 0.5, dynamicThresholding: true,
+    });
+    expect(result.generation.labels).toContain('生成モード アニメ');
+    expect(result.notes).toContain(FALLBACK_NOTE);
+    expect(result.notes).not.toContain('生成モード（アニメ／ケモノ）は現在の設定を使います。');
+  });
+
+  it('detects furry mode from the stored params and the fur dataset prefix', () => {
+    const result = promptImportFromGeneratedImage(generatedImage({
+      prompt: 'fur dataset, blazer, wolf',
+      characterPrompts: ['wolf'],
+      characterDetails: [{ prompt: 'wolf', negative: 'lowres' }],
+      params: {
+        mode: 'furry', steps: 28, scale: 5, sampler: 'k_euler_ancestral',
+        noiseSchedule: 'karras', cfgRescale: 0, dynamicThresholding: false,
+      },
+    }), [entry('blazer', 'outfit')]);
+    expect(result.furDataset).toBe('fur dataset');
+    expect(result.generation.values.mode).toBe('furry');
+    expect(result.generation.labels).toContain('生成モード ケモノ');
+    expect(buildPrompt(importedBaseForMode(result, 'furry'), 'numeric')).toBe('blazer, wolf');
+    expect(buildPrompt(importedBaseForMode(result, 'anime'), 'numeric')).toBe('fur dataset, blazer, wolf');
+  });
+
+  it('keeps per-character negatives and coordinates when they differ', () => {
+    const result = promptImportFromGeneratedImage(generatedImage({
+      prompt: '2girls',
+      characterPrompts: ['girl, red hair', 'boy'],
+      characterDetails: [
+        { prompt: 'girl, red hair', negative: 'lowres', center: { x: 0.2, y: 0.3 } },
+        { prompt: 'boy', negative: 'blurry', center: { x: 0.7, y: 0.4 } },
+      ],
+    }), []);
+    expect(result.characters).toHaveLength(2);
+    expect(result.characters[0]?.center).toEqual({ x: 0.2, y: 0.3 });
+    expect(result.characters[1]?.center).toEqual({ x: 0.7, y: 0.4 });
+    expect(result.characterNegative).toBeUndefined();
+    expect(result.characters.map((c) => c.negative)).toEqual(['lowres', 'blurry']);
+    expect(result.notes.join('\n')).toContain('キャラごとに違うため、各キャラの個別欄に入れました');
+    expect(result.notes.join('\n')).toContain('キャラ用ネガティブ 1　lowres');
+    expect(result.notes.join('\n')).toContain('キャラ用ネガティブ 2　blurry');
+  });
+
+  it('restores only positive prompts from old history without params or character details', () => {
+    const image = generatedImage({
+      prompt: 'standing', seed: 123, width: 832, height: 1216,
+      characterPrompts: ['girl'],
+    });
+    delete image.negativePrompt;
+    delete image.characterDetails;
+    delete image.params;
+    const result = promptImportFromGeneratedImage(image, []);
+    expect(result.characters[0]?.tags.unclassified.map((t) => t.tag)).toEqual(['girl']);
+    expect(result.negative).toBeUndefined();
+    expect(result.notes).toContain('全体ネガティブを読み取れないため、現在の値を使います。');
+    expect(result.notes).toContain('画像のキャラ用ネガティブを共通欄に反映できないため、現在の値を使います。');
+    expect(result.notes).toContain('生成モード（アニメ／ケモノ）は現在の設定を使います。');
+    expect(result.generation.values).toEqual({ seed: 123, size: 'portrait' });
+    expect(result.generation.skipped).toEqual(expect.arrayContaining(['ステップ', 'ガイダンス', 'サンプラー', 'ノイズスケジュール']));
+    expect(result.generation.values).not.toHaveProperty('mode');
+  });
+
+  it('rejects an empty prompt and more than 15 characters', () => {
+    expect(() => promptImportFromGeneratedImage(generatedImage({ prompt: '', characterPrompts: [], characterDetails: [] }), []))
+      .toThrow('適用できる正のプロンプトがありません');
+    const many = Array.from({ length: 16 }, (_, i) => ({ prompt: `person ${i + 1}`, negative: '' }));
+    expect(() => promptImportFromGeneratedImage(generatedImage({
+      prompt: 'group', characterPrompts: many.map((c) => c.prompt), characterDetails: many,
+    }), [])).toThrow('保存上限');
+  });
+
+  it('uses the fallback only when PNG metadata cannot be read, and keeps PNG priority otherwise', async () => {
+    const fallback = generatedImage();
+    const fromFallback = await readPromptImportWithFallback(
+      { blob: new Blob([pngFixture()]), fallbackImage: fallback }, [],
+    );
+    expect(fromFallback.base.unclassified.map((t) => t.tag)).toEqual(['blazer', 'standing']);
+    expect(fromFallback.notes).toContain(FALLBACK_NOTE);
+
+    await expect(readPromptImportWithFallback({ blob: new Blob([pngFixture()]) }, []))
+      .rejects.toThrow('生成情報');
+
+    const fromPng = await readPromptImportWithFallback(
+      { blob: new Blob([pngFixture({ v4_prompt: caption('standing', ['girl']) })]), fallbackImage: fallback }, [],
+    );
+    expect(fromPng.base.unclassified.map((t) => t.tag)).toEqual(['standing']);
+    expect(fromPng.notes).not.toContain(FALLBACK_NOTE);
+
+    await expect(readPromptImportWithFallback(
+      { blob: new Blob([pngFixture()]), fallbackImage: generatedImage({ prompt: '', characterPrompts: [], characterDetails: [] }) }, [],
+    )).rejects.toThrow('適用できる正のプロンプトがありません');
   });
 });

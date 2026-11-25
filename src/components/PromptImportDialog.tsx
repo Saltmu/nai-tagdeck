@@ -1,12 +1,15 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import type { GeneratedImage } from '../hooks/useImages';
 import type { DictEntry, TagGroups } from '../types';
 import { categoryLabel, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { MAX_ENABLED_CHARACTERS } from '../lib/characterLimits';
-import { readPromptImport, type PromptImport } from '../lib/promptImport';
+import { readPromptImportWithFallback, type PromptImport } from '../lib/promptImport';
 
 export interface PromptSource {
   blob: Blob;
   name: string;
+  /** アプリ内履歴から開いた場合のみ渡す。PNG メタデータ読取失敗時のフォールバックに使う。 */
+  fallbackImage?: GeneratedImage;
 }
 
 interface Props {
@@ -52,7 +55,7 @@ export function PromptImportDialog({ source, entries, onCancel, onApply }: Props
   }, [busy]);
   useEffect(() => {
     let current = true;
-    void readPromptImport(source.blob, entries).then(
+    void readPromptImportWithFallback(source, entries).then(
       (result) => { if (current) setRead({ source, entries, result }); },
       (error: unknown) => {
         if (current) setRead({ source, entries, error: error instanceof Error ? error.message : '画像を読み取れませんでした' });
