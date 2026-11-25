@@ -98,3 +98,26 @@ jobs:
           #    until reload. Issue #33 asks to remove those files.
           if [[ "$DRY_RUN" == true ]]; then
             printf '%s\n' \
+              "mirror --reverse --no-perms --ignore-time --verbose $preview dist/assets assets" \
+              "mirror --reverse --delete --no-perms --transfer-all --verbose --exclude-glob .htaccess --exclude-glob robots.txt --exclude ^assets/ $preview dist ." \
+              "mirror --reverse --delete --no-perms --ignore-time --verbose $preview dist/assets assets" \
+              | run_lftp
+          else
+            printf '%s\n' \
+              'mirror --reverse --no-perms --ignore-time --verbose dist/assets assets' \
+              'mirror --reverse --delete --no-perms --transfer-all --verbose --exclude-glob .htaccess --exclude-glob robots.txt --exclude ^assets/ dist .' \
+              "get index.html -o \"$check_dir/index.html\"" \
+              "get sw.js -o \"$check_dir/sw.js\"" \
+              | run_lftp
+            if ! cmp -s dist/index.html "$check_dir/index.html"; then
+              echo '::error::The published index.html does not match the build. Old hashed assets were kept.'
+              exit 1
+            fi
+            if ! cmp -s dist/sw.js "$check_dir/sw.js"; then
+              echo '::error::The published sw.js does not match the build. Old hashed assets were kept.'
+              exit 1
+            fi
+            printf '%s\n' \
+              'mirror --reverse --delete --no-perms --ignore-time --verbose dist/assets assets' \
+              | run_lftp
+          fi
