@@ -41,6 +41,7 @@ describe('全設定とデータの削除', () => {
     const storage = new MemoryStorage();
     storage.setItem('other-app', 'keep');
     storage.setItem('nai-tagdeck.token', 'token');
+    storage.setItem('nai-tagdeck:theme', 'dark');
     storage.setItem('nai-tagdeck:category-open:base', 'false');
     storage.setItem('nai-tagdeck:category-open:character', 'false');
     clearAppStorage(storage);
