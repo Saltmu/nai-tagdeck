@@ -45,6 +45,8 @@ describe('tutorial entry links', () => {
           <SettingsView
             token={token}
             notify={vi.fn()}
+            theme="system"
+            onThemeChange={vi.fn()}
             getBackup={vi.fn() as never}
             onImportBackup={vi.fn()}
             onResetAll={vi.fn()}
