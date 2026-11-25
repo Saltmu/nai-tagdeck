@@ -14,6 +14,11 @@ import { emptyWorkspace, workspaceReducer } from '../src/lib/workspace';
 import { DEFAULT_GENERATION, type SizeKey } from '../src/lib/generation';
 import type { GeneratedImage } from '../src/hooks/useImages';
 import type { PresetStore } from '../src/hooks/usePresets';
+import { SettingsView } from '../src/components/SettingsView';
+import { DEFAULT_SETTINGS } from '../src/lib/settings';
+import { DEFAULT_GENERATION } from '../src/lib/generation';
+import { emptyWorkspace } from '../src/lib/workspace';
+import type { ThemePreference } from '../src/types';
 import type { Dictionary } from '../src/hooks/useDictionary';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -609,5 +614,46 @@ describe('Listbox accessible labels', () => {
     for (const lb of listboxes) {
       expect(lb.getAttribute('aria-label')?.trim().length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('SettingsView appearance theme picker', () => {
+  it('provides system / light / dark radios and reports the selection', async () => {
+    let theme: ThemePreference = 'system';
+    function Harness() {
+      const [value, setValue] = useState<ThemePreference>('system');
+      theme = value;
+      return (
+        <SettingsView
+          token={{ token: null, storage: 'local', save: () => true, clear: () => {} }}
+          notify={() => {}}
+          theme={value}
+          onThemeChange={setValue}
+          getBackup={() => ({
+            dictionary: [],
+            presets: [],
+            workspace: emptyWorkspace(),
+            settings: DEFAULT_SETTINGS,
+            generation: DEFAULT_GENERATION,
+          })}
+          onImportBackup={async () => {}}
+          onResetAll={() => {}}
+          onShowFirstRun={() => {}}
+          firstRunDisabled={false}
+        />
+      );
+    }
+    await act(async () => root.render(<Harness />));
+    const section = container.querySelector('section[aria-labelledby="appearance-title"]');
+    expect(section).not.toBeNull();
+    const radios = [...container.querySelectorAll<HTMLInputElement>('input[type="radio"][name="theme"]')];
+    expect(radios.map((r) => r.value)).toEqual(['system', 'light', 'dark']);
+    expect(radios.find((r) => r.value === 'system')?.checked).toBe(true);
+    await act(async () => {
+      radios.find((r) => r.value === 'dark')?.click();
+    });
+    expect(theme).toBe('dark');
+    expect(radios.find((r) => r.value === 'dark')?.checked).toBe(true);
+    expect(radios.find((r) => r.value === 'system')?.checked).toBe(false);
   });
 });
