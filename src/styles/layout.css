@@ -28,7 +28,8 @@
   height: 24px;
 }
 
-.app-title img {
+.app-title img,
+.app-title svg {
   display: block;
   flex: none;
 }
