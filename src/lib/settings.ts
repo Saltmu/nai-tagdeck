@@ -4,12 +4,14 @@ import { DEFAULT_CHARACTER_NEGATIVE } from './novelai';
 export const DEFAULT_SETTINGS: Settings = {
   weightSyntax: 'numeric',
   characterNegativePrompt: DEFAULT_CHARACTER_NEGATIVE,
+  theme: 'system',
 };
 
 export function isDefaultSettings(s: Settings): boolean {
   return (
     s.weightSyntax === DEFAULT_SETTINGS.weightSyntax &&
-    s.characterNegativePrompt === DEFAULT_SETTINGS.characterNegativePrompt
+    s.characterNegativePrompt === DEFAULT_SETTINGS.characterNegativePrompt &&
+    s.theme === DEFAULT_SETTINGS.theme
   );
 }
 
@@ -27,5 +29,7 @@ export function normalizeSettings(raw: unknown): Settings {
   return {
     weightSyntax: r.weightSyntax === 'brace' ? 'brace' : 'numeric',
     characterNegativePrompt: text(r.characterNegativePrompt, DEFAULT_SETTINGS.characterNegativePrompt),
+    // theme を持たない旧データ・旧バックアップは 'system' へフォールバックする。
+    theme: r.theme === 'light' || r.theme === 'dark' ? r.theme : 'system',
   };
 }

@@ -24,6 +24,9 @@ export async function resetAppData(): Promise<void> {
   pendingWrites = new AbortController();
   clearAppStorage(window.localStorage);
   clearAppStorage(window.sessionStorage);
+  // テーマの localStorage ミラー（'nai-tagdeck:theme'）は clearAppStorage で消える。
+  // data-theme 属性も外し、再起動時はシステム連動へ戻す。
+  if (typeof document !== 'undefined') document.documentElement.removeAttribute('data-theme');
   await db.clearAllData();
   const meta = 'getBaseMeta' in db && typeof db.getBaseMeta === 'function' ? db.getBaseMeta() ?? undefined : undefined;
   publishTabSync('reset', meta);

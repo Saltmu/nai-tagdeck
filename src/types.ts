@@ -57,8 +57,12 @@ export type TargetId = string;
 /** numeric: V4 以降の `1.2::tag::`、brace: `{tag}` / `[tag]`（1段 = 1.05 倍）。 */
 export type WeightSyntax = 'numeric' | 'brace';
 
+/** 外観テーマの選択。'system' は OS 設定に追従する。 */
+export type ThemePreference = 'system' | 'light' | 'dark';
+
 export interface Settings {
   weightSyntax: WeightSyntax;
   /** キャラクタープロンプトごとのネガティブ。全体のネガティブは Workspace.negative に持つ。 */
   characterNegativePrompt: string;
+  theme: ThemePreference;
 }

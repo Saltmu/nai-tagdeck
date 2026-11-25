@@ -22,6 +22,7 @@ function baseInput(): SwBuildInput {
       'icons/icon-192.png': new Uint8Array([9, 10, 11, 12]),
       'icons/icon-512.png': new Uint8Array([13, 14, 15, 16]),
       'brand/icon.svg': '<svg/>',
+      'theme-init.js': 'localStorage.getItem("nai-tagdeck:theme");',
       'sitemap.xml': '<urlset/>',
       'robots.txt': 'User-agent: *',
     },
@@ -41,6 +42,7 @@ describe('buildSwAsset', () => {
       './icons/icon-192.png',
       './icons/icon-512.png',
       './manifest.webmanifest',
+      './theme-init.js',
     ]);
     expect(precache.some((entry) => entry.includes('sitemap.xml') || entry.includes('robots.txt'))).toBe(false);
     expect(precache.some((entry) => entry.includes('index.html'))).toBe(false);
@@ -57,6 +59,7 @@ describe('buildSwAsset', () => {
       publicFiles: {
         'sitemap.xml': '<urlset/>',
         'manifest.webmanifest': '{"name":"nai-tagdeck"}',
+        'theme-init.js': 'localStorage.getItem("nai-tagdeck:theme");',
         'brand/icon.svg': '<svg/>',
         'icons/icon-512.png': new Uint8Array([13, 14, 15, 16]),
         'icons/icon-192.png': new Uint8Array([9, 10, 11, 12]),
@@ -225,6 +228,24 @@ describe('security headers', () => {
     expect(assetMirrors.some((line) => line.includes('--transfer-all') || line.includes('--delete-excluded') || line.includes('--delete-first'))).toBe(false);
     expect(workflow).toContain('cmp -s dist/index.html');
     expect(workflow).toContain('cmp -s dist/sw.js');
+  });
+});
+
+describe('theme-init.js のプリキャッシュと CSP 準拠', () => {
+  it('theme-init.js をプリキャッシュし、両ページからインラインなしで読み込む', () => {
+    expect(existsSync(resolve('public/theme-init.js'))).toBe(true);
+    const { precache } = buildSwAsset(baseInput());
+    expect(precache).toContain('./theme-init.js');
+    expect(CSP_META).toContain("script-src 'self'");
+    for (const [file, src] of [
+      ['index.html', './theme-init.js'],
+      ['tutorial/index.html', '../theme-init.js'],
+    ] as const) {
+      const html = readFileSync(resolve(file), 'utf-8');
+      expect(html).toContain(`<script src="${src}"></script>`);
+      // インラインスクリプトは CSP（script-src 'self'）違反になるため置けない。
+      expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);
+    }
   });
 });
 
