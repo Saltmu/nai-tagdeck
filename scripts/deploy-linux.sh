@@ -93,9 +93,9 @@ run_lftp() {
       'set xfer:use-temp-file yes' \
       'set net:timeout 20' \
       'set net:max-retries 2' \
-      'set ftp/ssl-force true' \
-      'set ftp/ssl-protect-data true' \
-      'set ftp/ssl-auth TLS' \
+      'set ftp:ssl-force true' \
+      'set ftp:ssl-protect-data true' \
+      'set ftp:ssl-auth TLS' \
       'set ssl:verify-certificate yes' \
       'set ssl:check-hostname yes' \
       'set ftp:passive-mode true' \
