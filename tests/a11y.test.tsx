@@ -16,8 +16,6 @@ import type { GeneratedImage } from '../src/hooks/useImages';
 import type { PresetStore } from '../src/hooks/usePresets';
 import { SettingsView } from '../src/components/SettingsView';
 import { DEFAULT_SETTINGS } from '../src/lib/settings';
-import { DEFAULT_GENERATION } from '../src/lib/generation';
-import { emptyWorkspace } from '../src/lib/workspace';
 import type { ThemePreference } from '../src/types';
 import type { Dictionary } from '../src/hooks/useDictionary';
 
