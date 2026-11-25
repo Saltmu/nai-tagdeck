@@ -242,3 +242,45 @@ export function TempIcon() {
     </svg>
   );
 }
+
+interface BrandProps {
+  className?: string;
+  width?: number;
+  height?: number;
+}
+
+/**
+ * ヘッダーのブランドアイコン（インライン SVG）。
+ * 色は var(--accent) / var(--accent-text) を参照するため、手動のライト／ダーク切替に追従する。
+ * <img> で外部 SVG を読むと、SVG 内の @media (prefers-color-scheme) は html[data-theme] を見ない。
+ */
+export function BrandIcon({ className, width = 24, height = 24 }: BrandProps) {
+  return (
+    <svg className={className} viewBox="0 0 48 48" width={width} height={height} aria-hidden="true">
+      <path d="M7 9h21l14 15-14 15H7Z" fill="var(--accent)" />
+      <circle cx="13" cy="24" r="3" fill="var(--accent-text)" />
+      <path d="m22 24 5 5 8-10" fill="none" stroke="var(--accent-text)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** ヘッダーのブランドワードマーク（インライン SVG）。文字色は var(--text) を参照する。 */
+export function BrandWordmark({ className, width = 108, height = 24 }: BrandProps) {
+  return (
+    <svg className={className} viewBox="0 0 216 48" width={width} height={height} aria-hidden="true">
+      <text
+        x="0"
+        y="35"
+        fill="var(--text)"
+        fontFamily="Segoe UI, Arial, sans-serif"
+        fontSize="31"
+        fontWeight="650"
+        letterSpacing="-.6"
+        textLength="212"
+        lengthAdjust="spacingAndGlyphs"
+      >
+        nai-tagdeck
+      </text>
+    </svg>
+  );
+}
