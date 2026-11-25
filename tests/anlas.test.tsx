@@ -20,7 +20,7 @@ const opusSubscription: Subscription = {
   purchasedTrainingSteps: 8000,
   totalAnlas: 18000,
   expiresAt: 1798761600000,
-  usage: { percent: 23.5, isNegative: false, timeUntilNextPercent: 5400 },
+  usage: { percent: 23, isNegative: false, timeUntilNextPercent: 5400 },
 };
 
 const mockedFetch = () => vi.mocked(fetchSubscription);
@@ -122,7 +122,7 @@ describe('AnlasDetails', () => {
     const el = await renderDetails(fakeState({}));
     expect(el.textContent).toContain('Opus');
     expect(el.textContent).toContain('18,000 Anlas（付与分 10,000／購入分 8,000）');
-    expect(el.textContent).toContain('23.5%');
+    expect(el.textContent).toContain('23%');
     expect(el.textContent).toContain('次の1%回復まであと1時間30分');
     expect(el.textContent).toContain('付与分の Anlas は期間の終了時にリセットされます');
     expect(el.textContent).toContain('次回更新日：');
@@ -261,6 +261,53 @@ describe('useAnlas', () => {
     await waitForStatus('ready');
     expect(state.lastConsumed).toBeNull();
     expect(state.subscription?.totalAnlas).toBe(17995);
+  });
+
+  it('生成後の取得が失敗したら基準値と消費表示が無効化され、次の成功では複数回分の消費を表示しない', async () => {
+    mockedFetch().mockResolvedValueOnce(opusSubscription);
+    await renderHarness('pst-secret');
+    await waitForStatus('ready');
+
+    // 1 回目の生成で 5 消費し、表示が 5 になる
+    mockedFetch().mockResolvedValueOnce({ ...opusSubscription, totalAnlas: 17995 });
+    await act(async () => {
+      state.refreshAfterGeneration();
+    });
+    await waitForStatus('ready');
+    expect(state.lastConsumed).toBe(5);
+
+    // 2 回目の生成後の取得が失敗する（この生成の消費は分からない）
+    mockedFetch().mockRejectedValueOnce(new Error('boom'));
+    await act(async () => {
+      state.refreshAfterGeneration();
+    });
+    await waitForStatus('error');
+    expect(state.lastConsumed).toBeNull();
+
+    // 3 回目の生成後の取得が成功しても、基準値がないため消費は「—」のまま（10 とは表示しない）
+    mockedFetch().mockResolvedValueOnce({ ...opusSubscription, totalAnlas: 17990 });
+    await act(async () => {
+      state.refreshAfterGeneration();
+    });
+    await waitForStatus('ready');
+    expect(state.subscription?.totalAnlas).toBe(17990);
+    expect(state.lastConsumed).toBeNull();
+  });
+
+  it('トークンを別の値に置き換えたら、前のトークンの残高・消費は残らない', async () => {
+    mockedFetch().mockResolvedValueOnce(opusSubscription);
+    await renderHarness('pst-first');
+    await waitForStatus('ready');
+    expect(state.subscription?.totalAnlas).toBe(18000);
+
+    // 新しいトークンでの取得が失敗しても、前の残高は表示されない
+    mockedFetch().mockRejectedValueOnce(new Error('boom'));
+    await act(async () => {
+      root.render(<Harness token="pst-second" />);
+    });
+    await waitForStatus('error');
+    expect(state.subscription).toBeNull();
+    expect(state.lastConsumed).toBeNull();
   });
 
   it('トークンを消すと表示も消え、残高はどこにも保存されない', async () => {

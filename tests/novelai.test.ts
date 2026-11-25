@@ -171,15 +171,13 @@ describe('normalizeSettings', () => {
 });
 
 describe('parseSubscription', () => {
-  it('付与分と購入分を合計し、プラン・V5 利用枠・期限を読み取る', () => {
+  it('trainingStepsLeft の中の付与分と購入分を合計し、プラン・V5 利用枠・期限を読み取る', () => {
     expect(
       parseSubscription({
         tier: 3,
-        fixedTrainingStepsLeft: 10000,
-        purchasedTrainingSteps: 8000,
-        trainingStepsLeft: 18000,
+        trainingStepsLeft: { fixedTrainingStepsLeft: 10000, purchasedTrainingSteps: 8000 },
         expiresAt: 1798761600,
-        usage: { percent: 23.5, isNegative: false, timeUntilNextPercent: 5400 },
+        usage: { percent: 23, isNegative: false, timeUntilNextPercent: 5400 },
       }),
     ).toEqual({
       tier: 3,
@@ -187,7 +185,7 @@ describe('parseSubscription', () => {
       purchasedTrainingSteps: 8000,
       totalAnlas: 18000,
       expiresAt: 1798761600000,
-      usage: { percent: 23.5, isNegative: false, timeUntilNextPercent: 5400 },
+      usage: { percent: 23, isNegative: false, timeUntilNextPercent: 5400 },
     });
     expect(tierName(0)).toBe('Paper');
     expect(tierName(1)).toBe('Tablet');
@@ -195,11 +193,11 @@ describe('parseSubscription', () => {
     expect(tierName(3)).toBe('Opus');
   });
 
-  it('付与分・購入分がなくても trainingStepsLeft があれば合計にする', () => {
-    expect(parseSubscription({ tier: 1, trainingStepsLeft: 500 })).toEqual({
+  it('平坦な応答（旧形式）も読める', () => {
+    expect(parseSubscription({ tier: 1, fixedTrainingStepsLeft: 400, purchasedTrainingSteps: 100 })).toEqual({
       tier: 1,
-      fixedTrainingStepsLeft: 0,
-      purchasedTrainingSteps: 0,
+      fixedTrainingStepsLeft: 400,
+      purchasedTrainingSteps: 100,
       totalAnlas: 500,
       expiresAt: null,
       usage: null,
@@ -210,14 +208,14 @@ describe('parseSubscription', () => {
     expect(parseSubscription(null)).toBeNull();
     expect(parseSubscription('x')).toBeNull();
     expect(parseSubscription({ tier: 3 })).toBeNull();
+    expect(parseSubscription({ tier: 3, trainingStepsLeft: { fixedTrainingStepsLeft: 100 } })).toBeNull();
     expect(parseSubscription({ tier: 3, fixedTrainingStepsLeft: '100', purchasedTrainingSteps: 0 })).toBeNull();
   });
 
   it('ミリ秒の期限と壊れた usage はそのまま扱う', () => {
     const parsed = parseSubscription({
       tier: 3,
-      fixedTrainingStepsLeft: 100,
-      purchasedTrainingSteps: 0,
+      trainingStepsLeft: { fixedTrainingStepsLeft: 100, purchasedTrainingSteps: 0 },
       expiresAt: 1798761600000,
       usage: { percent: 'x' },
     });
@@ -231,8 +229,7 @@ describe('fetchSubscription', () => {
 
   const subscriptionJson = {
     tier: 3,
-    fixedTrainingStepsLeft: 10000,
-    purchasedTrainingSteps: 8000,
+    trainingStepsLeft: { fixedTrainingStepsLeft: 10000, purchasedTrainingSteps: 8000 },
     expiresAt: 1798761600,
     usage: { percent: 10, isNegative: false, timeUntilNextPercent: 3600 },
   };

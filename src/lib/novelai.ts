@@ -567,25 +567,29 @@ function parseUsage(value: unknown): SubscriptionUsage | null {
 }
 
 /**
- * `GET /user/subscription` の応答を解釈する。未対応のフィールドが増えても、
- * 残高の要所が読めれば表示する。残高がまったく読めないときだけ null。
+ * `GET /user/subscription` の応答を解釈する。公式 OpenAPI（`user.SubscriptionResponse`）
+ * では残高は `trainingStepsLeft` オブジェクトの中（`fixedTrainingStepsLeft`／
+ * `purchasedTrainingSteps`）にある。平坦な応答にも一応対応するが、公式はネスト。
+ * 未対応のフィールドが増えても、残高の要所が読めれば表示する。残高がまったく
+ * 読めないときだけ null。
  */
 export function parseSubscription(data: unknown): Subscription | null {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
   const record = data as Record<string, unknown>;
-  const fixed = finiteNumber(record.fixedTrainingStepsLeft);
-  const purchased = finiteNumber(record.purchasedTrainingSteps);
-  const trainingLeft = finiteNumber(record.trainingStepsLeft);
-  let totalAnlas: number | null = null;
-  if (fixed !== null && purchased !== null) totalAnlas = fixed + purchased;
-  else if (trainingLeft !== null) totalAnlas = trainingLeft;
-  if (totalAnlas === null) return null;
+  const nested = record.trainingStepsLeft;
+  const steps =
+    nested && typeof nested === 'object' && !Array.isArray(nested)
+      ? (nested as Record<string, unknown>)
+      : null;
+  const fixed = finiteNumber(steps?.fixedTrainingStepsLeft) ?? finiteNumber(record.fixedTrainingStepsLeft);
+  const purchased = finiteNumber(steps?.purchasedTrainingSteps) ?? finiteNumber(record.purchasedTrainingSteps);
+  if (fixed === null || purchased === null) return null;
   const tier = finiteNumber(record.tier);
   return {
     tier: tier ?? -1,
-    fixedTrainingStepsLeft: fixed ?? 0,
-    purchasedTrainingSteps: purchased ?? 0,
-    totalAnlas,
+    fixedTrainingStepsLeft: fixed,
+    purchasedTrainingSteps: purchased,
+    totalAnlas: fixed + purchased,
     expiresAt: normalizeTimestampMs(record.expiresAt),
     usage: parseUsage(record.usage),
   };

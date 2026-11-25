@@ -60,6 +60,16 @@ V5 も V4 と同じ形式（`v4_prompt`）を使う。`v5_prompt` は存在し�
 
 1,048,576 ピクセル（1024×1024 相当）以下・28 steps 以下・1 枚。832×1216 と 1216×832 は条件内。→ `isFreeGeneration()`。V5 には Opus の利用枠もあり、枠を使い切った状態で生成を続けると Anlas を使う場合がある。[NovelAI FAQ](https://docs.novelai.net/en/faq/)
 
+## Anlas 残高の取得（`GET /user/subscription`、#132）
+
+2026-11-25 に公式 OpenAPI（`https://image.novelai.net/docs/doc.json`）で確認した応答の形。`trainingStepsLeft` はオブジェクトで、付与分と購入分はその中にある（トップレベルではない）。
+
+- エンドポイント: `GET https://image.novelai.net/user/subscription`、認証は `Authorization: Bearer <token>`。旧ホスト `api.novelai.net` は 400 になるため使わない。
+- `user.SubscriptionResponse`: `tier`（整数、0=Paper、1=Tablet、2=Scroll、3=Opus）、`expiresAt`（整数、購読期間の終了時刻）、`trainingStepsLeft`（`user.TrainingStepsLeft`）、`usage`（`usagelimit.Status`）。
+- `user.TrainingStepsLeft`: `fixedTrainingStepsLeft`（付与分、整数）、`purchasedTrainingSteps`（購入分、整数）。合計残高は両方の和。
+- `usagelimit.Status`: `percent`（整数、0〜100+）、`isNegative`（利用枠超過のとき true）、`purchasedPercent`（整数、0〜400）、`timeUntilNextPercent`（整数、秒。次の 1% 回復までの秒数。補充が上限で止まっている間は 0）。
+- 実装は `src/lib/novelai.ts` の `fetchSubscription()`／`parseSubscription()`。`expiresAt` は秒・ミリ秒の両方に対応する正規化を入れてある。
+
 ## プロンプトの記法（V5）
 
 - `{tag}` / `[tag]`: 1 段ごとに ×1.05 / ÷1.05。

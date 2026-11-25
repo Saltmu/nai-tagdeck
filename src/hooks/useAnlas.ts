@@ -54,6 +54,9 @@ export function useAnlas(token: string | null): AnlasState {
         if (prev !== null) {
           const delta = prev - total;
           setLastConsumed(delta >= 0 ? delta : null);
+        } else {
+          // 比較できる残高がない生成の消費は分からないので「—」にする。
+          setLastConsumed(null);
         }
         expectDeltaRef.current = false;
       }
@@ -62,6 +65,12 @@ export function useAnlas(token: string | null): AnlasState {
       setStatus('ready');
     } catch (e) {
       if (controller.signal.aborted || requestIdRef.current !== id) return;
+      // 取得に失敗したら、差分の基準値は無効化する。失敗した取得の前後で残高が
+      // 変わっているかもしれず、次に成功した取得で複数回分の消費を 1 回分として
+      // 表示してしまうため。生成後の取得が失敗したときは、その生成の消費は
+      // 分からないので消費表示も「—」に戻す。
+      prevTotalRef.current = null;
+      if (expectDeltaRef.current) setLastConsumed(null);
       expectDeltaRef.current = false;
       setError(describeSubscriptionError(e));
       setStatus('error');
@@ -76,16 +85,18 @@ export function useAnlas(token: string | null): AnlasState {
     void runFetch(true);
   }, [runFetch]);
 
-  // トークンが保存・変更されたら残高を取得し直す。消えたら表示も消す。
+  // トークンが保存・変更されたら残高を取得し直す。トークンが別の値に変わった
+  // ときも、前のトークンの残高・消費が残ったまま表示されないよう、取得前に
+  // キャッシュを消す。消えたら表示も消す。
   useEffect(() => {
+    controllerRef.current?.abort();
+    requestIdRef.current += 1;
+    prevTotalRef.current = null;
+    expectDeltaRef.current = false;
+    setSubscription(null);
+    setLastConsumed(null);
+    setError(null);
     if (!token) {
-      controllerRef.current?.abort();
-      requestIdRef.current += 1;
-      prevTotalRef.current = null;
-      expectDeltaRef.current = false;
-      setSubscription(null);
-      setLastConsumed(null);
-      setError(null);
       setStatus('unset');
       return;
     }
