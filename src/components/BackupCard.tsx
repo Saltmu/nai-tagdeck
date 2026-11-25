@@ -20,6 +20,8 @@ interface PendingImport {
   currentCounts?: { dictionary: number; presets: number };
   controller: AbortController;
   startedReloadCount: number;
+  /** 確認ダイアログを開いた時点でバックアップ読み込みが無効だったか。 */
+  startedImportDisabled: boolean;
 }
 
 const RELOAD_ABORT_MESSAGE =
@@ -68,6 +70,10 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
     const controller = new AbortController();
     activeOpAbortRef.current = controller;
     const startedReloadCount = reloadCountRef.current;
+    // 読み込み入力は importDisabled の間は無効化されているため、ここに来た時点で
+    // 読み込みは許可されていたはず。読み取り中に無効になった場合は、再読み込み
+    // などの同期ロックが読み取り中に始まったことを示す。
+    const startedImportDisabled = importDisabledRef.current;
     try {
       const parsed = parseBackup(await file.text());
       if (!mountedRef.current) return;
@@ -77,7 +83,15 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
       }
       if (controller.signal.aborted) return;
       if (importDisabledRef.current) {
-        setError('保存データの読み込み中または同期ロック中のため、バックアップを読み込めません');
+        // 読み取り中に同期ロックがかかった場合は、再読み込みによる中止として扱う。
+        // ロックがかかった時点で読み取り中のバックアップは古いデータに対する
+        // ものになるため、読み込み中メッセージではなく中止メッセージを出す。
+        // 読み取り開始時点ですでに無効だった場合だけ、従来の読み込み中メッセージを出す。
+        setError(
+          startedImportDisabled
+            ? '保存データの読み込み中または同期ロック中のため、バックアップを読み込めません'
+            : RELOAD_ABORT_MESSAGE,
+        );
         return;
       }
       if (!parsed.ok) {
@@ -95,7 +109,7 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
       } catch {
         currentCounts = undefined;
       }
-      setPending({ fileName: file.name, data, warnings, dictionaryErrors, currentCounts, controller, startedReloadCount });
+      setPending({ fileName: file.name, data, warnings, dictionaryErrors, currentCounts, controller, startedReloadCount, startedImportDisabled });
     } finally {
       if (activeOpAbortRef.current === controller) activeOpAbortRef.current = null;
     }
@@ -109,14 +123,20 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
     const confirmed = pendingRef.current;
     setPending(null);
     if (!confirmed) return;
-    const { data, controller, startedReloadCount } = confirmed;
+    const { data, controller, startedReloadCount, startedImportDisabled } = confirmed;
     if (controller.signal.aborted || !mountedRef.current) return;
     if (reloadCountRef.current !== startedReloadCount) {
       setError(RELOAD_ABORT_MESSAGE);
       return;
     }
     if (importDisabledRef.current) {
-      setError('保存データの読み込み中または同期ロック中のため、バックアップを読み込めません');
+      // 確認ダイアログを開いている間に同期ロックがかかった場合も、読み取り時と
+      // 同じく再読み込みによる中止として扱う。
+      setError(
+        startedImportDisabled
+          ? '保存データの読み込み中または同期ロック中のため、バックアップを読み込めません'
+          : RELOAD_ABORT_MESSAGE,
+      );
       return;
     }
     if (importingRef.current) return;
