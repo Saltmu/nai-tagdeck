@@ -45,7 +45,8 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  /* data-theme 未設定時（システム連動）は OS 設定に追従する。light を選んだときは上書きしない。 */
+  :root:not([data-theme='light']) {
     --bg: #12141a;
     --surface: #1b1e26;
     --surface-2: #242833;
@@ -64,4 +65,25 @@
     --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5);
     color-scheme: dark;
   }
+}
+
+/* 手動でダークを選んだときは OS 設定に関わらず強制する。 */
+:root[data-theme='dark'] {
+  --bg: #12141a;
+  --surface: #1b1e26;
+  --surface-2: #242833;
+  --text: #e6e8ee;
+  --muted: #9aa3b2;
+  --border: #333947;
+  --accent: #8b85ff;
+  --accent-hover: #a29dff;
+  --accent-text: #12141a;
+  --accent-soft: #2c2a52;
+  --danger: #ff7b7f;
+  --weighted: #f0a54a;
+  --toast-bg: #e6e8ee;
+  --toast-text: #12141a;
+  --shadow: none;
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5);
+  color-scheme: dark;
 }
