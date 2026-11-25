@@ -191,11 +191,12 @@ if [[ "$DRY" == false ]]; then
     || fail "配信された index.html がビルドと一致しません。古いハッシュ付きアセットは残してあります。"
   cmp -s "$ROOT/dist/sw.js" "$CHECK_DIR/sw.js" \
     || fail "配信された sw.js がビルドと一致しません。古いハッシュ付きアセットは残してあります。"
-  # 4. 古いハッシュ付きアセットだけを削除する
-  printf '%s\n' \
-    "mirror --reverse --delete --no-perms --ignore-time --verbose dist/assets assets" \
-    | (cd "$ROOT" && run_lftp)
 fi
+# 4. 古いハッシュ付きアセットだけを削除する。--dry でも --dry-run 付きで実行し、
+# プレビューに削除対象を含める（deploy.yml と同じく 3 つの mirror をすべて表示する）。
+printf '%s\n' \
+  "mirror --reverse --delete --no-perms --ignore-time --verbose $PREVIEW dist/assets assets" \
+  | (cd "$ROOT" && run_lftp)
 
 echo
 if [[ "$DRY" == true ]]; then
