@@ -264,3 +264,32 @@ it('imports and generates a fur-dataset-only PNG without character tags without 
     input: 'fur dataset',
   }), expect.anything());
 });
+
+it('falls back to stored history when a viewer image has no PNG metadata', async () => {
+  vi.mocked(requestImages).mockResolvedValueOnce([{ blob: new Blob([pngFixture()]) }]);
+  await click(button('生成する（Ctrl+Enter）'));
+  expect(container.querySelector('.thumb-btn')).not.toBeNull();
+
+  // 履歴のプロンプトと現在の作業状態を変えて、フォールバック復元が分かるようにする
+  await click(button('編集'));
+  await click(button('existing を削除'));
+  expect(preview()).toBe('ONのタグがありません');
+
+  await click(button('生成'));
+  await click(container.querySelector<HTMLButtonElement>('.thumb-btn')!);
+  await click(button('プロンプトを読み込む', container.querySelector('.viewer')!));
+  const dialog = container.querySelector('dialog')!;
+  expect(dialog.textContent).toContain('ベース　1件（未分類 1件）');
+  expect(dialog.textContent).toContain('履歴に保持していた送信情報から読み込みました');
+  expect(dialog.textContent).not.toContain('生成情報が見つかりません');
+  await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await click(button('適用', dialog));
+  const confirm = container.querySelector<HTMLDialogElement>('dialog.app-dialog-confirm');
+  if (confirm?.open) await click(button('適用', confirm));
+  expect(preview()).toBe('existing');
+  await click(button('生成する（Ctrl+Enter）'));
+  expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
+    input: 'existing',
+    parameters: expect.objectContaining({ seed: 11, width: 832, height: 1216, steps: 19, negative_prompt: 'old negative' }),
+  }), expect.anything());
+});

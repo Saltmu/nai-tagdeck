@@ -116,10 +116,10 @@ export function Gallery({
       setZipping(false);
     }
   };
-  const openImport = (blob: Blob, name: string) => {
+  const openImport = (blob: Blob, name: string, fallbackImage?: GeneratedImage) => {
     setFileError('');
     setOpenId(null);
-    onReadPng({ blob, name });
+    onReadPng({ blob, name, fallbackImage });
   };
   const { dragging, dropProps } = usePngDrop({
     enabled: !!onPickPng,
@@ -299,7 +299,7 @@ export function Gallery({
           onTogglePin={() => onTogglePin(images[openIndex]!.id)}
           onImportPrompt={onPickPng ? () => {
             const image = images[openIndex]!;
-            openImport(image.blob, imageFileName(image));
+            openImport(image.blob, imageFileName(image), image);
           } : undefined}
         />
       )}
