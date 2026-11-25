@@ -32,11 +32,23 @@ for arg in "$@"; do
 done
 
 # --- 設定の読み込み（環境変数が優先） ---
+# ファイルを読み込む前に、明示された環境変数を退避しておく。ファイル側の
+# 代入で上書きされないよう、読み込み後に退避した値を戻す。
+declare -A _ENV_OVERRIDES=()
+for _var in DEPLOY_HOST DEPLOY_PORT DEPLOY_USER DEPLOY_DIR DEPLOY_HOST_FINGERPRINT DEPLOY_SSH_KEY_FILE DEPLOY_PASSWORD LFTP_PASSWORD; do
+  if [[ -n "${!_var:-}" ]]; then
+    _ENV_OVERRIDES["$_var"]="${!_var}"
+  fi
+done
 CONFIG_FILE="$ROOT/deploy/config.linux.local"
 if [[ -f "$CONFIG_FILE" ]]; then
   # shellcheck disable=SC1090
   set -a; source "$CONFIG_FILE"; set +a
 fi
+for _var in "${!_ENV_OVERRIDES[@]}"; do
+  printf -v "$_var" '%s' "${_ENV_OVERRIDES[$_var]}"
+done
+unset _ENV_OVERRIDES _var
 
 DEPLOY_HOST="${DEPLOY_HOST:-}"
 DEPLOY_PORT="${DEPLOY_PORT:-22}"
@@ -137,7 +149,7 @@ run_lftp() {
       'set sftp:auto-confirm no' \
       "set sftp:connect-program \"ssh -a -x $SSH_CONNECT_OPTS\"" \
       "$OPEN_CMD" \
-      "cd \"${DEPLOY_DIR%/}\"" \
+      "cd \"${DEPLOY_DIR%/}\""
     cat
     printf '%s\n' 'bye'
   } | lftp --norc -f /dev/stdin
