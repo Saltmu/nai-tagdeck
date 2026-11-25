@@ -43,6 +43,15 @@
   font-weight: 600;
 }
 
+/* 閉じた状態でも中身が分かるよう、見出しの下に概要を出す。 */
+.accordion-summary {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
 .accordion-body {
   display: flex;
   flex-direction: column;

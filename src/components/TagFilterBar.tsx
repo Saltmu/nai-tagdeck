@@ -54,7 +54,7 @@ export function TagFilterBar({
             {searchOpen ? <CloseIcon /> : <SearchIcon />}
           </button>
           <EditorActions
-            label={filter.onlyEnabled ? '表示（ONのみ）' : '表示'}
+            label={filter.onlyEnabled ? '表示切替（ONのみ）' : '表示切替'}
             active={filter.onlyEnabled}
             actions={[
               { label: 'ONのみ', pressed: filter.onlyEnabled, run: () => onOnlyEnabledChange(!filter.onlyEnabled) },

@@ -259,10 +259,9 @@ export const CategorySection = memo(function CategorySection({
             <span className="disclosure-icon" aria-hidden="true" />
             <span className="disclosure-label">{label}</span>
             {open ? (
-              <span className="count">
-                {enabledCount}/{tags.length}
-                {filtering ? ` · 該当 ${visibleTags.length}件` : ''}
-              </span>
+              filtering ? (
+                <span className="count">該当 {visibleTags.length}件</span>
+              ) : null
             ) : (
               <span className="collapsed-summary">
                 {filtering ? (

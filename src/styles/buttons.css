@@ -84,6 +84,17 @@
   color: var(--text);
 }
 
+/* アイコンの横に短い表示ラベルを付ける場合（プリセット行の「…」など）。 */
+.icon-btn.has-label {
+  width: auto;
+  padding: 0 0.5rem;
+  gap: 0.25rem;
+}
+
+.editor-actions-short-label {
+  font-size: 0.85rem;
+}
+
 .icon-btn[aria-pressed='true'] {
   background: var(--accent-soft);
   color: var(--accent);

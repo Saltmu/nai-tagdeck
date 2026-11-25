@@ -127,6 +127,36 @@
   margin: 0.4rem 0 0;
 }
 
+.negative-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* 「?」ヘルプアイコン。説明文は最小限にし、押したときだけ内容を出す。 */
+.help-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.help-btn:hover,
+.help-btn[aria-expanded='true'] {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
 .section-head {
   display: flex;
   flex-wrap: wrap;

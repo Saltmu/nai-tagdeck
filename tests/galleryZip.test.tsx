@@ -194,3 +194,22 @@ it('shows a dashed empty area instead of the PNG import zone when there are no i
   expect(container.querySelector('.gallery-empty')).toBeNull();
   expect(container.querySelector('.thumbs')).not.toBeNull();
 });
+
+it('shows the disabled reason for the zip and clear buttons', async () => {
+  const clearButton = () =>
+    [...container.querySelectorAll('button')].find((b) => b.textContent === 'すべて削除') as HTMLButtonElement;
+
+  await renderGallery([]);
+  expect(container.querySelector('.gallery-actions-hint')?.textContent).toBe('画像がまだありません');
+  expect(zipButton().disabled).toBe(true);
+  expect(clearButton().disabled).toBe(true);
+
+  await renderGallery([image(1)]);
+  expect(container.querySelector('.gallery-actions-hint')?.textContent).toContain('ピン留めした画像がありません');
+  expect(zipButton().disabled).toBe(true);
+  expect(clearButton().disabled).toBe(false);
+
+  await renderGallery([image(1, { pinned: true })]);
+  expect(container.querySelector('.gallery-actions-hint')).toBeNull();
+  expect(zipButton().disabled).toBe(false);
+});

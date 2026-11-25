@@ -164,6 +164,7 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
         辞書・プリセット・作業中のタグ・設定を1つのファイルにまとめます。データはブラウザごとに保存されるので、
         別の端末やサイトに移すときに使います。トークンは含めません。
       </p>
+      <p className="hint">すべてのデータを削除するときは、下の「Dangerゾーン」を使います。</p>
       <div className="form-actions backup-actions">
         <button
           type="button"

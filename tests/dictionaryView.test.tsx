@@ -430,3 +430,40 @@ it('does not offer to discard a row while its save is still running', async () =
   expect(container.querySelector('.entry-form')).toBeNull();
   expect(button('次のページへ')?.disabled).toBe(false);
 });
+
+it('shows a duplicate warning and marks duplicate rows', async () => {
+  const dup = (id: string, tag: string, category: CategoryKey): DictEntry => ({
+    id,
+    tag,
+    category,
+    alias: '',
+    default_weight: 1,
+    sort_order: 0,
+    updated_at: '',
+  });
+  await render([
+    dup('w1', 'watercolor', 'quality'),
+    dup('w2', 'watercolor', 'pose'),
+    dup('w3', 'watercolor', 'background'),
+    dup('l1', 'line art', 'quality'),
+    dup('l2', 'lineart', 'pose'),
+    entry('solo'),
+  ]);
+  const warning = container.querySelector('.dict-duplicate-warning')?.textContent ?? '';
+  expect(warning).toContain('重複しているタグがあります');
+  expect(warning).toContain('「watercolor」（3件）');
+  expect(warning).toContain('「line art」（2件）');
+  expect(container.querySelectorAll('.chip-duplicate')).toHaveLength(5);
+});
+
+it('shows no duplicate warning when tags are unique', async () => {
+  await render([entry('solo'), entry('duo')]);
+  expect(container.querySelector('.dict-duplicate-warning')).toBeNull();
+  expect(container.querySelectorAll('.chip-duplicate')).toHaveLength(0);
+});
+
+it('labels the import button and ties the restore note to its button', async () => {
+  await render([entry('solo')]);
+  expect(container.querySelector('.file-btn')?.textContent).toBe('辞書を読み込む');
+  expect(container.querySelector('.dict-toolbar .hint')?.textContent).toContain('「初期カテゴリを復元」は');
+});

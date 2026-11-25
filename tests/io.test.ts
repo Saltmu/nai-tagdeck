@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   findDuplicate,
+  findDuplicateGroups,
   fromCSV,
   fromJSON,
   mergeEntries,
@@ -144,5 +145,33 @@ describe('findDuplicate', () => {
     expect(findDuplicate(list, { id: '2', tag: 'SOLO', category: 'quality' })?.id).toBe('1');
     expect(findDuplicate(list, { id: '1', tag: 'solo', category: 'quality' })).toBeUndefined();
     expect(findDuplicate(list, { id: '2', tag: 'solo', category: 'pose' })).toBeUndefined();
+  });
+});
+
+describe('findDuplicateGroups', () => {
+  it('カテゴリをまたいだ同じタグをまとめる', () => {
+    const groups = findDuplicateGroups([
+      e('1', 'watercolor', { category: 'quality' }),
+      e('2', 'watercolor', { category: 'pose' }),
+      e('3', 'watercolor', { category: 'background' }),
+      e('4', 'solo'),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.tag).toBe('watercolor');
+    expect(groups[0]!.entries.map((entry) => entry.id)).toEqual(['1', '2', '3']);
+  });
+
+  it('空白の有無の違いも重複とみなす', () => {
+    const groups = findDuplicateGroups([
+      e('1', 'line art'),
+      e('2', 'lineart', { category: 'pose' }),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.entries).toHaveLength(2);
+  });
+
+  it('重複がなければ空を返す', () => {
+    expect(findDuplicateGroups([e('1', 'solo'), e('2', 'duo')])).toEqual([]);
+    expect(findDuplicateGroups([e('1', ''), e('2', '  ')])).toEqual([]);
   });
 });

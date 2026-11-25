@@ -193,6 +193,7 @@ export function PresetBar({
         <EditorActions
           label="プリセット操作"
           icon={<MoreIcon />}
+          shortLabel="操作"
           actions={[
             { label: '変更を上書き', run: overwrite, disabled: !active || !dirty },
             { label: '新しいプリセットとして保存', run: saveAs, disabled: isEmptyWorkspace(workspace) },

@@ -341,12 +341,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
                     </span>
                   )
                 ))}
-              {t.key === 'dictionary' && (
-                <span className="tab-count">
-                  {dictionary.entries.length}
-                  <span className="visually-hidden">件</span>
-                </span>
-              )}
             </button>
           ))}
         </nav>

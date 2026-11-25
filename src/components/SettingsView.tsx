@@ -80,7 +80,10 @@ export function SettingsView({
         </div>
         <div className="accordion-list">
           <details className="accordion">
-            <summary>初回案内をもう一度表示</summary>
+            <summary>
+              初回案内をもう一度表示
+              <span className="accordion-summary">タグの例と辞書の読み込みを選び直せます</span>
+            </summary>
             <div className="accordion-body">
               <p className="hint">タグの例とタグ辞書の読み込みを選び直せます。辞書と保存済みプリセットは残ります。作業中のタグをタグの例で置き換える前には確認します。</p>
               <button type="button" className="btn" disabled={firstRunDisabled} onClick={onShowFirstRun}>
@@ -89,7 +92,10 @@ export function SettingsView({
             </div>
           </details>
           <details className="accordion">
-            <summary>基本的な使い方</summary>
+            <summary>
+              基本的な使い方
+              <span className="accordion-summary">辞書への登録から生成までの流れ</span>
+            </summary>
             <div className="accordion-body">
               <ol className="howto-steps">
                 <li>辞書にタグを登録し、編集画面でタグを組み合わせてプロンプトを作ります。</li>
@@ -101,7 +107,10 @@ export function SettingsView({
             </div>
           </details>
           <details className="accordion">
-            <summary>自動保存の補足</summary>
+            <summary>
+              自動保存の補足
+              <span className="accordion-summary">作業内容は自動保存されます。生成画像は保存されません</span>
+            </summary>
             <div className="accordion-body">
               <p className="hint">作業内容はこのブラウザに自動保存され、次回も続きから編集できます。</p>
               <p className="hint">生成画像は自動保存されません。必要な画像はダウンロードしてください。ピン留めもタブを閉じると消えます。</p>
@@ -109,7 +118,10 @@ export function SettingsView({
             </div>
           </details>
           <details className="accordion">
-            <summary>通信先</summary>
+            <summary>
+              通信先
+              <span className="accordion-summary">外部通信は NovelAI への生成時のみです</span>
+            </summary>
             <div className="accordion-body">
               <p className="hint">アプリ本体の読み込み・更新のための配信元への通信を除き、このツールの外部通信先は画像生成時のNovelAIのみです。生成時はプロンプト・生成設定・認証用トークンをブラウザからNovelAIへ直接送信します。辞書・プリセット・作業内容・設定はこのブラウザに保存し、このサイトのサーバーには送信しません。トークンもこのサイトのサーバーには送信しません。</p>
             </div>

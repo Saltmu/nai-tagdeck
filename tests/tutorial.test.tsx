@@ -71,6 +71,33 @@ describe('tutorial entry links', () => {
     expect(tokenLink?.getAttribute('href')).toContain('from=token-settings');
   });
 
+  it('shows an overview under each how-to heading while closed', async () => {
+    const token = { token: '', storage: 'session' as const, save: vi.fn(), clear: vi.fn() };
+    await act(async () => {
+      root.render(
+        <DialogProvider>
+          <SettingsView
+            token={token}
+            notify={vi.fn()}
+            theme="system"
+            onThemeChange={vi.fn()}
+            getBackup={vi.fn() as never}
+            onImportBackup={vi.fn()}
+            onResetAll={vi.fn()}
+            onShowFirstRun={vi.fn()}
+            firstRunDisabled={false}
+          />
+        </DialogProvider>,
+      );
+    });
+    expect([...container.querySelectorAll('.accordion-summary')].map((el) => el.textContent)).toEqual([
+      'タグの例と辞書の読み込みを選び直せます',
+      '辞書への登録から生成までの流れ',
+      '作業内容は自動保存されます。生成画像は保存されません',
+      '外部通信は NovelAI への生成時のみです',
+    ]);
+  });
+
   it('renders external tutorial link inside Dialogs choose options', async () => {
     let openChoose: (() => void) | undefined;
     function Trigger() {

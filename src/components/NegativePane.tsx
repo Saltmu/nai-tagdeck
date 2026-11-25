@@ -39,6 +39,7 @@ export function NegativePane({
 }: NegativePaneProps) {
   const id = useId();
   const [characterOpen, setCharacterOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const defaults = useMemo(() => defaultNegativeTags(), []);
   const hasAllDefaults = defaults.every((d) => tags.some((t) => t.enabled && normalize(t.tag) === normalize(d.tag)));
 
@@ -68,12 +69,38 @@ export function NegativePane({
         aliasMap={aliasMap}
       />
       <div className="negative-actions">
-        <button type="button" className="btn btn-small" disabled={hasAllDefaults} onClick={addDefaults}>
-          既定のタグを追加
-        </button>
-        <p className="hint">
-          既定は公式UIの UC プリセット「heavy」と同じタグです。足りないものだけ追加し、OFF のものは ON に戻します。NSFW を生成するときは nsfw を OFF にしてください。
-        </p>
+        <div className="negative-actions-row">
+          <button
+            type="button"
+            className="btn btn-small"
+            disabled={hasAllDefaults}
+            aria-describedby={hasAllDefaults ? `${id}-defaults-hint` : undefined}
+            onClick={addDefaults}
+          >
+            既定のタグを追加
+          </button>
+          <button
+            type="button"
+            className="help-btn"
+            aria-label="既定のタグについての説明"
+            title="既定のタグについての説明"
+            aria-expanded={helpOpen}
+            aria-controls={`${id}-defaults-help`}
+            onClick={() => setHelpOpen((value) => !value)}
+          >
+            ?
+          </button>
+        </div>
+        {helpOpen && (
+          <p className="hint" id={`${id}-defaults-help`}>
+            既定は公式UIの UC プリセット「heavy」と同じタグです。足りないものだけ追加し、OFF のものは ON に戻します。NSFW を生成するときは nsfw を OFF にしてください。
+          </p>
+        )}
+        {hasAllDefaults && (
+          <p className="hint" id={`${id}-defaults-hint`} role="note">
+            既定のタグはすべて追加済みです
+          </p>
+        )}
       </div>
 
       <div className="card negative-section">
