@@ -113,7 +113,11 @@ describe('tutorial entry links', () => {
   it('renders TokenSettings standalone with tutorial link', async () => {
     const token = { token: '', storage: 'session' as const, save: vi.fn(), clear: vi.fn() };
     await act(async () => {
-      root.render(<TokenSettings token={token} notify={vi.fn()} />);
+      root.render(
+        <DialogProvider>
+          <TokenSettings token={token} notify={vi.fn()} />
+        </DialogProvider>,
+      );
     });
     const link = Array.from(container.querySelectorAll('a')).find(
       (a) => a.textContent?.trim() === 'APIトークンの発行方法を見る',

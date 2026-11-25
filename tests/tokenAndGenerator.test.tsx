@@ -3,6 +3,7 @@ import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TokenSettings } from '../src/components/TokenSettings';
+import { DialogProvider } from '../src/components/Dialogs';
 import { useGenerator, type Generator } from '../src/hooks/useGenerator';
 import type { NewImage } from '../src/hooks/useImages';
 import { useToken, type TokenState } from '../src/hooks/useToken';
@@ -158,7 +159,9 @@ describe('TokenSettings', () => {
     await act(async () => {
       root.render(
         <StrictMode>
-          <TokenSettings token={token} notify={notify} />
+          <DialogProvider>
+            <TokenSettings token={token} notify={notify} />
+          </DialogProvider>
         </StrictMode>,
       );
     });
@@ -346,5 +349,85 @@ describe('useGenerator', () => {
     const third = onImages.mock.calls[2]![0][0]!;
     expect(third.prompt).toBe('fur dataset, wolf');
     expect(third.params?.mode).toBe('furry');
+  });
+});
+
+describe('TokenSettings の保存理由と削除確認', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  const dialogPrototype = HTMLDialogElement.prototype;
+  const dialogMethods = ['showModal', 'close'] as const;
+  const originalDialogMethods = dialogMethods.map((name) =>
+    Object.getOwnPropertyDescriptor(dialogPrototype, name),
+  );
+
+  beforeEach(() => {
+    Object.defineProperties(dialogPrototype, {
+      showModal: { configurable: true, value: function (this: HTMLDialogElement) { this.open = true; } },
+      close: { configurable: true, value: function (this: HTMLDialogElement) { this.open = false; } },
+    });
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+    for (const [i, name] of dialogMethods.entries()) {
+      const descriptor = originalDialogMethods[i];
+      if (descriptor) Object.defineProperty(dialogPrototype, name, descriptor);
+      else Reflect.deleteProperty(dialogPrototype, name);
+    }
+  });
+
+  const renderSettings = (token: TokenState, notify: (message: string) => void) =>
+    act(async () => {
+      root.render(
+        <StrictMode>
+          <DialogProvider>
+            <TokenSettings token={token} notify={notify} />
+          </DialogProvider>
+        </StrictMode>,
+      );
+    });
+
+  const saveButton = () => container.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+  const deleteButton = () =>
+    [...container.querySelectorAll('button')].find((node) => node.textContent === '削除')!;
+  const setTokenInput = async (value: string) => {
+    const input = container.querySelector<HTMLInputElement>('input[type="password"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+
+  it('入力が空の間は保存が押せない理由を表示し、入力すると消える', async () => {
+    await renderSettings({ token: null, storage: 'session', save: vi.fn(), clear: vi.fn() }, vi.fn());
+    expect(saveButton().disabled).toBe(true);
+    expect(container.textContent).toContain('トークンを入力すると「保存」が押せるようになります');
+
+    await setTokenInput('pst-valid_123');
+    expect(saveButton().disabled).toBe(false);
+    expect(container.textContent).not.toContain('トークンを入力すると「保存」が押せるようになります');
+  });
+
+  it('削除は確認ダイアログを出し、キャンセルでは消さず、確定で消す', async () => {
+    const clear = vi.fn();
+    const notify = vi.fn();
+    await renderSettings({ token: 'pst-abcdefgh1234', storage: 'local', save: vi.fn(), clear }, notify);
+
+    await act(async () => deleteButton().click());
+    const dialog = container.querySelector<HTMLDialogElement>('dialog.app-dialog-confirm')!;
+    expect(dialog.textContent).toContain('削除すると生成ができなくなります');
+    await act(async () => dialog.querySelector<HTMLButtonElement>('button.btn:not(.btn-danger)')!.click());
+    expect(clear).not.toHaveBeenCalled();
+
+    await act(async () => deleteButton().click());
+    const confirm = container.querySelector<HTMLDialogElement>('dialog.app-dialog-confirm')!;
+    await act(async () => confirm.querySelector<HTMLButtonElement>('button.btn-danger')!.click());
+    expect(clear).toHaveBeenCalledOnce();
+    expect(notify).toHaveBeenCalledWith('トークンを削除しました');
   });
 });

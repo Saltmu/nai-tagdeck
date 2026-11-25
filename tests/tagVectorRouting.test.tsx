@@ -122,29 +122,33 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it('auto-classifies unregistered tags on character and shows clickable move candidate on base', async () => {
-  // ベース: 未登録タグは未分類に入り、根拠があるときだけ候補カテゴリを行に表示する
+it('auto-classifies unregistered tags on base and character, and suggests a move for unclassified rows', async () => {
+  // ベース: 根拠のある未登録タグは上部入力から直接、推定カテゴリへ振り分ける
   await submitTopInput('ベース', '1.3::asymmetrical bomber jacket::, completely unknown xyzzy');
 
-  const baseUnclassified = harness.getWorkspace().base.unclassified;
-  expect(baseUnclassified.map((t) => [t.tag, t.weight])).toEqual([
+  expect(harness.getWorkspace().base.outfit.map((t) => [t.tag, t.weight])).toEqual([
     ['asymmetrical bomber jacket', 1.3],
+  ]);
+  expect(harness.getWorkspace().base.unclassified.map((t) => [t.tag, t.weight])).toEqual([
     ['completely unknown xyzzy', 1],
   ]);
-
-  const suggestBtn = container.querySelector<HTMLButtonElement>(
-    'button[aria-label="asymmetrical bomber jacket を候補カテゴリ「衣装」へ移動"]',
-  );
-  expect(suggestBtn).not.toBeNull();
-  expect(suggestBtn?.textContent).toBe('候補: 衣装');
+  // 根拠のないタグに候補は付かない
   expect(
     container.querySelector('button[aria-label^="completely unknown xyzzy を候補カテゴリ"]'),
   ).toBeNull();
 
-  // 候補を押すと既存のカテゴリ移動と同じ処理で衣装へ移る（重みも維持）
+  // 未分類に入ったタグには現在の辞書から候補を表示する。候補を押すと既存のカテゴリ移動と同じ処理で移る（重みも維持）
+  const unclassifiedInput = container.querySelector<HTMLInputElement>('input[aria-label="未分類にタグを追加"]')!;
+  await type(unclassifiedInput, 'abandoned train station');
+  await act(async () => unclassifiedInput.parentElement!.querySelector<HTMLButtonElement>('button')!.click());
+  const suggestBtn = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="abandoned train station を候補カテゴリ「背景・場所」へ移動"]',
+  );
+  expect(suggestBtn).not.toBeNull();
+  expect(suggestBtn?.textContent).toBe('候補: 背景・場所');
   await act(async () => suggestBtn!.click());
-  expect(harness.getWorkspace().base.outfit.map((t) => [t.tag, t.weight])).toEqual([
-    ['asymmetrical bomber jacket', 1.3],
+  expect(harness.getWorkspace().base.background.map((t) => [t.tag, t.weight])).toEqual([
+    ['abandoned train station', 1],
   ]);
   expect(harness.getWorkspace().base.unclassified.map((t) => t.tag)).toEqual(['completely unknown xyzzy']);
 
@@ -179,21 +183,18 @@ it('reflects dictionary additions, edits, and deletions on the next judgement', 
 
   // 登録前は共通語がなく未分類・候補なし
   await submitTopInput('ベース', 'embossed cloak');
+  expect(harness.getWorkspace().base.unclassified.map((t) => t.tag)).toContain('embossed cloak');
   expect(container.querySelector('button[aria-label^="embossed cloak を候補カテゴリ"]')).toBeNull();
 
-  // 登録後: 次の判定で衣装が候補に出る
+  // 登録後: 次の判定で衣装へ自動振り分けされる
   await act(async () => harness.setEntries([...baseDict, custom]));
   await submitTopInput('ベース', 'embossed cloak');
-  expect(
-    container.querySelector('button[aria-label="embossed cloak を候補カテゴリ「衣装」へ移動"]'),
-  ).not.toBeNull();
+  expect(harness.getWorkspace().base.outfit.map((t) => t.tag)).toContain('embossed cloak');
 
   // カテゴリ変更後: ベース・キャラ双方の次の判定に変更先（外見）が反映される
   await act(async () => harness.setEntries([...baseDict, { ...custom, category: 'appearance' }]));
   await submitTopInput('ベース', 'embossed cloak');
-  expect(
-    container.querySelector('button[aria-label="embossed cloak を候補カテゴリ「外見」へ移動"]'),
-  ).not.toBeNull();
+  expect(harness.getWorkspace().base.appearance.map((t) => t.tag)).toContain('embossed cloak');
   await clickTab('キャラ1');
   await submitTopInput('キャラ1', 'shimmering cloak');
   expect(harness.getWorkspace().characters[0]!.tags.appearance.map((t) => t.tag)).toContain('shimmering cloak');
@@ -220,12 +221,14 @@ it('keeps unclassified section input, ambiguous dictionary tags, and PNG import 
   expect(harness.getWorkspace().base.unclassified.map((t) => t.tag)).toContain('layered jacket');
   expect(container.querySelector('button[aria-label^="layered jacket を候補カテゴリ"]')).toBeNull();
 
-  // 未分類カテゴリの個別追加欄では候補表示を行わない
+  // 未分類カテゴリの個別追加欄は分類せず未分類に入れる。入ったタグには現在の辞書から候補を表示する
   const unclassifiedInput = container.querySelector<HTMLInputElement>('input[aria-label="未分類にタグを追加"]')!;
   await type(unclassifiedInput, 'asymmetrical bomber jacket');
   await act(async () => unclassifiedInput.parentElement!.querySelector<HTMLButtonElement>('button')!.click());
   expect(harness.getWorkspace().base.unclassified.map((t) => t.tag)).toContain('asymmetrical bomber jacket');
-  expect(container.querySelector('button[aria-label^="asymmetrical bomber jacket を候補カテゴリ"]')).toBeNull();
+  expect(
+    container.querySelector('button[aria-label="asymmetrical bomber jacket を候補カテゴリ「衣装」へ移動"]'),
+  ).not.toBeNull();
 
   // 画像取り込み時の分類は現行どおり完全一致のみ
   const png = new Blob([
@@ -246,11 +249,10 @@ it('keeps unclassified section input, ambiguous dictionary tags, and PNG import 
   expect(imported.base.unclassified.map((t) => t.tag)).toEqual(['asymmetrical bomber jacket']);
   expect(imported.characters[0]?.tags.unclassified.map((t) => t.tag)).toEqual(['asymmetrical bomber jacket']);
 
-  // 上部入力で候補が付いたあと、PNG 取り込み等で別の行に置き換わった場合は候補を引き継がない
+  // 上部入力は自動振り分けになったため、未分類に残るのは PNG 取り込み等の別経路のタグだけ。
+  // その行の候補は現在の辞書から計算し直す。古い行の候補を引き継ぐのではなく、置き換わった行に改めて付く
   await submitTopInput('ベース', 'asymmetrical bomber jacket');
-  expect(
-    container.querySelector('button[aria-label="asymmetrical bomber jacket を候補カテゴリ「衣装」へ移動"]'),
-  ).not.toBeNull();
+  expect(harness.getWorkspace().base.outfit.map((t) => t.tag)).toContain('asymmetrical bomber jacket');
 
   await act(async () => harness.replaceWorkspace({
     base: imported.base,
@@ -258,5 +260,11 @@ it('keeps unclassified section input, ambiguous dictionary tags, and PNG import 
     negative: harness.getWorkspace().negative,
   }));
   expect(harness.getWorkspace().base.unclassified.map((t) => t.tag)).toEqual(['asymmetrical bomber jacket']);
-  expect(container.querySelector('button[aria-label^="asymmetrical bomber jacket を候補カテゴリ"]')).toBeNull();
+  const importedSuggest = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="asymmetrical bomber jacket を候補カテゴリ「衣装」へ移動"]',
+  );
+  expect(importedSuggest).not.toBeNull();
+  await act(async () => importedSuggest!.click());
+  expect(harness.getWorkspace().base.outfit.map((t) => t.tag)).toContain('asymmetrical bomber jacket');
+  expect(harness.getWorkspace().base.unclassified).toEqual([]);
 });

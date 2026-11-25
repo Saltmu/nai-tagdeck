@@ -93,9 +93,7 @@ export function Editor({
   const isKnown = useCallback((tag: string) => knownTags.has(normalize(tag)), [knownTags]);
   const {
     suggestions: baseSuggestions,
-    noteSuggestion,
-    clearSuggestion: clearBaseSuggestion,
-  } = useUnclassifiedSuggestions(workspace.base.unclassified);
+  } = useUnclassifiedSuggestions(workspace.base.unclassified, vectorIndex, PROMPT_CATEGORY_KEYS);
 
   const { save } = dictionary;
   const [registering, setRegistering] = useState<{ tag: WorkTag; category: CategoryKey } | null>(null);
@@ -229,9 +227,8 @@ export function Editor({
     if (pickedCategory && pickedCategory !== 'negative' && promptCategories.includes(pickedCategory)) {
       return pickedCategory;
     }
-    const routed = classifyEditorTag(tag, vectorIndex, promptCategories, active ? 'auto' : 'suggest');
-    if (!active) noteSuggestion(tag, routed.suggestedCategory);
-    return routed.category;
+    // 上部入力欄はカテゴリ指定なしで自動振り分けする（根拠が不十分なら未分類）。
+    return classifyEditorTag(tag, vectorIndex, promptCategories);
   };
   const addPromptTag = (tag: string, weight: number, pickedCategory?: CategoryKey) => {
     const category = resolvePromptCategory(tag, pickedCategory);
@@ -466,7 +463,6 @@ export function Editor({
                 onRegister={register}
                 quickPicks={key === 'quality' ? QUALITY_PICKS : undefined}
                 quickPicksMode="many"
-                onAdded={key === 'unclassified' ? clearBaseSuggestion : undefined}
                 suggestedCategories={key === 'unclassified' ? baseSuggestions : undefined}
                 filter={tagFilter}
                 characters={characterTargets}

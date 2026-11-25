@@ -627,7 +627,7 @@ describe('SettingsView appearance theme picker', () => {
         />
       );
     }
-    await act(async () => root.render(<Harness />));
+    await act(async () => root.render(<DialogProvider><Harness /></DialogProvider>));
     const section = container.querySelector('section[aria-labelledby="appearance-title"]');
     expect(section).not.toBeNull();
     const radios = [...container.querySelectorAll<HTMLInputElement>('input[type="radio"][name="theme"]')];

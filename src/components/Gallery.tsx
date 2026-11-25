@@ -1,6 +1,5 @@
 import { lazy, Suspense, type CSSProperties, useEffect, useRef, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
-import { usePngDrop } from '../hooks/usePngDrop';
 import { downloadBlob, downloadUrl, timeStamp } from '../lib/browser';
 import { imageFileName } from '../lib/imageFileName';
 import { MAX_IMAGE_HISTORY_BYTES, MAX_IMAGE_HISTORY_COUNT } from '../lib/imageHistory';
@@ -52,7 +51,6 @@ export function Gallery({
 }: Props) {
   const dialogs = useDialogs();
   const [openId, setOpenId] = useState<string | null>(null);
-  const [fileError, setFileError] = useState('');
   const [zipError, setZipError] = useState('');
   const [zipping, setZipping] = useState(false);
   const zippingRef = useRef(false);
@@ -122,15 +120,9 @@ export function Gallery({
     }
   };
   const openImport = (blob: Blob, name: string, fallbackImage?: GeneratedImage) => {
-    setFileError('');
     setOpenId(null);
     onReadPng({ blob, name, fallbackImage });
   };
-  const { dragging, dropProps } = usePngDrop({
-    enabled: !!onPickPng,
-    onDropFile: ({ blob, name }) => openImport(blob, name),
-    onMultipleFiles: () => setFileError('PNG を1枚ずつドロップしてください'),
-  });
 
   return (
     <section className="card gallery" aria-label="生成した画像">
@@ -220,19 +212,6 @@ export function Gallery({
         </div>
       </div>
 
-      <div
-        className={`png-drop-zone${dragging ? ' is-dragging' : ''}`}
-        {...dropProps}
-      >
-        <button type="button" className="btn btn-small" disabled={!onPickPng} onClick={() => {
-          setFileError('');
-          onPickPng?.();
-        }}>
-          PNGから読み込む
-        </button>
-        <span className="hint">または NovelAI の PNG をここにドロップ</span>
-      </div>
-      {fileError && <p className="error-banner" role="alert">{fileError}</p>}
       {zipError && <p className="error-banner" role="alert">{zipError}</p>}
       {evictedCount > 0 && (
         <div className="notice" role="status">
@@ -245,7 +224,11 @@ export function Gallery({
         </div>
       )}
 
-      {images.length === 0 && !generating ? null : (
+      {images.length === 0 && !generating ? (
+        <div className="gallery-empty" role="status">
+          生成した画像はここに表示されます
+        </div>
+      ) : (
         <ul className="thumbs">
           {generating && (
             <li className="thumb is-pending" style={thumbStyle(pendingSize.width, pendingSize.height)}>

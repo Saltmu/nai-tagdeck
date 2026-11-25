@@ -76,7 +76,8 @@ const chooseDialog = () => Array.from(container.querySelectorAll('dialog'))
   .find((dialog) => dialog.textContent?.includes('変更が反映されていません'));
 
 async function dropImport() {
-  const target = container.querySelector('.png-drop-zone')!;
+  // 画像欄のドロップゾーンは廃止されたため、タグ編集エリアへドロップする
+  const target = container.querySelector('.editor')!;
   const event = new Event('drop', { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [imageFile()] } });
   await act(async () => target.dispatchEvent(event));
@@ -401,7 +402,7 @@ it('imports a custom PNG size and undoes it back to the preset size', async () =
   });
   const customFile = new File([customBytes], 'custom.png', { type: 'image/png' });
   Object.defineProperty(customFile, 'arrayBuffer', { value: async () => customBytes.buffer });
-  const target = container.querySelector('.png-drop-zone')!;
+  const target = container.querySelector('.editor')!;
   const event = new Event('drop', { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [customFile] } });
   await act(async () => target.dispatchEvent(event));

@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from 'react';
 import type { TokenState } from '../hooks/useToken';
 import { maskToken, normalizeToken, validateToken, type TokenStorage } from '../lib/token';
 import { tutorialUrl } from '../lib/tutorialLinks';
+import { useDialogs } from './Dialogs';
 
 interface Props {
   token: TokenState;
@@ -15,9 +16,21 @@ const STORAGE_LABEL: Record<TokenStorage, string> = {
 
 export function TokenSettings({ token, notify }: Props) {
   const id = useId();
+  const dialogs = useDialogs();
   const [input, setInput] = useState('');
   const [storage, setStorage] = useState<TokenStorage>(token.storage);
   const [error, setError] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    const masked = token.token ? maskToken(token.token) : '';
+    const ok = await dialogs.confirm(
+      `トークン「${masked}」を削除しますか？削除すると生成ができなくなります。`,
+      { okLabel: '削除', danger: true },
+    );
+    if (!ok) return;
+    token.clear();
+    notify('トークンを削除しました');
+  };
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -46,10 +59,7 @@ export function TokenSettings({ token, notify }: Props) {
             <button
               type="button"
               className="btn btn-small btn-danger"
-              onClick={() => {
-                token.clear();
-                notify('トークンを削除しました');
-              }}
+              onClick={() => void handleDelete()}
             >
               削除
             </button>
@@ -97,8 +107,19 @@ export function TokenSettings({ token, notify }: Props) {
             </label>
           ))}
         </fieldset>
+        {/* 保存ボタンは入力が空の間は押せない。理由をボタンのそばに表示する */}
+        {!normalizeToken(input) && (
+          <p className="hint" id={`${id}-save-hint`} role="note">
+            トークンを入力すると「保存」が押せるようになります
+          </p>
+        )}
         <div className="form-actions">
-          <button type="submit" className="btn btn-primary" disabled={!normalizeToken(input)}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={!normalizeToken(input)}
+            aria-describedby={!normalizeToken(input) ? `${id}-save-hint` : undefined}
+          >
             保存
           </button>
           <a
