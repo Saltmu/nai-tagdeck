@@ -144,6 +144,7 @@ run_lftp() {
   {
     printf '%s\n' \
       'set cmd:fail-exit yes' \
+      'set xfer:use-temp-file yes' \
       'set net:timeout 20' \
       'set net:max-retries 2' \
       'set sftp:auto-confirm no' \
@@ -163,7 +164,11 @@ fi
 [[ -f "$ROOT/dist/index.html" ]] || fail "dist/index.html がありません。ビルドに失敗していないか確認してください。"
 
 echo
-echo "$DEPLOY_HOST:$DEPLOY_PORT → $DEPLOY_DIR${DRY:+ [確認のみ]}"
+if [[ "$DRY" == true ]]; then
+  echo "$DEPLOY_HOST:$DEPLOY_PORT → $DEPLOY_DIR [確認のみ]"
+else
+  echo "$DEPLOY_HOST:$DEPLOY_PORT → $DEPLOY_DIR"
+fi
 
 PREVIEW=""
 if [[ "$DRY" == true ]]; then
