@@ -11,6 +11,11 @@ export const GENERATE_URL = 'https://image.novelai.net/ai/generate-image';
 export const NAI_MODEL = 'nai-diffusion-5-full';
 export const REQUEST_TIMEOUT_MS = 120_000;
 
+/** Anlas 残高の取得先。旧ホスト `api.novelai.net` は 400 になるため使わない。 */
+export const SUBSCRIPTION_URL = 'https://image.novelai.net/user/subscription';
+/** 残高取得のタイムアウト（生成の 120 秒より短くする）。 */
+export const SUBSCRIPTION_TIMEOUT_MS = 30_000;
+
 /** Opus プランで Anlas を消費しない条件（最新の条件は公式で確認すること）。 */
 export const FREE_LIMITS = {
   maxPixels: 1024 * 1024,
@@ -498,4 +503,157 @@ export function describeError(error: unknown): string {
   if (error instanceof TypeError) return 'NovelAI に接続できませんでした。通信状態を確認してください';
   if (error instanceof SyntaxError) return '応答を読み取れませんでした';
   return `生成できませんでした: ${String(error)}`;
+}
+
+// ---- Anlas 残高（GET /user/subscription） ----
+
+/** プラン名。tier: 0=Paper、1=Tablet、2=Scroll、3=Opus。 */
+export const TIER_NAMES: Record<number, string> = {
+  0: 'Paper',
+  1: 'Tablet',
+  2: 'Scroll',
+  3: 'Opus',
+};
+
+export function tierName(tier: number): string {
+  return TIER_NAMES[tier] ?? `プラン ${tier}`;
+}
+
+/** Opus の V5 利用枠。Opus 以外では応答に含まれない。 */
+export interface SubscriptionUsage {
+  /** V5 利用枠の使用率（%）。 */
+  percent: number;
+  /** 利用枠を超過しているとき true。 */
+  isNegative: boolean;
+  /** 次に 1% 回復するまでの秒数。分からなければ null。 */
+  timeUntilNextPercent: number | null;
+}
+
+export interface Subscription {
+  tier: number;
+  /** 付与分 Anlas の残り。 */
+  fixedTrainingStepsLeft: number;
+  /** 購入分 Anlas の残り。 */
+  purchasedTrainingSteps: number;
+  /** 合計残高（付与分＋購入分）。 */
+  totalAnlas: number;
+  /** 購読期間の終了時刻（ミリ秒）。分からなければ null。 */
+  expiresAt: number | null;
+  /** Opus の V5 利用枠。Opus 以外・不明のとき null。 */
+  usage: SubscriptionUsage | null;
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** 秒かミリ秒か分からない UNIX 時刻をミリ秒にそろえる。 */
+function normalizeTimestampMs(value: unknown): number | null {
+  const num = finiteNumber(value);
+  if (num === null || num <= 0) return null;
+  return num > 1e12 ? num : num * 1000;
+}
+
+function parseUsage(value: unknown): SubscriptionUsage | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const percent = finiteNumber(record.percent);
+  if (percent === null) return null;
+  return {
+    percent,
+    isNegative: record.isNegative === true,
+    timeUntilNextPercent: finiteNumber(record.timeUntilNextPercent),
+  };
+}
+
+/**
+ * `GET /user/subscription` の応答を解釈する。未対応のフィールドが増えても、
+ * 残高の要所が読めれば表示する。残高がまったく読めないときだけ null。
+ */
+export function parseSubscription(data: unknown): Subscription | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const record = data as Record<string, unknown>;
+  const fixed = finiteNumber(record.fixedTrainingStepsLeft);
+  const purchased = finiteNumber(record.purchasedTrainingSteps);
+  const trainingLeft = finiteNumber(record.trainingStepsLeft);
+  let totalAnlas: number | null = null;
+  if (fixed !== null && purchased !== null) totalAnlas = fixed + purchased;
+  else if (trainingLeft !== null) totalAnlas = trainingLeft;
+  if (totalAnlas === null) return null;
+  const tier = finiteNumber(record.tier);
+  return {
+    tier: tier ?? -1,
+    fixedTrainingStepsLeft: fixed ?? 0,
+    purchasedTrainingSteps: purchased ?? 0,
+    totalAnlas,
+    expiresAt: normalizeTimestampMs(record.expiresAt),
+    usage: parseUsage(record.usage),
+  };
+}
+
+/**
+ * Anlas 残高とプランを取得する。残高は表示用にだけ使い、IndexedDB や
+ * バックアップには保存しない。取得に失敗しても例外を投げるだけで、生成は止めない。
+ */
+export async function fetchSubscription(
+  token: string,
+  signal?: AbortSignal,
+  timeoutMs = SUBSCRIPTION_TIMEOUT_MS,
+): Promise<Subscription> {
+  const tokenError = validateToken(token);
+  if (tokenError) throw new NovelAIError(0, `トークンの形式が正しくありません（${tokenError}）`);
+
+  const { signal: requestSignal, cleanup } = createRequestSignal(signal, timeoutMs);
+  try {
+    const res = await fetch(SUBSCRIPTION_URL, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      signal: requestSignal,
+      credentials: 'omit',
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
+    });
+    if (!res.ok) {
+      const message = await readErrorMessage(res, requestSignal);
+      if (requestSignal?.aborted) throw requestSignal.reason ?? createTimeoutError();
+      throw new NovelAIError(res.status, message || '残高を取得できませんでした');
+    }
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch {
+      throw new NovelAIError(0, '残高の応答を読み取れませんでした');
+    }
+    if (requestSignal?.aborted) throw requestSignal.reason ?? createTimeoutError();
+    const parsed = parseSubscription(data);
+    if (!parsed) throw new NovelAIError(0, '残高の応答を読み取れませんでした');
+    return parsed;
+  } catch (err) {
+    if (requestSignal?.aborted && !signal?.aborted && isTimeoutError(requestSignal.reason)) {
+      throw requestSignal.reason;
+    }
+    throw err;
+  } finally {
+    cleanup();
+  }
+}
+
+/** 残高取得の失敗を、画面に出す短い文にする。 */
+export function describeSubscriptionError(error: unknown): string {
+  if (isTimeoutError(error)) return 'タイムアウトしました';
+  if (error instanceof NovelAIError) {
+    switch (error.status) {
+      case 0:
+        return error.message || '通信に失敗しました';
+      case 401:
+        return 'トークンが無効です';
+      case 402:
+        return 'プランの範囲外です';
+      default:
+        return `取得できませんでした（${error.status}）`;
+    }
+  }
+  return '取得できませんでした';
 }

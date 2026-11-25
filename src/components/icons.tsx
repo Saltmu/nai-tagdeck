@@ -40,6 +40,27 @@ export function SparkleIcon() {
 
 const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
 
+/**
+ * Anlas（NovelAI の稲妻アイコン風の金色の稲妻）。
+ * 公式の画像ファイルではなく、こちらで描いた SVG。色は本家の金色に寄せている。
+ */
+export function AnlasIcon() {
+  return (
+    <svg className="icon anlas-icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M11.6 1.8 4.9 11h3.5L7.4 18.2 15.1 9h-3.5Z" fill="#f5b301" />
+    </svg>
+  );
+}
+
+/** 更新（円形の矢印）。 */
+export function RefreshIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6M16.5 3.2v3.2h-3.2" {...stroke} />
+    </svg>
+  );
+}
+
 /** 編集（鉛筆）。 */
 export function EditIcon() {
   return (

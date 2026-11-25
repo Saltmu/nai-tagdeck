@@ -1,9 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_PARAMS,
   NAI_MODEL,
+  NovelAIError,
+  SUBSCRIPTION_URL,
   buildGenerateRequest,
+  describeSubscriptionError,
+  fetchSubscription,
   isFreeGeneration,
+  parseSubscription,
+  tierName,
 } from '../src/lib/novelai';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../src/lib/settings';
 
@@ -161,5 +167,105 @@ describe('normalizeSettings', () => {
   it('壊れた値は既定値にする', () => {
     expect(normalizeSettings('x')).toEqual(DEFAULT_SETTINGS);
     expect(normalizeSettings({ weightSyntax: 'x', characterNegativePrompt: 1 })).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe('parseSubscription', () => {
+  it('付与分と購入分を合計し、プラン・V5 利用枠・期限を読み取る', () => {
+    expect(
+      parseSubscription({
+        tier: 3,
+        fixedTrainingStepsLeft: 10000,
+        purchasedTrainingSteps: 8000,
+        trainingStepsLeft: 18000,
+        expiresAt: 1798761600,
+        usage: { percent: 23.5, isNegative: false, timeUntilNextPercent: 5400 },
+      }),
+    ).toEqual({
+      tier: 3,
+      fixedTrainingStepsLeft: 10000,
+      purchasedTrainingSteps: 8000,
+      totalAnlas: 18000,
+      expiresAt: 1798761600000,
+      usage: { percent: 23.5, isNegative: false, timeUntilNextPercent: 5400 },
+    });
+    expect(tierName(0)).toBe('Paper');
+    expect(tierName(1)).toBe('Tablet');
+    expect(tierName(2)).toBe('Scroll');
+    expect(tierName(3)).toBe('Opus');
+  });
+
+  it('付与分・購入分がなくても trainingStepsLeft があれば合計にする', () => {
+    expect(parseSubscription({ tier: 1, trainingStepsLeft: 500 })).toEqual({
+      tier: 1,
+      fixedTrainingStepsLeft: 0,
+      purchasedTrainingSteps: 0,
+      totalAnlas: 500,
+      expiresAt: null,
+      usage: null,
+    });
+  });
+
+  it('残高がまったく読めない応答は null にする', () => {
+    expect(parseSubscription(null)).toBeNull();
+    expect(parseSubscription('x')).toBeNull();
+    expect(parseSubscription({ tier: 3 })).toBeNull();
+    expect(parseSubscription({ tier: 3, fixedTrainingStepsLeft: '100', purchasedTrainingSteps: 0 })).toBeNull();
+  });
+
+  it('ミリ秒の期限と壊れた usage はそのまま扱う', () => {
+    const parsed = parseSubscription({
+      tier: 3,
+      fixedTrainingStepsLeft: 100,
+      purchasedTrainingSteps: 0,
+      expiresAt: 1798761600000,
+      usage: { percent: 'x' },
+    });
+    expect(parsed?.expiresAt).toBe(1798761600000);
+    expect(parsed?.usage).toBeNull();
+  });
+});
+
+describe('fetchSubscription', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const subscriptionJson = {
+    tier: 3,
+    fixedTrainingStepsLeft: 10000,
+    purchasedTrainingSteps: 8000,
+    expiresAt: 1798761600,
+    usage: { percent: 10, isNegative: false, timeUntilNextPercent: 3600 },
+  };
+
+  it('image.novelai.net の /user/subscription に Bearer トークンで問い合わせる', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(subscriptionJson), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const data = await fetchSubscription('pst-secret');
+    expect(data.totalAnlas).toBe(18000);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(SUBSCRIPTION_URL);
+    expect(url).toBe('https://image.novelai.net/user/subscription');
+    expect(url).not.toContain('api.novelai.net');
+    expect(url).not.toContain('pst-secret');
+    expect(init.method).toBe('GET');
+    expect(init.headers).toEqual({ Authorization: 'Bearer pst-secret' });
+    expect(init.credentials).toBe('omit');
+  });
+
+  it('401 は NovelAIError になり、表示文はトークン無効になる', async () => {
+    vi.stubGlobal('fetch', async () => new Response('{"message":"Invalid token"}', { status: 401 }));
+    const err = await fetchSubscription('pst-bad').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NovelAIError);
+    expect(err).toMatchObject({ status: 401 });
+    expect(describeSubscriptionError(err)).toBe('トークンが無効です');
+  });
+
+  it('残高の読めない応答と改行トークンは fetch 前に拒否する', async () => {
+    vi.stubGlobal('fetch', async () => new Response('{}', { status: 200 }));
+    await expect(fetchSubscription('pst-ok')).rejects.toBeInstanceOf(NovelAIError);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(fetchSubscription('pst-abc\nxyz')).rejects.toBeInstanceOf(NovelAIError);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,5 @@
 import type { TokenState } from '../hooks/useToken';
+import type { AnlasState } from '../hooks/useAnlas';
 import { TokenSettings } from './TokenSettings';
 import { BackupCard } from './BackupCard';
 import type { Backup, BackupImportMode } from '../lib/backup';
@@ -14,6 +15,8 @@ const THEME_OPTIONS: Array<{ value: ThemePreference; label: string; hint: string
 
 interface Props {
   token: TokenState;
+  /** Anlas 残高の表示状態。渡さないときは詳細を出さない。 */
+  anlas?: AnlasState;
   notify: (message: string) => void;
   theme: ThemePreference;
   onThemeChange: (theme: ThemePreference) => void;
@@ -28,6 +31,7 @@ interface Props {
 
 export function SettingsView({
   token,
+  anlas,
   notify,
   theme,
   onThemeChange,
@@ -112,7 +116,7 @@ export function SettingsView({
           </details>
         </div>
       </section>
-      <TokenSettings token={token} notify={notify} />
+      <TokenSettings token={token} notify={notify} anlas={anlas} />
       <BackupCard
         getData={getBackup}
         onImport={onImportBackup}

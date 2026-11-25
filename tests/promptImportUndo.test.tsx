@@ -21,6 +21,8 @@ vi.mock('../src/lib/db', () => ({
 vi.mock('../src/lib/novelai', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/novelai')>(),
   requestImages: vi.fn(),
+  // Anlas 残高の取得はこのテストの対象外。実通信をしない。
+  fetchSubscription: vi.fn().mockRejectedValue(new Error('fetchSubscription is mocked out')),
 }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
