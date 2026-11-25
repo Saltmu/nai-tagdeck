@@ -1,13 +1,15 @@
-import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, type CSSProperties, useEffect, useRef, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
 import { usePngDrop } from '../hooks/usePngDrop';
 import { downloadBlob, downloadUrl, timeStamp } from '../lib/browser';
+import { imageFileName } from '../lib/imageFileName';
 import { MAX_IMAGE_HISTORY_BYTES, MAX_IMAGE_HISTORY_COUNT } from '../lib/imageHistory';
-import { imageZipBlob } from '../lib/imageZip';
-import { ImageViewer, imageFileName } from './ImageViewer';
+import { ChunkErrorBoundary } from './ChunkErrorBoundary';
 import { DownloadIcon, PinIcon, TempIcon } from './icons';
 import { useDialogs } from './Dialogs';
 import type { PromptSource } from './PromptImportDialog';
+
+const ImageViewer = lazy(() => import('./ImageViewer').then((m) => ({ default: m.ImageViewer })));
 
 interface Props {
   images: GeneratedImage[];
@@ -106,6 +108,9 @@ export function Gallery({
           data: new Uint8Array(await image.blob.arrayBuffer()),
         });
       }
+      if (!stillPresent()) return;
+      // ZIP 作成時のみ読む（初期チャンクには含めない）
+      const { imageZipBlob } = await import('../lib/imageZip');
       if (!stillPresent()) return;
       downloadBlob(`nai-tagdeck-pinned-${timeStamp()}.zip`, imageZipBlob(files));
       for (const image of targets) onDownloaded(image.id);
@@ -282,26 +287,30 @@ export function Gallery({
       )}
 
       {openIndex >= 0 && (
-        <ImageViewer
-          image={images[openIndex]!}
-          hasPrev={openIndex > 0}
-          hasNext={openIndex < images.length - 1}
-          onPrev={() => setOpenId(images[openIndex - 1]?.id ?? null)}
-          onNext={() => setOpenId(images[openIndex + 1]?.id ?? null)}
-          onClose={() => setOpenId(null)}
-          onRemove={() => {
-            const next = images[openIndex + 1] ?? images[openIndex - 1];
-            onRemove(images[openIndex]!.id);
-            setOpenId(next?.id ?? null);
-          }}
-          onUseSeed={onUseSeed}
-          onDownload={() => downloadImage(images[openIndex]!)}
-          onTogglePin={() => onTogglePin(images[openIndex]!.id)}
-          onImportPrompt={onPickPng ? () => {
-            const image = images[openIndex]!;
-            openImport(image.blob, imageFileName(image), image);
-          } : undefined}
-        />
+        <ChunkErrorBoundary>
+          <Suspense fallback={null}>
+            <ImageViewer
+              image={images[openIndex]!}
+              hasPrev={openIndex > 0}
+              hasNext={openIndex < images.length - 1}
+              onPrev={() => setOpenId(images[openIndex - 1]?.id ?? null)}
+              onNext={() => setOpenId(images[openIndex + 1]?.id ?? null)}
+              onClose={() => setOpenId(null)}
+              onRemove={() => {
+                const next = images[openIndex + 1] ?? images[openIndex - 1];
+                onRemove(images[openIndex]!.id);
+                setOpenId(next?.id ?? null);
+              }}
+              onUseSeed={onUseSeed}
+              onDownload={() => downloadImage(images[openIndex]!)}
+              onTogglePin={() => onTogglePin(images[openIndex]!.id)}
+              onImportPrompt={onPickPng ? () => {
+                const image = images[openIndex]!;
+                openImport(image.blob, imageFileName(image), image);
+              } : undefined}
+            />
+          </Suspense>
+        </ChunkErrorBoundary>
       )}
     </section>
   );

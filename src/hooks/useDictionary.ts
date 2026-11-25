@@ -3,7 +3,6 @@ import type { DictEntry } from '../types';
 import { deleteEntry, listEntries, putEntry, putEntries, replaceAllEntries } from '../lib/db';
 import { mergeEntries, sortEntries, type ImportMode } from '../lib/io';
 import { getDataResetSignal } from '../lib/reset';
-import { restoreInitialDictionary } from '../lib/sampleDictionary';
 import { isStaleWriteError } from '../lib/tabSync';
 import type { SyncBridge } from './useTabSync';
 
@@ -129,14 +128,18 @@ export function useDictionary(sync?: SyncBridge): Dictionary {
     return merged.length;
   }), [enqueue]);
 
-  const restoreInitial = useCallback(() => enqueue(async () => {
-    const merged = restoreInitialDictionary(latest.current);
-    await replaceAllEntries(merged);
-    syncRef.current?.onPersisted();
-    latest.current = merged;
-    setEntries(merged);
-    return merged.length;
-  }), [enqueue]);
+  const restoreInitial = useCallback(async () => {
+    // 動的 import の解決待ちで書き込みキューを塞がないよう、enqueue() の外で先に読む。
+    const { restoreInitialDictionary } = await import('../lib/sampleDictionary');
+    return enqueue(async () => {
+      const merged = restoreInitialDictionary(latest.current);
+      await replaceAllEntries(merged);
+      syncRef.current?.onPersisted();
+      latest.current = merged;
+      setEntries(merged);
+      return merged.length;
+    });
+  }, [enqueue]);
 
   const flush = useCallback(async () => {
     let pending: Promise<void>;

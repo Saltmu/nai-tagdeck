@@ -43,6 +43,14 @@ function button(text: string, scope: ParentNode = container): HTMLButtonElement 
 }
 
 const click = (node: HTMLElement) => act(async () => node.click());
+
+/** React.lazy で分離した画面・ダイアログがマウントされるまで待つ。 */
+async function waitForMount(selector: string) {
+  await vi.waitFor(() => {
+    if (!container.querySelector(selector)) throw new Error(`waiting for ${selector}`);
+  }, { timeout: 5000 });
+}
+
 const preview = () => container.querySelector('output.preview-text')?.textContent;
 const field = (suffix: string) => container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[id$="-${suffix}"]`);
 const undoButton = () => button('元に戻す');
@@ -62,6 +70,7 @@ async function deleteExistingTag() {
 
 async function openBackupConfirm() {
   await click(button('設定'));
+  await waitForMount('input[accept*="json"]');
   const input = container.querySelector<HTMLInputElement>('input[accept*="json"]');
   if (!input) throw new Error('バックアップの入力がありません');
   const file = new File([toBackupJSON({

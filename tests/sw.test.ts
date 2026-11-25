@@ -159,6 +159,9 @@ function extractBuildOutputs(result: Awaited<ReturnType<typeof viteBuild>>) {
     cacheName: cacheMatch[1],
     precache: JSON.parse(precacheMatch[1]) as string[],
     chunkNames: outputs.filter((o) => o.type === 'chunk').map((o) => o.fileName).sort(),
+    chunkCode: new Map(
+      outputs.filter((o) => o.type === 'chunk').map((o) => [o.fileName, o.code]),
+    ),
   };
 }
 
@@ -208,6 +211,41 @@ describe('Vite build swPlugin integration', () => {
     expect(first.html).toContain(`content="${CSP_META}"`);
     expect(first.html).not.toContain('frame-ancestors');
     expect(first.html).not.toContain('data:');
+  });
+
+  it('splits lazy screens and data out of the initial entry chunk and precaches every chunk', async () => {
+    const built = extractBuildOutputs(
+      await viteBuild({
+        configFile: resolve('vite.config.ts'),
+        logLevel: 'silent',
+        build: { write: false },
+      }),
+    );
+    const entrySrc = built.html.match(/<script[^>]*src="(\.\/assets\/[^"]+\.js)"/)?.[1];
+    if (!entrySrc) throw new Error('missing entry script in index.html');
+    const entryName = entrySrc.slice(2);
+    const entryCode = built.chunkCode.get(entryName);
+    if (entryCode === undefined) throw new Error(`missing entry chunk ${entryName}`);
+    // 分離先チャンクごとの目印（初期チャンクの Editor の QUALITY_PICKS にある
+    // 'very aesthetic' とは違い、辞書データの読み仮名など固有の文字列を使う）。
+    const splitChunks: Array<[prefix: string, marker: string]> = [
+      ['sampleDictionary-', '美的 びてき'],
+      ['sampleWorkspace-', 'サンプルキャラ'],
+      ['DictionaryView-', '初期タグを読み込む'],
+      ['SettingsView-', 'バックアップを読み込む'],
+      ['PromptImportDialog-', 'PNG の生成情報を読み込んでいます'],
+      ['ImageViewer-', '画像の拡大表示'],
+      ['imageZip-', 'application/zip'],
+    ];
+    for (const [prefix, marker] of splitChunks) {
+      const name = built.chunkNames.find((n) => n.split('/').at(-1)?.startsWith(prefix));
+      expect(name, `${prefix} chunk`).toBeDefined();
+      expect(built.chunkCode.get(name!) ?? '').toContain(marker);
+      expect(entryCode).not.toContain(marker);
+    }
+    for (const name of built.chunkNames) {
+      expect(built.precache).toContain(`./${name}`);
+    }
   });
 });
 

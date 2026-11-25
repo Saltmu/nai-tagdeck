@@ -1,14 +1,12 @@
-import { type MouseEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, type MouseEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Editor } from './components/Editor';
-import { DictionaryView } from './components/DictionaryView';
-import { SettingsView } from './components/SettingsView';
 import { GeneratePanel } from './components/GeneratePanel';
 import { PromptPreview } from './components/PromptPreview';
 import { Gallery } from './components/Gallery';
 import { GenerateDock } from './components/GenerateDock';
 import { QuickGenerate } from './components/QuickGenerate';
 import { LatestPreview } from './components/LatestPreview';
-import { PromptImportDialog } from './components/PromptImportDialog';
+import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { useDictionary } from './hooks/useDictionary';
 import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWorkspace';
 import { Toast, type ToastHandle } from './components/Toast';
@@ -35,6 +33,19 @@ import { copyText } from './lib/browser';
 import { applyTheme } from './lib/theme';
 import type { WorkspaceAction } from './lib/workspace';
 import type { ThemePreference, WeightSyntax } from './types';
+
+// 初期表示に不要なサブ画面・モーダルは、タブやダイアログを開くときだけ読む。
+const DictionaryView = lazy(() => import('./components/DictionaryView').then((m) => ({ default: m.DictionaryView })));
+const SettingsView = lazy(() => import('./components/SettingsView').then((m) => ({ default: m.SettingsView })));
+const PromptImportDialog = lazy(() => import('./components/PromptImportDialog').then((m) => ({ default: m.PromptImportDialog })));
+
+function ScreenLoadingFallback() {
+  return (
+    <section className="card" role="status" aria-busy="true">
+      <p>画面を読み込んでいます…</p>
+    </section>
+  );
+}
 
 type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
 
@@ -450,27 +461,35 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
           </div>
         </div>
         {tab === 'dictionary' && (
-          <DictionaryView
-            dictionary={dictionary}
-            notify={show}
-            locked={tabSync.bridge.locked}
-            reloadCount={tabSync.reloadCount}
-          />
+          <ChunkErrorBoundary>
+            <Suspense fallback={<ScreenLoadingFallback />}>
+              <DictionaryView
+                dictionary={dictionary}
+                notify={show}
+                locked={tabSync.bridge.locked}
+                reloadCount={tabSync.reloadCount}
+              />
+            </Suspense>
+          </ChunkErrorBoundary>
         )}
         {tab === 'settings' && (
-          <SettingsView
-            token={token}
-            notify={show}
-            theme={settings.theme}
-            onThemeChange={handleThemeChange}
-            getBackup={getBackup}
-            onImportBackup={importBackup}
-            onResetAll={onResetAll}
-            onShowFirstRun={firstRun.showGuide}
-            firstRunDisabled={!firstRunReady || firstRun.busy}
-            backupImportDisabled={!storesLoaded || tabSync.bridge.locked}
-            reloadCount={tabSync.reloadCount}
-          />
+          <ChunkErrorBoundary>
+            <Suspense fallback={<ScreenLoadingFallback />}>
+              <SettingsView
+                token={token}
+                notify={show}
+                theme={settings.theme}
+                onThemeChange={handleThemeChange}
+                getBackup={getBackup}
+                onImportBackup={importBackup}
+                onResetAll={onResetAll}
+                onShowFirstRun={firstRun.showGuide}
+                firstRunDisabled={!firstRunReady || firstRun.busy}
+                backupImportDisabled={!storesLoaded || tabSync.bridge.locked}
+                reloadCount={tabSync.reloadCount}
+              />
+            </Suspense>
+          </ChunkErrorBoundary>
         )}
       </main>
 
@@ -482,12 +501,16 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         onChange={promptImport.onPngFileChange}
       />
       {promptImport.promptSource && firstRunReady && (
-        <PromptImportDialog
-          source={promptImport.promptSource}
-          entries={dictionary.entries}
-          onCancel={promptImport.closePromptImport}
-          onApply={promptImport.applyPrompt}
-        />
+        <ChunkErrorBoundary>
+          <Suspense fallback={null}>
+            <PromptImportDialog
+              source={promptImport.promptSource}
+              entries={dictionary.entries}
+              onCancel={promptImport.closePromptImport}
+              onApply={promptImport.applyPrompt}
+            />
+          </Suspense>
+        </ChunkErrorBoundary>
       )}
 
       {showLatest && latest && (

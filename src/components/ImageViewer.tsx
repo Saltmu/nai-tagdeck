@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
-import { timeStamp } from '../lib/browser';
 import { modeLabel, samplerLabel } from '../lib/generation';
 import { CheckIcon, CloseIcon, DownloadIcon, LockIcon, NextIcon, PinIcon, PrevIcon, TrashIcon } from './icons';
 import { ViewerPromptDetails } from './ViewerPromptDetails';
@@ -27,11 +26,7 @@ const isViewerState = (state: unknown) =>
 const REMOVE_ARM_MS = 1000;
 const COPY_MS = 1500;
 
-const EXT: Record<string, string> = { 'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg' };
-
-export function imageFileName(image: GeneratedImage): string {
-  return `nai-tagdeck-${timeStamp(new Date(image.createdAt))}-${image.seed}.${EXT[image.blob.type] ?? 'png'}`;
-}
+export { imageFileName } from '../lib/imageFileName';
 
 export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload, onTogglePin, onImportPrompt }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);

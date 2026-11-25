@@ -39,6 +39,23 @@ function button(text: string, scope: ParentNode = container): HTMLButtonElement 
 }
 
 const click = (node: HTMLElement) => act(async () => node.click());
+
+/** React.lazy で分離した画面・ダイアログがマウントされるまで待つ。 */
+async function waitForMount(selector: string) {
+  await vi.waitFor(() => {
+    if (!container.querySelector(selector)) throw new Error(`waiting for ${selector}`);
+  }, { timeout: 5000 });
+}
+/** 取り込みダイアログの PNG 読み取りが終わる（成功の要約かエラーの表示）まで待つ。 */
+async function waitForImportResult() {
+  await vi.waitFor(() => {
+    if (!container.querySelector('.prompt-import-summary, .prompt-import-dialog [role="alert"]')) {
+      throw new Error('waiting for import result');
+    }
+  }, { timeout: 5000 });
+}
+
+
 /** 作業中のタグがあるときは、適用のあと未保存の確認も進める。 */
 async function acceptImport(scope: ParentNode) {
   await click(button('適用', scope));
@@ -48,17 +65,21 @@ async function acceptImport(scope: ParentNode) {
 }
 const preview = () => container.querySelector('output.preview-text')?.textContent;
 
-async function pick(file: File) {
+async function pick(file: File, waitForResult = true) {
   const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
   Object.defineProperty(input, 'files', { configurable: true, value: [file] });
   await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+  await waitForMount('.prompt-import-dialog');
+  if (waitForResult) await waitForImportResult();
 }
 
-async function drop(file: File, target: Element = container.querySelector('.png-drop-zone')!) {
+async function drop(file: File, target: Element = container.querySelector('.png-drop-zone')!, waitForResult = true) {
   const event = new Event('drop', { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [file] } });
   await act(async () => target.dispatchEvent(event));
   expect(event.defaultPrevented).toBe(true);
+  await waitForMount('.prompt-import-dialog');
+  if (waitForResult) await waitForImportResult();
 }
 
 beforeEach(async () => {
@@ -173,7 +194,10 @@ it('opens the shared PNG picker from preset actions and imports into the workspa
 it('reads the viewer PNG and leaves generation settings alone when the option is unchecked', async () => {
   await click(button('生成する（Ctrl+Enter）'));
   await click(container.querySelector<HTMLButtonElement>('.thumb-btn')!);
+  await waitForMount('.viewer');
   await click(button('プロンプトを読み込む', container.querySelector('.viewer')!));
+  await waitForMount('.prompt-import-dialog');
+  await waitForImportResult();
   expect(container.querySelector('dialog')?.textContent).toContain('ベース　3件（未分類 1件）');
   await acceptImport(container.querySelector('dialog')!);
   await click(button('生成する（Ctrl+Enter）'));
@@ -187,7 +211,7 @@ it('ignores an older read that completes after cancellation and a new selection'
   const stale = new File([imageBytes], 'stale.png', { type: 'image/png' });
   let finish!: (value: ArrayBuffer) => void;
   Object.defineProperty(stale, 'arrayBuffer', { value: () => new Promise<ArrayBuffer>((resolve) => { finish = resolve; }) });
-  await pick(stale);
+  await pick(stale, false);
   expect(container.querySelector('dialog')?.textContent).toContain('読み込んでいます');
   await click(button('キャンセル', container.querySelector('dialog')!));
   await pick(imageFile(pngFixture({ prompt: 'fresh tag' }), 'fresh.png'));
@@ -277,7 +301,10 @@ it('falls back to stored history when a viewer image has no PNG metadata', async
 
   await click(button('生成'));
   await click(container.querySelector<HTMLButtonElement>('.thumb-btn')!);
+  await waitForMount('.viewer');
   await click(button('プロンプトを読み込む', container.querySelector('.viewer')!));
+  await waitForMount('.prompt-import-dialog');
+  await waitForImportResult();
   const dialog = container.querySelector('dialog')!;
   expect(dialog.textContent).toContain('ベース　1件（未分類 1件）');
   expect(dialog.textContent).toContain('履歴に保持していた送信情報から読み込みました');

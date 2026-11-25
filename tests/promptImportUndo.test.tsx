@@ -58,6 +58,14 @@ function button(text: string, scope: ParentNode = container): HTMLButtonElement 
 }
 
 const click = (node: HTMLElement) => act(async () => node.click());
+
+/** React.lazy で分離した画面・ダイアログがマウントされるまで待つ。 */
+async function waitForMount(selector: string) {
+  await vi.waitFor(() => {
+    if (!container.querySelector(selector)) throw new Error(`waiting for ${selector}`);
+  }, { timeout: 5000 });
+}
+
 const preview = () => container.querySelector('output.preview-text')?.textContent;
 const field = (suffix: string) => container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[id$="-${suffix}"]`);
 const openBase = () => click(container.querySelector<HTMLButtonElement>('.editor-tablist [role="tab"]')!);
@@ -70,6 +78,9 @@ async function dropImport() {
   const event = new Event('drop', { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [imageFile()] } });
   await act(async () => target.dispatchEvent(event));
+  await waitForMount('.prompt-import-dialog');
+  // PNG の読み取りが終わって生成設定のチェックボックスが出るまで待つ
+  await waitForMount('.prompt-import-dialog input[type="checkbox"]');
   const dialog = container.querySelector('.prompt-import-dialog');
   if (!dialog) throw new Error('取り込みダイアログがありません');
   await click(dialog.querySelector('input[type="checkbox"]')!);
@@ -230,6 +241,7 @@ it('aborts applying and returns to preview when a backup finishes while the conf
     base: { quality: [{ tag: 'backup-tag', enabled: true, weight: 1 }] },
   }));
   await click(button('設定'));
+  await waitForMount('input[accept*="json"]');
   const input = container.querySelector<HTMLInputElement>('input[accept*="json"]');
   if (!input) throw new Error('バックアップの入力がありません');
   const file = new File([toBackupJSON({
@@ -273,6 +285,7 @@ it('aborts applying and uses the updated preview when the dictionary changes whi
   let release!: () => void;
   vi.mocked(replaceAllEntries).mockImplementation(() => new Promise<void>((resolve) => { release = resolve; }));
   await click(container.querySelector<HTMLButtonElement>('.tab-dictionary')!);
+  await waitForMount('input[accept*="csv"]');
   const input = container.querySelector<HTMLInputElement>('input[accept*="csv"]');
   if (!input) throw new Error('辞書の入力がありません');
   const file = new File(['tag,category\ngirl,appearance\n'], 'dict.csv', { type: 'text/csv' });
@@ -336,7 +349,14 @@ it('restores a metadata-less history image via fallback and undoes the import', 
 
   await click(button('生成'));
   await click(container.querySelector<HTMLButtonElement>('.thumb-btn')!);
+  await waitForMount('.viewer');
   await click(button('プロンプトを読み込む', container.querySelector('.viewer')!));
+  await waitForMount('.prompt-import-dialog');
+  await vi.waitFor(() => {
+    if (!container.querySelector('.prompt-import-summary, .prompt-import-dialog [role="alert"]')) {
+      throw new Error('waiting for import result');
+    }
+  }, { timeout: 5000 });
   const dialog = container.querySelector('.prompt-import-dialog');
   if (!dialog) throw new Error('取り込みダイアログがありません');
   expect(dialog.textContent).toContain('履歴に保持していた送信情報から読み込みました');

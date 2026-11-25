@@ -67,6 +67,13 @@ const flush = async (ms = 50) => {
   });
 };
 
+/** React.lazy で分離した画面・ダイアログがマウントされるまで待つ。 */
+async function waitForMount(selector: string) {
+  await vi.waitFor(() => {
+    if (!container.querySelector(selector)) throw new Error(`waiting for ${selector}`);
+  }, { timeout: 5000 });
+}
+
 async function writeFromOtherTab(
   patch: {
     workspace?: unknown;
@@ -192,6 +199,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
 
     // 辞書タブで編集フォームを開く
     await click(button('辞書'));
+    await waitForMount('.dictionary');
     await click(button('編集', container.querySelector('.dictionary')!));
     expect(container.querySelector('.entry-form')).not.toBeNull();
 
@@ -227,6 +235,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     expect(container.querySelector('output.preview-text')?.textContent).toContain('from-other-tab');
     // 辞書タブの下書きが閉じ、最新辞書が表示される
     await click(button('辞書'));
+    await waitForMount('.dictionary');
     expect(container.querySelector('.entry-form')).toBeNull();
     expect(container.textContent).toContain('moonlight');
   });
@@ -252,6 +261,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     expect(container.querySelector('output.preview-text')?.textContent).toBe('ONのタグがありません');
     // トークンも削除状態に同期されている
     await click(button('設定'));
+    await waitForMount('.settings');
     expect(container.querySelector('.token-status')?.textContent).toContain('未設定');
   });
 
@@ -380,6 +390,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     await flush(80);
 
     await click(button('設定'));
+    await waitForMount('.settings');
     expect(container.querySelector('.token-status')?.textContent).toContain('未設定');
 
     // タブ限定の sessionStorage トークンは別タブの削除で消えないことも確認
@@ -394,6 +405,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     await click(button('最新のデータを読み込む'));
     await flush(80);
     await click(button('設定'));
+    await waitForMount('.settings');
     expect(container.querySelector('.token-status')?.textContent).toContain('設定済み');
     expect(container.querySelector('.token-status')?.textContent).toContain('このタブだけ');
   });
@@ -403,6 +415,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     await writeFromOtherTab({ workspace: initialWs }, false);
     await mountApp();
     await click(button('設定'));
+    await waitForMount('.settings');
 
     // バックアップファイルの text() 読み取りを保留し、その間に他タブがプリセットを追加してこのタブで再読み込みする
     let releaseFileText!: (text: string) => void;
@@ -460,6 +473,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     await writeFromOtherTab({ workspace: initialWs }, false);
     await mountApp();
     await click(button('設定'));
+    await waitForMount('.settings');
 
     let releaseFileText!: (text: string) => void;
     const backupJson = JSON.stringify({
@@ -499,6 +513,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     }, false);
     await mountApp();
     await click(button('辞書'));
+    await waitForMount('.dictionary');
 
     let releaseFileText!: (text: string) => void;
     const dictJson = JSON.stringify({ app: 'nai-tagdeck', version: 1, entries: [{ tag: 'old-import', category: 'quality' }] });
@@ -566,6 +581,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     expect(container.querySelector('.tab-sync')?.textContent).toContain('migration failed');
     expect(container.querySelector('output.preview-text')?.textContent).toContain('keep-me');
     await click(button('辞書'));
+    await waitForMount('.dictionary');
     expect(container.textContent).toContain('old-dict');
     expect(container.textContent).not.toContain('new-dict');
 
@@ -586,6 +602,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     }, false);
     await mountApp();
     await click(button('設定'));
+    await waitForMount('.settings');
 
     // 別タブのリスナーで通知を受けた瞬間の DB 状態を検査する
     const peer = new FakeBroadcastChannel('nai-tagdeck:sync');
@@ -640,6 +657,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     }, false);
     await mountApp();
     await click(button('設定'));
+    await waitForMount('.settings');
 
     const peer = new FakeBroadcastChannel('nai-tagdeck:sync');
     const observedAtNotice: Array<{ msg: unknown; snapshot: Awaited<ReturnType<typeof readAllAppData>> }> = [];
@@ -700,6 +718,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
 
     // 自動保存エラー後でも全ストア読み込み済みならバックアップ読み込みボタンは有効なまま
     await click(button('設定'));
+    await waitForMount('.settings');
     const input = container.querySelector<HTMLInputElement>('.backup-actions input[type="file"]')!;
     expect(input.disabled).toBe(false);
 
@@ -782,6 +801,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     // 編集してデバウンス保存を保留させる（300ms 経過前に復元を開始する）
     await click(button('best quality'));
     await click(button('設定'));
+    await waitForMount('.settings');
 
     let releaseReplace!: () => void;
     const realReplace = dbModule.replaceAllAppData;
@@ -840,6 +860,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     });
 
     await click(button('辞書'));
+    await waitForMount('.dictionary');
     await click(button('＋ 新規登録'));
     const form = container.querySelector<HTMLFormElement>('section[aria-label="新規登録"] form')!;
     const tagInput = form.querySelector<HTMLInputElement>('input')!;
@@ -855,6 +876,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
 
     // 辞書保存が完了する前に設定タブからバックアップを復元する
     await click(button('設定'));
+    await waitForMount('.settings');
     const backupWs = emptyWorkspace();
     const backupJson = JSON.stringify({
       app: 'nai-tagdeck',
@@ -909,6 +931,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     expect(container.querySelector('.error-banner')?.textContent).toContain('quota exceeded');
     expect(container.querySelector('output.preview-text')?.textContent).toContain('legacy-saved-tag');
     await click(button('辞書'));
+    await waitForMount('.dictionary');
     expect(container.textContent).toContain('saved-dict-tag');
 
     // 移行未完了の間は workspace の自動保存が走らず、settings の旧ネガティブも消えない
