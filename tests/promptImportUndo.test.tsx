@@ -213,7 +213,13 @@ it('cancels only the PNG confirmation when saving fails and leaves another queue
   });
   await click(button('適用', dialog));
   vi.mocked(setKV).mockRejectedValue(new Error('disk'));
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 400)); });
+  // 保存は 300ms のデバウンス後に走るため、固定 400ms の待機では負荷時に
+  // エラー表示より先にアサーションが走って間欠的に失敗していた（#140）。
+  // 条件が揃うまで待つことで、負荷がかかっても確定的に待てるようにする。
+  await vi.waitFor(() => {
+    expect(container.textContent).toContain('保存できません');
+    expect(container.querySelector('.prompt-import-dialog')).toBeNull();
+  }, { timeout: 5000 });
   expect(container.textContent).toContain('保存できません');
   expect(container.querySelector('.prompt-import-dialog')).toBeNull();
   expect(chooseDialog()).toBeUndefined();
