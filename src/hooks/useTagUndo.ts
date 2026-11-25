@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch } from 'react';
-import type { GenerationSettings } from '../lib/generation';
+import { normalizeGeneration, type GenerationSettings } from '../lib/generation';
 import type { Workspace } from '../types';
 import { workspaceReducer, type WorkspaceAction } from '../lib/workspace';
 
@@ -86,9 +86,22 @@ function freezeExtras(
   if (after.generation !== undefined) {
     const beforeGeneration: Partial<GenerationSettings> = {};
     const afterGeneration: Partial<GenerationSettings> = {};
-    for (const key of Object.keys(after.generation) as (keyof GenerationSettings)[]) {
-      const value = after.generation[key];
-      if (value === undefined || Object.is(value, current.generation[key])) continue;
+    const keys = new Set(Object.keys(after.generation) as (keyof GenerationSettings)[]);
+    // サイズが変わり、どちらかがカスタムなら寸法もスナップショットに入れる。
+    // プリセットへ戻るときの寸法は undefined だが、Undo でカスタムへ戻すときに
+    // 元の寸法が必要なので、undefined のまま before とともに残す。
+    if (after.generation.size !== undefined && after.generation.size !== current.generation.size &&
+        (after.generation.size === 'custom' || current.generation.size === 'custom')) {
+      keys.add('customWidth');
+      keys.add('customHeight');
+    }
+    const nextGeneration = normalizeGeneration({ ...current.generation, ...after.generation });
+    for (const key of keys) {
+      const value = key === 'customWidth' || key === 'customHeight'
+        ? nextGeneration[key]
+        : after.generation[key];
+      if (value === undefined && current.generation[key] === undefined) continue;
+      if (Object.is(value, current.generation[key])) continue;
       beforeGeneration[key] = current.generation[key] as never;
       afterGeneration[key] = value as never;
     }

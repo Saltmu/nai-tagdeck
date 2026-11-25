@@ -240,6 +240,22 @@ describe('NovelAI PNG import', () => {
     expect(nonLeading.generation.values.mode).toBeUndefined();
   });
 
+  it('imports a free-tier custom size from a PNG and skips out-of-range sizes', async () => {
+    const custom = await read({ prompt: 'standing', width: 896, height: 1152, seed: 1 });
+    expect(custom.generation.values).toMatchObject({ size: 'custom', customWidth: 896, customHeight: 1152, seed: 1 });
+    expect(custom.generation.labels).toContain('サイズ カスタム 896×1152');
+    expect(custom.generation.skipped).not.toContain('サイズ');
+
+    const tooBig = await read({ prompt: 'standing', width: 1024, height: 1536, seed: 1 });
+    expect(tooBig.generation.values).not.toHaveProperty('size');
+    expect(tooBig.generation.values).not.toHaveProperty('customWidth');
+    expect(tooBig.generation.skipped).toContain('サイズ');
+
+    const notMultiple = await read({ prompt: 'standing', width: 900, height: 1152, seed: 1 });
+    expect(notMultiple.generation.values).not.toHaveProperty('size');
+    expect(notMultiple.generation.skipped).toContain('サイズ');
+  });
+
   it('rounds in-range scale values to one decimal place and skips out-of-range values', async () => {
     expect((await read({ prompt: 'a', scale: 5.01 })).generation.values.scale).toBe(5);
     expect((await read({ prompt: 'a', scale: 5.26 })).generation.values.scale).toBe(5.3);

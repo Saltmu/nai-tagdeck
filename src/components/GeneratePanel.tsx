@@ -1,12 +1,16 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import type { Generator } from '../hooks/useGenerator';
 import type { TokenState } from '../hooks/useToken';
 import {
   CFG_RESCALE_MAX,
+  CUSTOM_SIZE_SUGGESTIONS,
   GENERATION_MODES,
   NOISE_SCHEDULES,
   SAMPLERS,
+  adjustCustomHeight,
+  adjustCustomWidth,
   modeLabel,
+  resolveSize,
   samplerLabel,
   SCALE_MAX,
   SCALE_MIN,
@@ -30,6 +34,10 @@ interface Props {
   onGenerate: () => void;
 }
 
+function formatPixels(n: number): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 export function GeneratePanel({
   generation,
   onGenerationChange,
@@ -41,6 +49,30 @@ export function GeneratePanel({
 }: Props) {
   const id = useId();
   const { generating } = generator;
+  const [customHint, setCustomHint] = useState('');
+  const customSize = resolveSize(generation);
+  const customPixels = customSize.width * customSize.height;
+
+  const applyCustomSize = (width: number, height: number, hint?: string) => {
+    onGenerationChange({ size: 'custom', customWidth: width, customHeight: height });
+    setCustomHint(hint ?? '');
+  };
+  const applyCustomWidth = (value: number | null) => {
+    if (value === null) return;
+    const adjusted = adjustCustomWidth(value, customSize.height);
+    const hints: string[] = [];
+    if (adjusted.width !== value) hints.push(`幅を 64 の倍数に丸め、${adjusted.width} にしました`);
+    if (adjusted.height !== customSize.height) hints.push(`無料枠に収まるよう高さを ${adjusted.height} に調整しました`);
+    applyCustomSize(adjusted.width, adjusted.height, hints.join('。') + (hints.length > 0 ? '。' : ''));
+  };
+  const applyCustomHeight = (value: number | null) => {
+    if (value === null) return;
+    const adjusted = adjustCustomHeight(customSize.width, value);
+    const hints: string[] = [];
+    if (adjusted.height !== value) hints.push(`高さを 64 の倍数に丸め、${adjusted.height} にしました`);
+    if (adjusted.width !== customSize.width) hints.push(`無料枠に収まるよう幅を ${adjusted.width} に調整しました`);
+    applyCustomSize(adjusted.width, adjusted.height, hints.join('。') + (hints.length > 0 ? '。' : ''));
+  };
 
   return (
     <div className="generate">
@@ -76,15 +108,76 @@ export function GeneratePanel({
           <select
             id={`${id}-size`}
             value={generation.size}
-            onChange={(e) => onGenerationChange({ size: e.target.value as SizeKey })}
+            onChange={(e) => {
+              const next = e.target.value as SizeKey;
+              if (next === 'custom') {
+                const { width, height } = resolveSize(generation);
+                onGenerationChange({ size: 'custom', customWidth: width, customHeight: height });
+              } else {
+                onGenerationChange({ size: next });
+              }
+            }}
           >
             {SIZE_PRESETS.map((s) => (
               <option key={s.key} value={s.key}>
                 {s.label}
               </option>
             ))}
+            <option value="custom">カスタム…</option>
           </select>
         </label>
+        {generation.size === 'custom' && (
+          <div className="field field-wide custom-size">
+            <div className="custom-size-fields">
+              <label className="field" htmlFor={`${id}-custom-width`}>
+                <span>幅</span>
+                <NumberField
+                  id={`${id}-custom-width`}
+                  value={customSize.width}
+                  min={FREE_LIMITS.minSide}
+                  max={FREE_LIMITS.maxSide}
+                  step={FREE_LIMITS.sizeStep}
+                  onChange={applyCustomWidth}
+                />
+              </label>
+              <label className="field" htmlFor={`${id}-custom-height`}>
+                <span>高さ</span>
+                <NumberField
+                  id={`${id}-custom-height`}
+                  value={customSize.height}
+                  min={FREE_LIMITS.minSide}
+                  max={FREE_LIMITS.maxSide}
+                  step={FREE_LIMITS.sizeStep}
+                  onChange={applyCustomHeight}
+                />
+              </label>
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => applyCustomSize(customSize.height, customSize.width)}
+              >
+                縦横を入れ替え
+              </button>
+            </div>
+            <div className="custom-size-suggestions" aria-label="カスタムサイズの候補">
+              {CUSTOM_SIZE_SUGGESTIONS.map((s) => (
+                <button
+                  key={`${s.width}x${s.height}`}
+                  type="button"
+                  className="btn btn-small"
+                  aria-label={`カスタムサイズ ${s.width}×${s.height} にする`}
+                  onClick={() => applyCustomSize(s.width, s.height)}
+                >
+                  {s.width}×{s.height}
+                </button>
+              ))}
+            </div>
+            <p className="hint custom-size-status" aria-live="polite">
+              {customSize.width}×{customSize.height}（{formatPixels(customPixels)} / {formatPixels(FREE_LIMITS.maxPixels)} px）
+              {customHint ? `　${customHint}` : ''}
+            </p>
+          </div>
+        )}
         <label className="field" htmlFor={`${id}-steps`}>
           <span>ステップ（〜{FREE_LIMITS.maxSteps}）</span>
           <NumberField

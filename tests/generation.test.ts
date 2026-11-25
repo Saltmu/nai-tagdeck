@@ -11,11 +11,19 @@ import {
   sniffImageType,
 } from '../src/lib/novelai';
 import {
+  CUSTOM_SIZE_SUGGESTIONS,
   DEFAULT_GENERATION,
   SIZE_PRESETS,
+  adjustCustomHeight,
+  adjustCustomWidth,
+  fitFreeSize,
+  isValidFreeSize,
   modeLabel,
   normalizeGeneration,
+  resolveSize,
   samplerLabel,
+  sizeLabel,
+  sizeOf,
   toParams,
 } from '../src/lib/generation';
 import { isFreeGeneration } from '../src/lib/novelai';
@@ -297,6 +305,70 @@ describe('generation settings', () => {
     expect(samplerLabel('custom')).toBe('custom');
   });
 
+  it('カスタムサイズの候補はすべて無料枠内', () => {
+    expect(CUSTOM_SIZE_SUGGESTIONS).toHaveLength(6);
+    for (const s of CUSTOM_SIZE_SUGGESTIONS) {
+      expect(isFreeGeneration({ width: s.width, height: s.height, steps: 28 })).toBe(true);
+      expect(isValidFreeSize(s.width, s.height)).toBe(true);
+    }
+  });
+
+  it('無料枠の寸法だけを有効とする', () => {
+    expect(isValidFreeSize(896, 1152)).toBe(true);
+    expect(isValidFreeSize(512, 2048)).toBe(true);
+    expect(isValidFreeSize(900, 1152)).toBe(false);
+    expect(isValidFreeSize(32, 1152)).toBe(false);
+    expect(isValidFreeSize(2112, 448)).toBe(false);
+    expect(isValidFreeSize(1024, 1536)).toBe(false);
+    expect(isValidFreeSize('896', 1152)).toBe(false);
+    expect(isValidFreeSize(896.5, 1152)).toBe(false);
+    expect(isValidFreeSize(undefined, undefined)).toBe(false);
+  });
+
+  it('不正な寸法を安全に補正する', () => {
+    expect(fitFreeSize(900, 1152)).toEqual({ width: 896, height: 1152 });
+    expect(fitFreeSize(3000, 3000)).toEqual({ width: 1024, height: 1024 });
+    expect(fitFreeSize(2048, 2048)).toEqual({ width: 1024, height: 1024 });
+    expect(fitFreeSize(undefined, undefined)).toEqual({ width: 832, height: 1216 });
+    expect(fitFreeSize('x', 1152)).toEqual({ width: 832, height: 1152 });
+    expect(fitFreeSize(64, 64)).toEqual({ width: 64, height: 64 });
+  });
+
+  it('片辺の編集は編集した辺を優先し、超えるときだけもう一方を調整する', () => {
+    expect(adjustCustomWidth(896, 1152)).toEqual({ width: 896, height: 1152 });
+    expect(adjustCustomWidth(900, 1152)).toEqual({ width: 896, height: 1152 });
+    expect(adjustCustomWidth(1024, 1216)).toEqual({ width: 1024, height: 1024 });
+    expect(adjustCustomWidth(2048, 1216)).toEqual({ width: 2048, height: 512 });
+    expect(adjustCustomHeight(1216, 1024)).toEqual({ width: 1024, height: 1024 });
+    expect(adjustCustomHeight(896, 1152)).toEqual({ width: 896, height: 1152 });
+  });
+
+  it('カスタム寸法は保持し、プリセットでは落とす', () => {
+    const custom = normalizeGeneration({ ...DEFAULT_GENERATION, size: 'custom', customWidth: 896, customHeight: 1152 });
+    expect(custom).toMatchObject({ size: 'custom', customWidth: 896, customHeight: 1152 });
+    expect(normalizeGeneration(custom)).toEqual(custom);
+    expect(normalizeGeneration({ ...custom, size: 'portrait' })).not.toHaveProperty('customWidth');
+    expect(normalizeGeneration({ ...custom, size: 'portrait' })).not.toHaveProperty('customHeight');
+    expect(normalizeGeneration({ size: 'custom' })).toMatchObject({ size: 'custom', customWidth: 832, customHeight: 1216 });
+    expect(normalizeGeneration({ size: 'custom', customWidth: 900, customHeight: 1152 })).toMatchObject({
+      size: 'custom', customWidth: 896, customHeight: 1152,
+    });
+    expect(normalizeGeneration({ size: 'custom', customWidth: 1024, customHeight: 1536 })).toMatchObject({
+      size: 'custom', customWidth: 832, customHeight: 1216,
+    });
+  });
+
+  it('サイズを解決して表示名を返す', () => {
+    expect(resolveSize(DEFAULT_GENERATION)).toEqual({ width: 832, height: 1216 });
+    expect(resolveSize({ size: 'custom', customWidth: 896, customHeight: 1152 })).toEqual({ width: 896, height: 1152 });
+    expect(resolveSize({ size: 'custom' })).toEqual({ width: 832, height: 1216 });
+    expect(sizeLabel(DEFAULT_GENERATION)).toBe('縦 832×1216');
+    expect(sizeLabel({ size: 'custom', customWidth: 896, customHeight: 1152 })).toBe('カスタム 896×1152');
+    expect(sizeOf('portrait')).toEqual({ width: 832, height: 1216 });
+    expect(sizeOf('custom')).toEqual({ width: 832, height: 1216 });
+    expect(sizeOf({ size: 'custom', customWidth: 640, customHeight: 1536 })).toEqual({ width: 640, height: 1536 });
+  });
+
   it('送信用のパラメータにする', () => {
     expect(toParams({ ...DEFAULT_GENERATION, size: 'landscape' }, 7)).toMatchObject({
       width: 1216,
@@ -306,6 +378,14 @@ describe('generation settings', () => {
       cfgRescale: 0,
       dynamicThresholding: false,
     });
+    expect(toParams({ ...DEFAULT_GENERATION, size: 'custom', customWidth: 896, customHeight: 1152 }, 7)).toMatchObject({
+      width: 896,
+      height: 1152,
+    });
+    expect(() => toParams({ ...DEFAULT_GENERATION, size: 'custom', customWidth: 1024, customHeight: 1536 }, 7))
+      .toThrow('Anlas');
+    expect(() => toParams({ ...DEFAULT_GENERATION, size: 'custom', customWidth: 900, customHeight: 1152 }, 7))
+      .toThrow('Anlas');
     expect(toParams({ ...DEFAULT_GENERATION, cfgRescale: 0.2, dynamicThresholding: true }, 7)).toMatchObject({
       cfgRescale: 0.2,
       dynamicThresholding: true,

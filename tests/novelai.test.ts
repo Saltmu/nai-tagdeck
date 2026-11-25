@@ -124,6 +124,25 @@ describe('isFreeGeneration', () => {
     expect(isFreeGeneration({ width: 1024, height: 1088, steps: 28 })).toBe(false);
     expect(isFreeGeneration({ width: 832, height: 1216, steps: 29 })).toBe(false);
   });
+
+  it('64 の倍数・辺の範囲・整数・ステップ範囲を厳格に判定する', () => {
+    // 辺の端と、画素数がちょうど上限になる組み合わせは無料枠内
+    expect(isFreeGeneration({ width: 512, height: 2048, steps: 28 })).toBe(true);
+    expect(isFreeGeneration({ width: 64, height: 64, steps: 1 })).toBe(true);
+    expect(isFreeGeneration({ width: 640, height: 1536, steps: 28 })).toBe(true);
+    // 非 64 倍数・範囲外・非整数は拒否
+    expect(isFreeGeneration({ width: 900, height: 1152, steps: 28 })).toBe(false);
+    expect(isFreeGeneration({ width: 832, height: 1216, steps: 28 })).toBe(true);
+    expect(isFreeGeneration({ width: 32, height: 1216, steps: 28 })).toBe(false);
+    expect(isFreeGeneration({ width: 2112, height: 448, steps: 28 })).toBe(false);
+    expect(isFreeGeneration({ width: 832.5, height: 1216, steps: 28 })).toBe(false);
+    expect(isFreeGeneration({ width: NaN, height: 1216, steps: 28 })).toBe(false);
+    expect(isFreeGeneration({ width: 832, height: Infinity, steps: 28 })).toBe(false);
+    // ステップは 1〜28 の整数のみ
+    expect(isFreeGeneration({ width: 832, height: 1216, steps: 0 })).toBe(false);
+    expect(isFreeGeneration({ width: 832, height: 1216, steps: 28.5 })).toBe(false);
+    expect(isFreeGeneration({ width: 832, height: 1216, steps: NaN })).toBe(false);
+  });
 });
 
 describe('normalizeSettings', () => {

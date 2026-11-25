@@ -364,3 +364,37 @@ it('closes the preview dialog natively before unmounting when no confirmation is
   expect(container.querySelector('.prompt-import-dialog')).toBeNull();
   expect(preview()).toBe('standing');
 });
+
+it('imports a custom PNG size and undoes it back to the preset size', async () => {
+  const customBytes = pngFixture({
+    v4_prompt: caption('standing', ['girl']),
+    v4_negative_prompt: caption('old negative', ['imported neg']),
+    width: 896, height: 1152, seed: 42, steps: 28,
+  });
+  const customFile = new File([customBytes], 'custom.png', { type: 'image/png' });
+  Object.defineProperty(customFile, 'arrayBuffer', { value: async () => customBytes.buffer });
+  const target = container.querySelector('.png-drop-zone')!;
+  const event = new Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [customFile] } });
+  await act(async () => target.dispatchEvent(event));
+  const dialog = container.querySelector('.prompt-import-dialog');
+  if (!dialog) throw new Error('取り込みダイアログがありません');
+  expect(dialog.textContent).toContain('サイズ カスタム 896×1152');
+  await click(dialog.querySelector('input[type="checkbox"]')!);
+  await click(button('適用', dialog));
+  await click(button('反映せずに適用', chooseDialog()!));
+  expect(preview()).toBe('standing');
+  expect(field('size')?.value).toBe('custom');
+  expect(field('custom-width')?.value).toBe('896');
+  expect(field('custom-height')?.value).toBe('1152');
+
+  await click(button('元に戻す'));
+  expect(preview()).toBe('existing');
+  expect(field('size')?.value).toBe('portrait');
+
+  await click(button('やり直す'));
+  expect(preview()).toBe('standing');
+  expect(field('size')?.value).toBe('custom');
+  expect(field('custom-width')?.value).toBe('896');
+  expect(field('custom-height')?.value).toBe('1152');
+});
