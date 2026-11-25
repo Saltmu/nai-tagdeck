@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent
 import type { CategoryKey, DictEntry } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import { CATEGORIES, categoryLabel, isCategoryKey } from '../lib/categories';
-import { findDuplicate, parseImportFile, toCSV, toJSON, UTF8_BOM, type ImportMode, type ImportResult } from '../lib/io';
+import { findDuplicate, findDuplicateGroups, parseImportFile, toCSV, toJSON, UTF8_BOM, type ImportMode, type ImportResult } from '../lib/io';
 import { formatWeight, isNeutralWeight } from '../lib/prompt';
 import { filterEntries } from '../lib/suggest';
 import { normalize } from '../lib/tagText';
@@ -74,6 +74,12 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
   const pageStart = page * PAGE_SIZE;
   const shown = filtered.slice(pageStart, pageStart + PAGE_SIZE);
   const hasPager = filtered.length > PAGE_SIZE;
+  // カテゴリをまたいだ重複タグ（空白の有無の違いを含む）。一覧の上に警告を出す。
+  const duplicateGroups = useMemo(() => findDuplicateGroups(entries), [entries]);
+  const duplicateIds = useMemo(
+    () => new Set(duplicateGroups.flatMap((group) => group.entries.map((entry) => entry.id))),
+    [duplicateGroups],
+  );
 
   useEffect(() => {
     if (pageIndex !== page) setPageIndex(page);
@@ -331,8 +337,8 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
           <button type="button" className="btn" disabled={entries.length === 0} onClick={() => exportAs('csv')}>
             CSV書き出し
           </button>
-          <label className="btn file-btn">
-            読み込み
+          <label className="btn file-btn" title="辞書の JSON/CSV ファイルを読み込む">
+            辞書を読み込む
             <input
               type="file"
               className="visually-hidden"
@@ -342,7 +348,9 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
             />
           </label>
         </div>
-        <p className="hint">初期カテゴリのタグを補います。同名タグは既存のカテゴリ・日本語名・重み・並び順を保持します。</p>
+        <p className="hint">
+          「初期カテゴリを復元」は初期カテゴリのタグを補います。同名タグは既存のカテゴリ・日本語名・重み・並び順を保持します。
+        </p>
       </section>
 
       {pendingImport && (
@@ -386,6 +394,14 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
             {filtered.length}件 / 全{entries.length}件
             {hasPager && `（${pageStart + 1}〜${pageStart + shown.length}件目）`}
           </p>
+          {duplicateGroups.length > 0 && (
+            <p className="dict-duplicate-warning" role="note">
+              重複しているタグがあります：
+              {duplicateGroups.slice(0, 5).map((group) => `「${group.tag}」（${group.entries.length}件）`).join('、')}
+              {duplicateGroups.length > 5 && `、ほか${duplicateGroups.length - 5}件`}
+              。同じタグが複数のカテゴリにあります。不要なものは削除してください。
+            </p>
+          )}
           <ul className="dict-list">
             {shown.map((entry) =>
               editingId === entry.id ? (
@@ -405,6 +421,7 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
                   </div>
                   <div className="dict-meta">
                     <span className="chip">{categoryLabel(entry.category)}</span>
+                    {duplicateIds.has(entry.id) && <span className="chip chip-duplicate">重複</span>}
                     {!isNeutralWeight(entry.default_weight) && (
                       <span className="chip chip-weight">×{formatWeight(entry.default_weight)}</span>
                     )}

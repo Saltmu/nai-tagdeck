@@ -1,4 +1,4 @@
-import { lazy, Suspense, type CSSProperties, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, type CSSProperties, useEffect, useId, useRef, useState } from 'react';
 import type { GeneratedImage } from '../hooks/useImages';
 import { downloadBlob, downloadUrl, timeStamp } from '../lib/browser';
 import { imageFileName } from '../lib/imageFileName';
@@ -50,6 +50,7 @@ export function Gallery({
   onReadPng,
 }: Props) {
   const dialogs = useDialogs();
+  const id = useId();
   const [openId, setOpenId] = useState<string | null>(null);
   const [zipError, setZipError] = useState('');
   const [zipping, setZipping] = useState(false);
@@ -139,6 +140,7 @@ export function Gallery({
             className="btn btn-small gallery-zip-btn"
             disabled={pinnedCount === 0}
             aria-busy={zipping}
+            aria-describedby={pinnedCount === 0 ? `${id}-actions-hint` : undefined}
             title={pinnedCount === 0 ? 'ピン留めした画像をまとめて ZIP で保存します' : `ピン留めした ${pinnedCount}枚を ZIP で保存`}
             onClick={() => void downloadPinnedZip()}
           >
@@ -150,6 +152,7 @@ export function Gallery({
             type="button"
             className="btn btn-small btn-danger"
             disabled={images.length === 0}
+            aria-describedby={images.length === 0 ? `${id}-actions-hint` : undefined}
             onClick={async () => {
               const ok = await dialogs.confirm(`画像 ${images.length}枚をすべて削除しますか？（削除した画像は戻せません。DL操作済みの画像も含め、端末に保存されているか確認してから削除してください）`, {
                 okLabel: 'すべて削除',
@@ -162,6 +165,13 @@ export function Gallery({
           </button>
         </div>
       </div>
+      {(images.length === 0 || pinnedCount === 0) && (
+        <p className="hint gallery-actions-hint" id={`${id}-actions-hint`} role="note">
+          {images.length === 0
+            ? '画像がまだありません'
+            : 'ピン留めした画像がありません。ZIP保存するには画像をピン留めしてください'}
+        </p>
+      )}
 
       <div
         className="gallery-meter"

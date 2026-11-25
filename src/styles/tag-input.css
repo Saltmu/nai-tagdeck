@@ -120,3 +120,8 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   color: var(--weighted);
 }
 
+.chip-duplicate {
+  color: var(--weighted);
+  border: 1px solid var(--weighted);
+}
+

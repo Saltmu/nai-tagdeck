@@ -154,7 +154,7 @@ it('searches the open pane, keeps ON tags, and highlights matches', async () => 
   expect(textOf('.tag-filter-count')).toBe('');
   await chooseDisplayAction('ONのみ');
   expect(button('ONのみ').getAttribute('aria-pressed')).toBe('true');
-  expect(textOf('.tag-list-actions summary')).toBe('表示（ONのみ）');
+  expect(textOf('.tag-list-actions summary')).toBe('表示切替（ONのみ）');
   expect(container.textContent).toContain('long hair');
   expect(container.textContent).not.toContain('short hair');
   expect(textOf('.tag-filter-count')).toBe('該当 1件');
@@ -222,7 +222,9 @@ it('opens and closes every category in the current pane from the display menu an
 
   await chooseDisplayAction('すべて開く');
   expect(categoryButtons().every((item) => item.getAttribute('aria-expanded') === 'true')).toBe(true);
-  expect(categoryButtons().find((item) => item.textContent?.includes('外見'))?.textContent).toContain('1/2 · 該当 2件');
+  const opened = categoryButtons().find((item) => item.textContent?.includes('外見'))?.textContent ?? '';
+  expect(opened).toContain('該当 2件');
+  expect(opened).not.toContain('1/2');
 
   await search('');
   await click('中');
@@ -319,4 +321,22 @@ it('matches dictionary aliases in editor search and displays inline alias hint',
   expect(rows[0]!.querySelector('.tag-name')?.textContent).toBe('blonde hair');
   expect(rows[0]!.querySelector('.tag-alias')?.textContent).toBe('金髪');
   expect(rows[0]!.querySelector('.tag-alias mark')?.textContent).toBe('金髪');
+});
+
+it('shows the negative defaults note behind a help icon and the reason when all defaults are added', async () => {
+  await click('ネガティブ');
+  const addDefaults = button('既定のタグを追加');
+  expect(addDefaults.disabled).toBe(true);
+  expect(container.textContent).toContain('既定のタグはすべて追加済みです');
+  expect(container.textContent).not.toContain('既定は公式UIの UC プリセット');
+  const help = container.querySelector<HTMLButtonElement>('button[aria-label="既定のタグについての説明"]')!;
+  expect(help.getAttribute('aria-expanded')).toBe('false');
+  await act(async () => help.click());
+  expect(help.getAttribute('aria-expanded')).toBe('true');
+  expect(container.textContent).toContain('既定は公式UIの UC プリセット「heavy」と同じタグです');
+  expect(container.textContent).toContain('NSFW を生成するときは nsfw を OFF にしてください');
+});
+
+it('shows a visible label on the preset actions button', async () => {
+  expect(textOf('.preset-bar summary')).toContain('操作');
 });

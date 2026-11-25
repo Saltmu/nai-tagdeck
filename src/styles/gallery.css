@@ -59,6 +59,10 @@
   gap: 0.4rem;
 }
 
+.gallery-actions-hint {
+  margin: 0.4rem 0 0;
+}
+
 .gallery .card-title .count.is-full {
   color: var(--weighted);
   font-weight: 600;

@@ -267,3 +267,28 @@ export function findDuplicate(
   const key = entryKey(candidate);
   return entries.find((e) => e.id !== candidate.id && entryKey(e) === key);
 }
+
+export interface DuplicateGroup {
+  /** 表示するタグ名（グループ内で最初に現れたもの）。 */
+  tag: string;
+  entries: DictEntry[];
+}
+
+/**
+ * カテゴリをまたいで重複しているタグの組を返す。空白の有無（line art／lineart）や
+ * 大文字・全角の違いは `normalize` で吸収し、空白も除いて比べる。
+ */
+export function findDuplicateGroups(entries: readonly DictEntry[]): DuplicateGroup[] {
+  const byKey = new Map<string, DictEntry[]>();
+  for (const entry of entries) {
+    const key = normalize(entry.tag).replace(/\s+/g, '');
+    if (!key) continue;
+    const group = byKey.get(key);
+    if (group) group.push(entry);
+    else byKey.set(key, [entry]);
+  }
+  return [...byKey.values()]
+    .filter((group) => group.length > 1)
+    .map((group) => ({ tag: group[0]!.tag, entries: group }))
+    .sort((a, b) => b.entries.length - a.entries.length || a.tag.localeCompare(b.tag));
+}

@@ -11,11 +11,13 @@ interface Action {
 interface Props {
   label: string;
   icon?: ReactNode;
+  /** アイコンの横に出す短い表示ラベル（スマホでも読めるよう、アイコンだけの表示にしない）。 */
+  shortLabel?: string;
   active?: boolean;
   actions: readonly Action[];
 }
 
-export function EditorActions({ label, icon, active, actions }: Props) {
+export function EditorActions({ label, icon, shortLabel, active, actions }: Props) {
   const disclosure = useRef<HTMLDetailsElement>(null);
   const trigger = useRef<HTMLElement>(null);
 
@@ -51,11 +53,16 @@ export function EditorActions({ label, icon, active, actions }: Props) {
     >
       <summary
         ref={trigger}
-        className={icon ? 'icon-btn' : `btn btn-small editor-actions-text${active ? ' is-active' : ''}`}
+        className={
+          icon
+            ? `icon-btn${shortLabel ? ' has-label' : ''}`
+            : `btn btn-small editor-actions-text${active ? ' is-active' : ''}`
+        }
         aria-label={icon ? label : undefined}
         title={icon ? label : undefined}
       >
         {icon ?? label}
+        {icon && shortLabel && <span className="editor-actions-short-label">{shortLabel}</span>}
       </summary>
       <div className="editor-actions-panel" role="group" aria-label={label}>
         {actions.map(({ label: actionLabel, run, disabled, pressed, danger }) => (
