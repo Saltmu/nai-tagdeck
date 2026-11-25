@@ -15,6 +15,29 @@
   margin: 0 0 0.5rem;
 }
 
+/* 生成ボタンの上に置く Anlas の 1 行表示。「消費 xxx / 残高 yyy」の形 */
+.anlas-line {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.anlas-line .anlas-icon {
+  flex: none;
+}
+
+.anlas-refresh {
+  margin-left: auto;
+  padding: 0.1rem 0.4rem;
+}
+
+.anlas-error {
+  color: var(--danger);
+}
+
 /* 狭い画面: 画面下端に固定し、編集タブでも生成タブでも見えるようにする。
    ドックはこのバーの上に置く（dock.css で bottom をバーの高さにする） */
 @media (max-width: 1099px) {

@@ -51,6 +51,29 @@
   margin-top: 0.75rem;
 }
 
+/* 設定画面のトークン欄に出す Anlas の詳細 */
+.anlas-details {
+  margin: 0.75rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.anlas-details > div {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+}
+
+.anlas-details dt {
+  flex: none;
+  color: var(--muted);
+}
+
+.anlas-details dd {
+  margin: 0;
+}
+
 .card-title .count {
   margin-left: 0.4rem;
 }

@@ -1,11 +1,15 @@
 import { useId, useState, type FormEvent } from 'react';
 import type { TokenState } from '../hooks/useToken';
+import type { AnlasState } from '../hooks/useAnlas';
+import { AnlasDetails } from './AnlasBalance';
 import { maskToken, normalizeToken, validateToken, type TokenStorage } from '../lib/token';
 import { tutorialUrl } from '../lib/tutorialLinks';
 import { useDialogs } from './Dialogs';
 
 interface Props {
   token: TokenState;
+  /** Anlas 残高の表示状態。渡さないときは詳細を出さない。 */
+  anlas?: AnlasState;
   notify: (message: string) => void;
 }
 
@@ -14,7 +18,7 @@ const STORAGE_LABEL: Record<TokenStorage, string> = {
   local: 'このブラウザに保存（次回も使える）',
 };
 
-export function TokenSettings({ token, notify }: Props) {
+export function TokenSettings({ token, anlas, notify }: Props) {
   const id = useId();
   const dialogs = useDialogs();
   const [input, setInput] = useState('');
@@ -137,6 +141,7 @@ export function TokenSettings({ token, notify }: Props) {
         トークンは NovelAI への通信のヘッダーにだけ使い、このサイトのサーバーには送りません。
         共用の端末では「このタブだけ」を選んでください。
       </p>
+      {anlas && <AnlasDetails anlas={anlas} />}
     </section>
   );
 }

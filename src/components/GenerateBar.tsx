@@ -1,7 +1,9 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { Generator } from '../hooks/useGenerator';
 import type { TokenState } from '../hooks/useToken';
+import type { AnlasState } from '../hooks/useAnlas';
 import { resolveSize, sizeChangePatch, type GenerationSettings, type SizeKey } from '../lib/generation';
+import { AnlasLine } from './AnlasBalance';
 import { SizePicker } from './SizePicker';
 
 interface Props {
@@ -12,6 +14,8 @@ interface Props {
   /** 生成できない理由（なければ null）。 */
   blocker: string | null;
   onGenerate: () => void;
+  /** Anlas 残高の表示状態。渡さないときは残高の行を出さない。 */
+  anlas?: AnlasState;
 }
 
 /**
@@ -19,7 +23,7 @@ interface Props {
  * 編集タブでも生成タブでも表示する（生成ペインの子だが、狭い画面では画面下端に固定する）。
  * サイズは生成パネルのサイズ選択と同一の状態（generation.size）を操作し、表示も一致する。
  */
-export function GenerateBar({ generation, onGenerationChange, generator, token, blocker, onGenerate }: Props) {
+export function GenerateBar({ generation, onGenerationChange, generator, token, blocker, onGenerate, anlas }: Props) {
   const barRef = useRef<HTMLElement>(null);
   const { generating } = generator;
   const customSize = resolveSize(generation);
@@ -54,6 +58,7 @@ export function GenerateBar({ generation, onGenerationChange, generator, token, 
 
   return (
     <section ref={barRef} className="generate-bar" aria-label="生成操作">
+      {anlas && <AnlasLine anlas={anlas} />}
       {blocker && token.token && <p className="hint gen-blocker">{blocker}</p>}
       <div className="gen-actions">
         <SizePicker size={generation.size} customSize={customSize} onSizeChange={handleSizeChange} />

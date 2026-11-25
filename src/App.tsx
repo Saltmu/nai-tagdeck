@@ -12,6 +12,7 @@ import { useDictionary } from './hooks/useDictionary';
 import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWorkspace';
 import { Toast, type ToastHandle } from './components/Toast';
 import { useToken } from './hooks/useToken';
+import { useAnlas } from './hooks/useAnlas';
 import { useTagUndo, type UndoExtrasSync } from './hooks/useTagUndo';
 import { useImages } from './hooks/useImages';
 import { useGenerator } from './hooks/useGenerator';
@@ -60,6 +61,8 @@ const TABS: Array<{ key: Tab; label: string; icon: ReactNode }> = [
 export default function App({ onResetAll }: { onResetAll: () => void }) {
   const dialogs = useDialogs();
   const token = useToken();
+  // Anlas 残高は表示用のメモリキャッシュ。トークン保存時と生成完了時に取得し直す。
+  const anlas = useAnlas(token.token);
   const allLoadedRef = useRef(false);
   const discardHistoryRef = useRef<() => void>(() => {});
   const captureLocalRef = useRef<() => {
@@ -106,7 +109,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     [show],
   );
   const imageStore = useImages({ onEvict });
-  const generator = useGenerator(imageStore.add);
+  const generator = useGenerator(imageStore.add, () => anlas.refreshAfterGeneration());
   const [tab, setTab] = useState<Tab>('editor');
   // 画面ごとのスクロール位置を覚え、切り替え時に戻す。生成画像の確認とタグ編集を
   // 行き来しても、毎回スワイプし直す必要がないようにする。未訪問の画面は先頭から開く。
@@ -469,6 +472,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               token={token}
               blocker={blocker}
               onGenerate={startGenerate}
+              anlas={anlas}
             />
           </div>
         </div>
@@ -489,6 +493,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             <Suspense fallback={<ScreenLoadingFallback />}>
               <SettingsView
                 token={token}
+                anlas={anlas}
                 notify={show}
                 theme={settings.theme}
                 onThemeChange={handleThemeChange}

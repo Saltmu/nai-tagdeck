@@ -5,12 +5,13 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { DialogProvider } from '../src/components/Dialogs';
 import { getKV, listEntries, setKV } from '../src/lib/db';
-import { requestImages } from '../src/lib/novelai';
+import { fetchSubscription, requestImages, type Subscription } from '../src/lib/novelai';
 
 vi.mock('../src/lib/db', () => ({ getKV: vi.fn(), listEntries: vi.fn(), setKV: vi.fn() }));
 vi.mock('../src/lib/novelai', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/novelai')>(),
   requestImages: vi.fn(),
+  fetchSubscription: vi.fn(),
 }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -91,6 +92,14 @@ beforeEach(async () => {
     { id: '1', tag: 'masterpiece', category: 'quality', alias: '', default_weight: 1, sort_order: 0, updated_at: '' },
   ]);
   vi.mocked(requestImages).mockResolvedValue([{ blob: new Blob(['x'], { type: 'image/png' }) }]);
+  vi.mocked(fetchSubscription).mockResolvedValue({
+    tier: 3,
+    fixedTrainingStepsLeft: 10000,
+    purchasedTrainingSteps: 8000,
+    totalAnlas: 18000,
+    expiresAt: null,
+    usage: null,
+  } satisfies Subscription);
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -153,4 +162,37 @@ it('starts generation from the editor tab', async () => {
   await vi.waitFor(() => {
     expect(requestImages).toHaveBeenCalled();
   });
+});
+
+it('shows the Anlas balance above the generate button, and the consumed amount after a generation', async () => {
+  await vi.waitFor(() => {
+    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 — / 残高 18,000');
+  });
+  // 生成後の取得では残高が 5 減る（精密参照 1 枚分）
+  vi.mocked(fetchSubscription).mockResolvedValueOnce({
+    tier: 3,
+    fixedTrainingStepsLeft: 9995,
+    purchasedTrainingSteps: 8000,
+    totalAnlas: 17995,
+    expiresAt: null,
+    usage: null,
+  });
+  await click(generateButtons()[0]!);
+  await vi.waitFor(() => {
+    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 5 / 残高 17,995');
+  });
+});
+
+it('shows the plan and the granted/purchased breakdown in the token settings', async () => {
+  await vi.waitFor(() => {
+    expect(container.querySelector('.anlas-line')?.textContent).toContain('残高 18,000');
+  });
+  await switchTab('tab-settings');
+  await vi.waitFor(() => {
+    expect(container.querySelector('.anlas-details')).not.toBeNull();
+  });
+  const details = container.querySelector('.anlas-details');
+  expect(details?.textContent).toContain('Opus');
+  expect(details?.textContent).toContain('18,000 Anlas（付与分 10,000／購入分 8,000）');
+  expect(details?.textContent).toContain('付与分の Anlas は期間の終了時にリセットされます');
 });

@@ -42,10 +42,16 @@ function recordedParams(input: string, params: ReturnType<typeof toParams>): Gen
   };
 }
 
-export function useGenerator(onImages: (images: NewImage[]) => void): Generator {
+export function useGenerator(
+  onImages: (images: NewImage[]) => void,
+  /** 画像の受け取りに成功したときだけ呼ぶ（生成完了後の処理用）。 */
+  onSuccess?: () => void,
+): Generator {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
   useEffect(() => () => controller.current?.abort(), []);
 
   const generate = useCallback(
@@ -78,6 +84,7 @@ export function useGenerator(onImages: (images: NewImage[]) => void): Generator 
             createdAt: Date.now(),
           })),
         );
+        onSuccessRef.current?.();
       } catch (e) {
         if (!ctrl.signal.aborted) setError(describeError(e));
       } finally {
