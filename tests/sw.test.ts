@@ -59,6 +59,7 @@ describe('buildSwAsset', () => {
       publicFiles: {
         'sitemap.xml': '<urlset/>',
         'manifest.webmanifest': '{"name":"nai-tagdeck"}',
+        'theme-init.js': 'localStorage.getItem("nai-tagdeck:theme");',
         'brand/icon.svg': '<svg/>',
         'icons/icon-512.png': new Uint8Array([13, 14, 15, 16]),
         'icons/icon-192.png': new Uint8Array([9, 10, 11, 12]),
