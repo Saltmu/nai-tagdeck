@@ -1,0 +1,39 @@
+/* ---- 生成フッター: サイズのピクトグラム ---- */
+.size-toggle {
+  display: flex;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+
+.size-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.size-btn:hover {
+  color: var(--text);
+}
+
+.size-btn[aria-checked='true'] {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+@media (max-width: 389px) {
+  .size-btn {
+    width: 28px;
+  }
+}

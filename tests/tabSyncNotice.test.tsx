@@ -193,7 +193,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
 
     await mountApp();
     // 1 枚生成してメモリ上の画像履歴を作る
-    await click(button('生成する（Ctrl+Enter）'));
+    await click(button('生成する'));
     await flush(50);
     expect(container.querySelectorAll('.gallery .thumb-frame')).toHaveLength(1);
 

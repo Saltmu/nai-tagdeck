@@ -1,0 +1,47 @@
+/* ---- header: seed lock ---- */
+
+/* 解除でボタンが消えるためフォーカスを移す外枠。プログラムからフォーカスするので枠線は出さない */
+.seed-lock-wrap {
+  display: inline-flex;
+  margin-inline-start: auto;
+}
+
+.seed-lock-wrap:focus {
+  outline: none;
+}
+
+/* 固定ヘッダーの高さを変えない 40px */
+.seed-lock {
+  position: relative;
+  flex: none;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 0.55rem;
+  gap: 0.3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.seed-lock-extra {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+@media (max-width: 767px) {
+  .seed-lock {
+    width: 40px;
+    padding: 0;
+  }
+
+  .seed-lock-extra {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}

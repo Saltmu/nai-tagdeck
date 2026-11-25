@@ -25,6 +25,11 @@
   margin-top: 0.75rem;
 }
 
+/* 見出しへスクロールしたときに固定ヘッダーの下に隠れないようにする */
+.category {
+  scroll-margin-top: calc(var(--header-height) + 0.5rem);
+}
+
 .disclosure {
   display: grid;
   grid-template-columns: 0.5rem minmax(0, auto) minmax(0, 1fr);
@@ -121,6 +126,7 @@
   flex: 1;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.6rem;
   min-width: 0;
   min-height: 44px;
@@ -274,6 +280,18 @@
 .tag-edit-move {
   min-width: 0;
   max-width: 100%;
+}
+
+/* 編集行の移動は折りたたみに入れる。入力と✓／×の行とは別行にする */
+.tag-edit-move-details {
+  flex-basis: 100%;
+}
+
+.tag-edit-hint {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .tag-alias {

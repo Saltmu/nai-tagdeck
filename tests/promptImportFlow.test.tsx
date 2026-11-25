@@ -160,7 +160,7 @@ it('retains the workspace on cancel or error, then applies a drop and only the s
   expect(preview()).toBe(expected);
   await click(container.querySelector<HTMLButtonElement>('.preview-item button')!);
   expect(writeText).toHaveBeenCalledWith(expected);
-  await click(button('生成する（Ctrl+Enter）'));
+  await click(button('生成する'));
   expect(requestImages).toHaveBeenCalledWith('test-token', expect.objectContaining({
     input: expected,
     parameters: expect.objectContaining({ steps: 19, width: 1024, height: 1024, seed: 42, negative_prompt: 'old negative' }),
@@ -192,7 +192,7 @@ it('opens the shared PNG picker from preset actions and imports into the workspa
 });
 
 it('reads the viewer PNG and leaves generation settings alone when the option is unchecked', async () => {
-  await click(button('生成する（Ctrl+Enter）'));
+  await click(button('生成する'));
   await click(container.querySelector<HTMLButtonElement>('.thumb-btn')!);
   await waitForMount('.viewer');
   await click(button('プロンプトを読み込む', container.querySelector('.viewer')!));
@@ -200,7 +200,7 @@ it('reads the viewer PNG and leaves generation settings alone when the option is
   await waitForImportResult();
   expect(container.querySelector('dialog')?.textContent).toContain('ベース　3件（未分類 1件）');
   await acceptImport(container.querySelector('dialog')!);
-  await click(button('生成する（Ctrl+Enter）'));
+  await click(button('生成する'));
   expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
     input: 'blazer, standing, 1.2::custom tag::',
     parameters: expect.objectContaining({ seed: 11, width: 832, height: 1216, steps: 19 }),
@@ -240,7 +240,7 @@ it('preserves fur dataset at the start even with classified tags when generation
   await drop(imageFile(furryBytes, 'furry.png'));
   await acceptImport(container.querySelector('dialog')!);
   expect(preview()).toBe('fur dataset, blazer, wolf');
-  await click(button('生成する（Ctrl+Enter）'));
+  await click(button('生成する'));
   expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
     input: 'fur dataset, blazer, wolf',
   }), expect.anything());
@@ -252,7 +252,7 @@ it('preserves fur dataset at the start even with classified tags when generation
   expect(preview()).toBe('fur dataset, blazer, wolf');
   await click(container.querySelector<HTMLButtonElement>('.preview-item button')!);
   expect(writeText).toHaveBeenCalledWith('fur dataset, blazer, wolf');
-  await click(button('生成する（Ctrl+Enter）'));
+  await click(button('生成する'));
   expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
     input: 'fur dataset, blazer, wolf',
   }), expect.anything());
@@ -267,7 +267,7 @@ it('allows generating after importing a fur-dataset-only base with character tag
   expect(preview()).toBe('fur dataset');
   const characterNegative = [...container.querySelectorAll('.preview-item')].find((node) => node.querySelector('dt')?.textContent?.includes('キャラ1のネガティブ'));
   expect(characterNegative?.querySelector('output')?.textContent).toBe('lowres, aliasing, ');
-  await click(button('生成する（Ctrl+Enter）'));
+  await click(button('生成する'));
   expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
     input: 'fur dataset',
     parameters: expect.objectContaining({
@@ -283,7 +283,7 @@ it('imports and generates a fur-dataset-only PNG without character tags without 
   await click(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
   await acceptImport(dialog);
   expect(preview()).toBe('fur dataset');
-  await click(button('生成する（Ctrl+Enter）'));
+  await click(button('生成する'));
   expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
     input: 'fur dataset',
   }), expect.anything());
@@ -291,7 +291,7 @@ it('imports and generates a fur-dataset-only PNG without character tags without 
 
 it('falls back to stored history when a viewer image has no PNG metadata', async () => {
   vi.mocked(requestImages).mockResolvedValueOnce([{ blob: new Blob([pngFixture()]) }]);
-  await click(button('生成する（Ctrl+Enter）'));
+  await click(button('生成する'));
   expect(container.querySelector('.thumb-btn')).not.toBeNull();
 
   // 履歴のプロンプトと現在の作業状態を変えて、フォールバック復元が分かるようにする
@@ -314,7 +314,7 @@ it('falls back to stored history when a viewer image has no PNG metadata', async
   const confirm = container.querySelector<HTMLDialogElement>('dialog.app-dialog-confirm');
   if (confirm?.open) await click(button('適用', confirm));
   expect(preview()).toBe('existing');
-  await click(button('生成する（Ctrl+Enter）'));
+  await click(button('生成する'));
   expect(requestImages).toHaveBeenLastCalledWith('test-token', expect.objectContaining({
     input: 'existing',
     parameters: expect.objectContaining({ seed: 11, width: 832, height: 1216, steps: 19, negative_prompt: 'old negative' }),

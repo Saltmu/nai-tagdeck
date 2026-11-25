@@ -53,6 +53,8 @@ async function waitForMount(selector: string) {
 
 const preview = () => container.querySelector('output.preview-text')?.textContent;
 const field = (suffix: string) => container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[id$="-${suffix}"]`);
+const checkedSizeLabel = () =>
+  container.querySelector('.size-toggle [role="radio"][aria-checked="true"]')?.getAttribute('aria-label');
 const undoButton = () => button('元に戻す');
 const dictionaryCount = () => container.querySelector('.tab-dictionary .tab-count')?.childNodes[0]?.textContent?.trim();
 const presetName = () => (container.querySelector('.preset-search input') as HTMLInputElement).value;
@@ -171,7 +173,7 @@ it('clears undo after a backup import so the workspace stays with the merged dic
   expect(dictionaryCount()).toBe('2');
   expect(field('steps')?.value).toBe('12');
   expect(field('seed')?.value).toBe('7');
-  expect(field('size')?.value).toBe('square');
+  expect(checkedSizeLabel()).toBe('正方形 1024×1024');
   await click(container.querySelector<HTMLButtonElement>('.editor-tab-negative')!);
   expect(field('character-text')?.value).toBe('from-backup');
   expect(undoButton().getAttribute('aria-disabled')).toBe('true');

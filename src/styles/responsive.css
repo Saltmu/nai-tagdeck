@@ -1,4 +1,11 @@
 /* ---- tablet / desktop ---- */
+@media (max-width: 767px) {
+  /* 狭い画面ではタグ行の操作を折り返し、名前が潰れないようにする */
+  .tag-row {
+    flex-wrap: wrap;
+  }
+}
+
 @media (min-width: 768px) {
   .app-header {
     padding: 0.6rem max(1.25rem, env(safe-area-inset-right)) 0.6rem max(1.25rem, env(safe-area-inset-left));

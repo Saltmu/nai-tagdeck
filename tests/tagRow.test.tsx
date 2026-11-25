@@ -62,14 +62,14 @@ it('hides the delete button while the tag name is being edited', async () => {
   expect(onEdit).not.toHaveBeenCalled();
 });
 
-it('shows alias only as title tooltip by default, and renders inline alias or move select on alias search / edit mode', async () => {
+it('shows the Japanese alias inline by default and moves a tag from the edit accordion', async () => {
   const onMoveTag = vi.fn();
   const moveTargets: MoveTargetGroup[] = [
     { id: 'base', label: 'ベース', options: [{ target: 'base', category: 'outfit', label: '衣装' }] },
     { id: 'c1', label: 'キャラ1', options: [{ target: 'c1', category: 'appearance', label: '外見' }] },
   ];
 
-  // 通常表示: title のみで .tag-alias や移動 select は出ない
+  // 通常表示: 日本語名をタグ名の横（狭い画面では下）に常時表示する
   await act(async () => root.render(
     <ul>
       <TagRow
@@ -85,7 +85,7 @@ it('shows alias only as title tooltip by default, and renders inline alias or mo
     </ul>,
   ));
   expect(container.querySelector('.tag-name')?.getAttribute('title')).toBe('女の子 / おんなのこ');
-  expect(container.querySelector('.tag-alias')).toBeNull();
+  expect(container.querySelector('.tag-alias')?.textContent).toBe('女の子 / おんなのこ');
   expect(container.querySelector('.tag-edit-move')).toBeNull();
 
   // 日本語エイリアス（' / ' を含む単一エイリアス含む）で検索ヒット時: .tag-alias を出し一致箇所を mark する
@@ -108,10 +108,16 @@ it('shows alias only as title tooltip by default, and renders inline alias or mo
   expect(aliasEl?.textContent).toBe('女の子 / おんなのこ');
   expect(aliasEl?.querySelector('mark')?.textContent).toBe('女の子 / おんなのこ');
 
-  // 編集モードを開いたとき: select を変えただけでは移動せず、「移動」ボタン押下で onMoveTag が呼ばれる
+  // 編集モードを開いたとき: 移動は既定で閉じたアコーディオンに入り、入力のすぐ横には✓／×だけが並ぶ
   const edit = container.querySelector<HTMLButtonElement>('button[aria-label="1girl を編集"]')!;
   await act(async () => edit.click());
   expect(container.querySelector('.tag-alias-edit')?.textContent).toContain('女の子 / おんなのこ');
+  expect(container.querySelector('.tag-edit-hint')?.textContent).toBe('Enter で保存・Esc でキャンセル');
+  const details = container.querySelector<HTMLDetailsElement>('.tag-edit-move-details')!;
+  expect(details.open).toBe(false);
+  expect(details.querySelector('summary')?.textContent).toBe('カテゴリ移動');
+  // アコーディオンを開いてから select を変えただけでは移動せず、「移動」ボタン押下で onMoveTag が呼ばれる
+  await act(async () => { details.open = true; });
   const select = container.querySelector<HTMLSelectElement>('.tag-edit-move')!;
   const moveButton = container.querySelector<HTMLButtonElement>('button[aria-label="1girl を移動"]')!;
   expect(select).not.toBeNull();
@@ -124,7 +130,7 @@ it('shows alias only as title tooltip by default, and renders inline alias or mo
   expect(onMoveTag).not.toHaveBeenCalled();
   expect(moveButton.disabled).toBe(false);
 
-  // タグ名を変更している間は移動ボタンを無効化し、元に戻せば再度有効になる
+  // タグ名を変更している間は移動ボタンを無効化し、理由を画面に表示する。元に戻せば再度有効になる
   const nameInput = container.querySelector<HTMLInputElement>('input[aria-label="1girl のタグを編集"]')!;
   await act(async () => {
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -132,12 +138,14 @@ it('shows alias only as title tooltip by default, and renders inline alias or mo
     nameInput.dispatchEvent(new Event('input', { bubbles: true }));
   });
   expect(moveButton.disabled).toBe(true);
+  expect(container.textContent).toContain('タグ名を変更したままでは移動できません');
   await act(async () => {
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     set?.call(nameInput, '1girl');
     nameInput.dispatchEvent(new Event('input', { bubbles: true }));
   });
   expect(moveButton.disabled).toBe(false);
+  expect(container.textContent).not.toContain('タグ名を変更したままでは移動できません');
 
   // moveTargets の並び順が変わっても target ID に基づいて正しい移動先へ送る
   const reorderedTargets: MoveTargetGroup[] = [
