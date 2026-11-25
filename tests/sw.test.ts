@@ -163,7 +163,10 @@ function extractBuildOutputs(result: Awaited<ReturnType<typeof viteBuild>>) {
 }
 
 describe('Vite build swPlugin integration', () => {
-  it('updates SW cache name when only index.html changes in a real Vite build', async () => {
+  // 本番ビルドを 2 回実行するため、単体でも約 2.8 秒かかる。並列実行時の負荷で
+  // 既定の 5 秒タイムアウトを超えて間欠的に失敗していた（#140）ため、
+  // 作業に見合うタイムアウトをテスト単位で指定する。
+  it('updates SW cache name when only index.html changes in a real Vite build', { timeout: 30_000 }, async () => {
     const first = extractBuildOutputs(
       await viteBuild({
         configFile: resolve('vite.config.ts'),
