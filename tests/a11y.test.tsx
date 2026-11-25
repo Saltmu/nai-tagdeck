@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DialogProvider, useDialogs, type DialogApi } from '../src/components/Dialogs';
 import { GenerateDock } from '../src/components/GenerateDock';
 import { SeedLock } from '../src/components/SeedLock';
+import { SizePicker } from '../src/components/SizePicker';
+import type { SizeKey } from '../src/lib/generation';
 import { ImageViewer } from '../src/components/ImageViewer';
 import { Editor } from '../src/components/Editor';
 import { useTagUndo } from '../src/hooks/useTagUndo';
@@ -157,6 +159,67 @@ describe('GenerateDock tablist', () => {
       tab0.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
     });
     expect(document.activeElement).toBe(tab1);
+  });
+});
+
+describe('SizePicker radiogroup', () => {
+  it('shows all sizes with dimension labels and keeps arrow navigation', async () => {
+    function Harness({ initial }: { initial: SizeKey }) {
+      const [size, setSize] = useState<SizeKey>(initial);
+      return (
+        <SizePicker
+          size={size}
+          customSize={{ width: 896, height: 1152 }}
+          onSizeChange={(next) => setSize(next)}
+        />
+      );
+    }
+    await act(async () => root.render(<Harness initial="portrait" />));
+    let radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(radios.map((r) => r.getAttribute('aria-label'))).toEqual([
+      '縦 832×1216',
+      '横 1216×832',
+      '正方形 1024×1024',
+      '縦長 768×1344',
+      '横長 1344×768',
+      'カスタム 896×1152',
+    ]);
+    expect(radios.map((r) => r.tabIndex)).toEqual([0, -1, -1, -1, -1, -1]);
+    expect(radios[0]!.getAttribute('aria-checked')).toBe('true');
+
+    await act(async () => {
+      radios[0]!.focus();
+      radios[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(document.activeElement).toBe(radios[1]);
+    expect(radios[1]!.getAttribute('aria-checked')).toBe('true');
+    expect(radios.map((r) => r.tabIndex)).toEqual([-1, 0, -1, -1, -1, -1]);
+
+    await act(async () => {
+      radios[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+    });
+    radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(document.activeElement).toBe(radios[5]);
+    expect(radios[5]!.getAttribute('aria-checked')).toBe('true');
+
+    await act(async () => {
+      radios[5]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(document.activeElement).toBe(radios[0]);
+    expect(radios[0]!.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('reports the custom size when its pictogram is clicked', async () => {
+    const onSizeChange = vi.fn();
+    await act(async () => root.render(
+      <SizePicker size="portrait" customSize={{ width: 896, height: 1152 }} onSizeChange={onSizeChange} />,
+    ));
+    const custom = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')]
+      .find((r) => r.getAttribute('aria-label') === 'カスタム 896×1152')!;
+    await act(async () => custom.click());
+    expect(onSizeChange).toHaveBeenCalledWith('custom');
   });
 });
 

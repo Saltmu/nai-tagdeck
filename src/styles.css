@@ -25,5 +25,6 @@
 @import './styles/token.css';
 @import './styles/presets.css';
 @import './styles/seed-lock.css';
+@import './styles/size-picker.css';
 @import './styles/latest.css';
 @import './styles/touch.css';

@@ -112,12 +112,9 @@ it('switches to a custom size, picks a suggestion, rounds a width and swaps side
   await act(async () => root.render(<Harness />));
   expect(container.querySelector('.custom-size')).toBeNull();
 
-  const sizeSelect = container.querySelector<HTMLSelectElement>('select[id$="-size"]')!;
-  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
-  await act(async () => {
-    setter?.call(sizeSelect, 'custom');
-    sizeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  const customRadio = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')]
+    .find((r) => r.getAttribute('aria-label') === 'カスタム 832×1216')!;
+  await act(async () => customRadio.click());
   expect(onGenerationChange).toHaveBeenCalledWith({ size: 'custom', customWidth: 832, customHeight: 1216 });
   expect(container.querySelector('.custom-size-status')?.textContent).toContain('832×1216（1,011,712 / 1,048,576 px）');
 

@@ -15,13 +15,13 @@ import {
   SCALE_MAX,
   SCALE_MIN,
   SEED_MAX,
-  SIZE_PRESETS,
   STEPS_MIN,
   type GenerationSettings,
   type SizeKey,
 } from '../lib/generation';
 import { FREE_LIMITS } from '../lib/novelai';
 import { NumberField } from './NumberField';
+import { SizePicker } from './SizePicker';
 
 interface Props {
   generation: GenerationSettings;
@@ -56,6 +56,14 @@ export function GeneratePanel({
   const applyCustomSize = (width: number, height: number, hint?: string) => {
     onGenerationChange({ size: 'custom', customWidth: width, customHeight: height });
     setCustomHint(hint ?? '');
+  };
+  /** ピクトグラムからのサイズ変更。カスタムは現在の実効寸法で入る。 */
+  const handleSizeChange = (next: SizeKey) => {
+    if (next === 'custom') {
+      applyCustomSize(customSize.width, customSize.height);
+    } else {
+      onGenerationChange({ size: next });
+    }
   };
   const applyCustomWidth = (value: number | null) => {
     if (value === null) return;
@@ -101,29 +109,6 @@ export function GeneratePanel({
             {GENERATION_MODES.map((mode) => (
               <option key={mode.value} value={mode.value}>{modeLabel(mode.value)}</option>
             ))}
-          </select>
-        </label>
-        <label className="field field-wide" htmlFor={`${id}-size`}>
-          <span>サイズ</span>
-          <select
-            id={`${id}-size`}
-            value={generation.size}
-            onChange={(e) => {
-              const next = e.target.value as SizeKey;
-              if (next === 'custom') {
-                const { width, height } = resolveSize(generation);
-                onGenerationChange({ size: 'custom', customWidth: width, customHeight: height });
-              } else {
-                onGenerationChange({ size: next });
-              }
-            }}
-          >
-            {SIZE_PRESETS.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.label}
-              </option>
-            ))}
-            <option value="custom">カスタム…</option>
           </select>
         </label>
         {generation.size === 'custom' && (
@@ -283,6 +268,7 @@ export function GeneratePanel({
 
       {blocker && token.token && <p className="hint gen-blocker">{blocker}</p>}
       <div className="gen-actions">
+        <SizePicker size={generation.size} customSize={customSize} onSizeChange={handleSizeChange} />
         {generating && (
           <button type="button" className="btn" onClick={generator.cancel}>
             中止

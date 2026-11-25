@@ -68,6 +68,8 @@ async function waitForMount(selector: string) {
 
 const preview = () => container.querySelector('output.preview-text')?.textContent;
 const field = (suffix: string) => container.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[id$="-${suffix}"]`);
+const checkedSizeLabel = () =>
+  container.querySelector('.size-toggle [role="radio"][aria-checked="true"]')?.getAttribute('aria-label');
 const openBase = () => click(container.querySelector<HTMLButtonElement>('.editor-tablist [role="tab"]')!);
 const openNegative = () => click(container.querySelector<HTMLButtonElement>('.editor-tab-negative')!);
 const chooseDialog = () => Array.from(container.querySelectorAll('dialog'))
@@ -150,7 +152,7 @@ it('asks before replacing unsaved preset edits and undoes the imported settings 
   expect((container.querySelector('.preset-search input') as HTMLInputElement).value).toBe('');
   expect(field('steps')?.value).toBe('28');
   expect(field('seed')?.value).toBe('42');
-  expect(field('size')?.value).toBe('square');
+  expect(checkedSizeLabel()).toBe('正方形 1024×1024');
   await openNegative();
   expect(field('character-text')?.value).toBe('imported neg');
   await openBase();
@@ -168,7 +170,7 @@ it('asks before replacing unsaved preset edits and undoes the imported settings 
   expect(preview()).toBe('existing');
   expect(field('steps')?.value).toBe('19');
   expect(field('seed')?.value).toBe('11');
-  expect(field('size')?.value).toBe('portrait');
+  expect(checkedSizeLabel()).toBe('縦 832×1216');
   await openNegative();
   expect(field('character-text')?.value).toBe('blurry');
   await openBase();
@@ -410,17 +412,17 @@ it('imports a custom PNG size and undoes it back to the preset size', async () =
   await click(button('適用', dialog));
   await click(button('反映せずに適用', chooseDialog()!));
   expect(preview()).toBe('standing');
-  expect(field('size')?.value).toBe('custom');
+  expect(checkedSizeLabel()).toBe('カスタム 896×1152');
   expect(field('custom-width')?.value).toBe('896');
   expect(field('custom-height')?.value).toBe('1152');
 
   await click(button('元に戻す'));
   expect(preview()).toBe('existing');
-  expect(field('size')?.value).toBe('portrait');
+  expect(checkedSizeLabel()).toBe('縦 832×1216');
 
   await click(button('やり直す'));
   expect(preview()).toBe('standing');
-  expect(field('size')?.value).toBe('custom');
+  expect(checkedSizeLabel()).toBe('カスタム 896×1152');
   expect(field('custom-width')?.value).toBe('896');
   expect(field('custom-height')?.value).toBe('1152');
 });
