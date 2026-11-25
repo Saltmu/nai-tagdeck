@@ -56,7 +56,17 @@ const field = (suffix: string) => container.querySelector<HTMLInputElement | HTM
 const checkedSizeLabel = () =>
   container.querySelector('.size-toggle [role="radio"][aria-checked="true"]')?.getAttribute('aria-label');
 const undoButton = () => button('元に戻す');
-const dictionaryCount = () => container.querySelector('.tab-dictionary .tab-count')?.childNodes[0]?.textContent?.trim();
+/**
+ * 辞書の件数はヘッダーの辞書タブバッジではなく、辞書画面の件数表示で確認する
+ * （#144 でヘッダーバッジは削除され、辞書一覧の「N件 / 全M件」は残した）。
+ */
+async function expectDictionaryTotal(expected: number) {
+  expect(container.querySelector('.tab-dictionary .tab-count')).toBeNull();
+  await click(button('辞書'));
+  await waitForMount('.dict-list-card');
+  expect(container.querySelector('.dict-count')?.textContent).toContain(`全${expected}件`);
+  await click(button('編集'));
+}
 const presetName = () => (container.querySelector('.preset-search input') as HTMLInputElement).value;
 
 async function openEditor() {
@@ -159,8 +169,13 @@ afterEach(async () => {
   });
 });
 
+it('does not show a word-count badge on the dictionary tab', async () => {
+  expect(container.querySelector('.tab-dictionary .tab-count')).toBeNull();
+  expect(button('辞書')?.textContent?.trim()).toBe('辞書');
+});
+
 it('clears undo after a backup import so the workspace stays with the merged dictionary and settings', async () => {
-  expect(dictionaryCount()).toBe('1');
+  await expectDictionaryTotal(1);
   expect(presetName()).toBe('基本');
   await deleteExistingTag();
 
@@ -170,7 +185,7 @@ it('clears undo after a backup import so the workspace stays with the merged dic
 
   expect(preview()).toBe('backup-tag');
   expect(presetName()).toBe('');
-  expect(dictionaryCount()).toBe('2');
+  await expectDictionaryTotal(2);
   expect(field('steps')?.value).toBe('12');
   expect(field('seed')?.value).toBe('7');
   expect(checkedSizeLabel()).toBe('正方形 1024×1024');
@@ -183,7 +198,7 @@ it('clears undo after a backup import so the workspace stays with the merged dic
   await click(undoButton());
   expect(preview()).toBe('backup-tag');
   expect(presetName()).toBe('');
-  expect(dictionaryCount()).toBe('2');
+  await expectDictionaryTotal(2);
   expect(field('steps')?.value).toBe('12');
   await click(container.querySelector<HTMLButtonElement>('.editor-tab-negative')!);
   expect(field('character-text')?.value).toBe('from-backup');
@@ -193,7 +208,7 @@ it('clears undo after a backup import so the workspace stays with the merged dic
 });
 
 it('replaces dictionary and presets with only the backup content when replace is chosen', async () => {
-  expect(dictionaryCount()).toBe('1');
+  await expectDictionaryTotal(1);
   expect(presetName()).toBe('基本');
 
   await importBackupReplace();
@@ -203,11 +218,11 @@ it('replaces dictionary and presets with only the backup content when replace is
   expect(preview()).toBe('backup-tag');
   expect(presetName()).toBe('');
   // 既存の辞書 1 件（standing）は消え、バックアップの 1 件だけが残る
-  expect(dictionaryCount()).toBe('1');
+  await expectDictionaryTotal(1);
   expect(undoButton().getAttribute('aria-disabled')).toBe('true');
   await pressUndo();
   expect(preview()).toBe('backup-tag');
-  expect(dictionaryCount()).toBe('1');
+  await expectDictionaryTotal(1);
   await click(container.querySelector<HTMLButtonElement>('.preset-search input')!);
   expect(container.textContent).toContain('追加');
   expect(container.textContent).toContain('基本');
@@ -228,7 +243,7 @@ it('keeps the imported workspace when Ctrl+Z arrives before the replacement rend
   }
   await openEditor();
   expect(preview()).toBe('backup-tag');
-  expect(dictionaryCount()).toBe('2');
+  await expectDictionaryTotal(2);
   expect(field('steps')?.value).toBe('12');
   expect(undoButton().getAttribute('aria-disabled')).toBe('true');
   await pressUndo();
@@ -255,7 +270,7 @@ it('clears undo when the first-run sample replaces the workspace and restores th
   expect(container.textContent).toContain('サンプルキャラ');
   expect(preview()).toContain('1girl');
   expect(preview()).not.toContain('existing');
-  expect(dictionaryCount()).toBe(String(sampleDictionary().length));
+  await expectDictionaryTotal(sampleDictionary().length);
   expect(presetName()).toBe('');
   expect(undoButton().getAttribute('aria-disabled')).toBe('true');
 
@@ -263,6 +278,6 @@ it('clears undo when the first-run sample replaces the workspace and restores th
   await click(undoButton());
   expect(preview()).toContain('1girl');
   expect(preview()).not.toContain('existing');
-  expect(dictionaryCount()).toBe(String(sampleDictionary().length));
+  await expectDictionaryTotal(sampleDictionary().length);
   expect(presetName()).toBe('');
 });
