@@ -34,7 +34,7 @@
   }
 
   .toast {
-    bottom: calc(1.5rem + var(--dock-offset) + var(--latest-offset));
+    bottom: calc(1.5rem + var(--dock-offset) + var(--latest-offset) + var(--generate-bar-height, 0px));
   }
 }
 

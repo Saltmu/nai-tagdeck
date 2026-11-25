@@ -1,5 +1,4 @@
-import { useId, useState } from 'react';
-import type { Generator } from '../hooks/useGenerator';
+import { useEffect, useId, useState } from 'react';
 import type { TokenState } from '../hooks/useToken';
 import {
   CFG_RESCALE_MAX,
@@ -7,11 +6,13 @@ import {
   GENERATION_MODES,
   NOISE_SCHEDULES,
   SAMPLERS,
+  SIZE_PRESETS,
   adjustCustomHeight,
   adjustCustomWidth,
   modeLabel,
   resolveSize,
   samplerLabel,
+  sizeChangePatch,
   SCALE_MAX,
   SCALE_MIN,
   SEED_MAX,
@@ -21,17 +22,12 @@ import {
 } from '../lib/generation';
 import { FREE_LIMITS } from '../lib/novelai';
 import { NumberField } from './NumberField';
-import { SizePicker } from './SizePicker';
 
 interface Props {
   generation: GenerationSettings;
   onGenerationChange: (patch: Partial<GenerationSettings>) => void;
-  generator: Generator;
   token: TokenState;
   onOpenSettings: () => void;
-  /** 生成できない理由（なければ null）。 */
-  blocker: string | null;
-  onGenerate: () => void;
 }
 
 function formatPixels(n: number): string {
@@ -41,29 +37,25 @@ function formatPixels(n: number): string {
 export function GeneratePanel({
   generation,
   onGenerationChange,
-  generator,
   token,
   onOpenSettings,
-  blocker,
-  onGenerate,
 }: Props) {
   const id = useId();
-  const { generating } = generator;
   const [customHint, setCustomHint] = useState('');
   const customSize = resolveSize(generation);
   const customPixels = customSize.width * customSize.height;
+  // カスタムを離れたら丸めの案内は残さない（ピクトグラム側から切り替えたときも同じ）。
+  useEffect(() => {
+    if (generation.size !== 'custom') setCustomHint('');
+  }, [generation.size]);
 
   const applyCustomSize = (width: number, height: number, hint?: string) => {
     onGenerationChange({ size: 'custom', customWidth: width, customHeight: height });
     setCustomHint(hint ?? '');
   };
-  /** ピクトグラムからのサイズ変更。カスタムは現在の実効寸法で入る。 */
+  /** サイズ選択（セレクト）からの変更。フッターのピクトグラムと同一の状態を操作する。 */
   const handleSizeChange = (next: SizeKey) => {
-    if (next === 'custom') {
-      applyCustomSize(customSize.width, customSize.height);
-    } else {
-      onGenerationChange({ size: next });
-    }
+    onGenerationChange(sizeChangePatch(generation, next));
   };
   const applyCustomWidth = (value: number | null) => {
     if (value === null) return;
@@ -99,6 +91,22 @@ export function GeneratePanel({
       )}
 
       <div className="gen-grid">
+        {/* サイズ指定は常時表示する。ピクトグラムを押さないと出てこない作りにしない。 */}
+        <label className="field field-wide" htmlFor={`${id}-size`}>
+          <span>サイズ</span>
+          <select
+            id={`${id}-size`}
+            value={generation.size}
+            onChange={(e) => handleSizeChange(e.target.value as SizeKey)}
+          >
+            {SIZE_PRESETS.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+            <option value="custom">カスタム {customSize.width}×{customSize.height}</option>
+          </select>
+        </label>
         <label className="field field-wide" htmlFor={`${id}-mode`}>
           <span>モード</span>
           <select
@@ -265,25 +273,6 @@ export function GeneratePanel({
           <p className="hint">既定は CFG リスケール 0、ダイナミックしきい値オフです。</p>
         </div>
       </details>
-
-      {blocker && token.token && <p className="hint gen-blocker">{blocker}</p>}
-      <div className="gen-actions">
-        <SizePicker size={generation.size} customSize={customSize} onSizeChange={handleSizeChange} />
-        {generating && (
-          <button type="button" className="btn" onClick={generator.cancel}>
-            中止
-          </button>
-        )}
-        <button
-          type="button"
-          className="btn btn-primary btn-large"
-          disabled={generating || blocker !== null}
-          title={blocker ?? undefined}
-          onClick={onGenerate}
-        >
-          {generating ? '生成中…' : '生成する'}
-        </button>
-      </div>
     </div>
   );
 }

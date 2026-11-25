@@ -163,7 +163,7 @@ describe('GenerateDock tablist', () => {
 });
 
 describe('SizePicker radiogroup', () => {
-  it('shows all sizes with dimension labels and keeps arrow navigation', async () => {
+  it('shows the three standard sizes with dimension labels and keeps arrow navigation', async () => {
     function Harness({ initial }: { initial: SizeKey }) {
       const [size, setSize] = useState<SizeKey>(initial);
       return (
@@ -180,11 +180,8 @@ describe('SizePicker radiogroup', () => {
       '縦 832×1216',
       '横 1216×832',
       '正方形 1024×1024',
-      '縦長 768×1344',
-      '横長 1344×768',
-      'カスタム 896×1152',
     ]);
-    expect(radios.map((r) => r.tabIndex)).toEqual([0, -1, -1, -1, -1, -1]);
+    expect(radios.map((r) => r.tabIndex)).toEqual([0, -1, -1]);
     expect(radios[0]!.getAttribute('aria-checked')).toBe('true');
 
     await act(async () => {
@@ -194,30 +191,49 @@ describe('SizePicker radiogroup', () => {
     radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
     expect(document.activeElement).toBe(radios[1]);
     expect(radios[1]!.getAttribute('aria-checked')).toBe('true');
-    expect(radios.map((r) => r.tabIndex)).toEqual([-1, 0, -1, -1, -1, -1]);
+    expect(radios.map((r) => r.tabIndex)).toEqual([-1, 0, -1]);
 
     await act(async () => {
       radios[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
     });
     radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
-    expect(document.activeElement).toBe(radios[5]);
-    expect(radios[5]!.getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(radios[2]);
+    expect(radios[2]!.getAttribute('aria-checked')).toBe('true');
 
     await act(async () => {
-      radios[5]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      radios[2]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     });
     radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
     expect(document.activeElement).toBe(radios[0]);
     expect(radios[0]!.getAttribute('aria-checked')).toBe('true');
   });
 
-  it('reports the custom size when its pictogram is clicked', async () => {
+  it('shows the active tall/wide/custom size as a fourth pictogram', async () => {
     const onSizeChange = vi.fn();
     await act(async () => root.render(
-      <SizePicker size="portrait" customSize={{ width: 896, height: 1152 }} onSizeChange={onSizeChange} />,
+      <SizePicker size="tall" customSize={{ width: 896, height: 1152 }} onSizeChange={onSizeChange} />,
     ));
-    const custom = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')]
-      .find((r) => r.getAttribute('aria-label') === 'カスタム 896×1152')!;
+    let radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(radios.map((r) => r.getAttribute('aria-label'))).toEqual([
+      '縦 832×1216',
+      '横 1216×832',
+      '正方形 1024×1024',
+      '縦長 768×1344',
+    ]);
+    expect(radios[3]!.getAttribute('aria-checked')).toBe('true');
+
+    await act(async () => root.render(
+      <SizePicker size="custom" customSize={{ width: 896, height: 1152 }} onSizeChange={onSizeChange} />,
+    ));
+    radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(radios.map((r) => r.getAttribute('aria-label'))).toEqual([
+      '縦 832×1216',
+      '横 1216×832',
+      '正方形 1024×1024',
+      'カスタム 896×1152',
+    ]);
+    const custom = radios[3]!;
+    expect(custom.getAttribute('aria-checked')).toBe('true');
     await act(async () => custom.click());
     expect(onSizeChange).toHaveBeenCalledWith('custom');
   });
