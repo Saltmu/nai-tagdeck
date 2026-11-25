@@ -4,10 +4,19 @@ import { BackupCard } from './BackupCard';
 import type { Backup, BackupImportMode } from '../lib/backup';
 import { DangerZone } from './DangerZone';
 import { tutorialUrl } from '../lib/tutorialLinks';
+import type { ThemePreference } from '../types';
+
+const THEME_OPTIONS: Array<{ value: ThemePreference; label: string; hint: string }> = [
+  { value: 'system', label: 'システム連動', hint: 'OS の設定に合わせます' },
+  { value: 'light', label: 'ライト', hint: '常に明るい配色にします' },
+  { value: 'dark', label: 'ダーク', hint: '常に暗い配色にします' },
+];
 
 interface Props {
   token: TokenState;
   notify: (message: string) => void;
+  theme: ThemePreference;
+  onThemeChange: (theme: ThemePreference) => void;
   getBackup: () => Backup;
   onImportBackup: (data: Backup, mode?: BackupImportMode) => Promise<void>;
   onResetAll: () => void;
@@ -20,6 +29,8 @@ interface Props {
 export function SettingsView({
   token,
   notify,
+  theme,
+  onThemeChange,
   getBackup,
   onImportBackup,
   onResetAll,
@@ -30,6 +41,26 @@ export function SettingsView({
 }: Props) {
   return (
     <div className="settings">
+      <section className="card" aria-labelledby="appearance-title">
+        <h2 id="appearance-title" className="card-title">外観</h2>
+        <fieldset className="theme-picker">
+          <legend className="visually-hidden">外観テーマ</legend>
+          {THEME_OPTIONS.map((option) => (
+            <label key={option.value} className="theme-option">
+              <input
+                type="radio"
+                name="theme"
+                value={option.value}
+                checked={theme === option.value}
+                onChange={() => onThemeChange(option.value)}
+              />
+              <span className="theme-option-label">{option.label}</span>
+              <span className="theme-option-hint">{option.hint}</span>
+            </label>
+          ))}
+        </fieldset>
+        <p className="hint">切り替えるとすぐに画面へ反映され、自動保存されます。システム連動は OS のライト／ダーク設定に合わせます。</p>
+      </section>
       <section className="card" aria-label="使い方">
         <h2 className="card-title">使い方</h2>
         <div className="tutorial-entry">
