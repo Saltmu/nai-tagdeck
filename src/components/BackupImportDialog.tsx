@@ -63,12 +63,12 @@ export function BackupImportDialog({
     if (element) {
       setScrollable(element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth);
     }
-    // merge は実行ボタン、replace はキャンセルへフォーカスする。
-    (mode === 'replace' ? cancel.current : primary.current)?.focus({ preventScroll: true });
+    // 初期モードは merge のため、実行ボタンへフォーカスする。
+    // replace への切替時は別の effect がキャンセルへフォーカスを移す。
+    primary.current?.focus({ preventScroll: true });
     resetScroll();
     const frame = requestAnimationFrame(resetScroll);
     return () => cancelAnimationFrame(frame);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // モードが replace に切り替わったら、Enter 連打で確定しないようキャンセルへフォーカスを移す。
@@ -85,8 +85,7 @@ export function BackupImportDialog({
     const onAbort = () => onCancel();
     signal.addEventListener('abort', onAbort, { once: true });
     return () => signal.removeEventListener('abort', onAbort);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signal]);
+  }, [signal, onCancel]);
 
   const settle = (confirmed: boolean) => {
     if (settled.current) return;
@@ -162,8 +161,9 @@ export function BackupImportDialog({
           </button>
           <button
             ref={primary}
-            type="submit"
+            type="button"
             className={`btn ${mode === 'replace' ? 'btn-danger' : 'btn-primary'}`}
+            onClick={() => settle(true)}
           >
             {mode === 'replace' ? 'すべて置き換えて読み込む' : '読み込む'}
           </button>
