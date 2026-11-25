@@ -47,6 +47,114 @@
   font-weight: 600;
 }
 
+/* モード: 2 つしかないのでセレクトではなくボタン式（セグメント）にする */
+.mode-toggle {
+  display: flex;
+  gap: 0.25rem;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+
+.mode-btn {
+  flex: 1;
+  min-height: 40px;
+  padding: 0.4rem 0.75rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mode-btn:hover {
+  color: var(--text);
+}
+
+.mode-btn[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+/* サイズ指定: 向きごとにグルーピングしたボタン。ピクトグラムと寸法をあわせて出す */
+.size-groups {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.size-group {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.size-group-title {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.size-group-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.size-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 40px;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.size-option:hover {
+  border-color: var(--accent);
+}
+
+.size-option[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ステップ・スケール: 数値入力ではなくフェーダー（本家と同じ操作感） */
+.fader-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.fader-row input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.fader-row output {
+  min-width: 2.5rem;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (pointer: coarse) {
+  .mode-btn,
+  .size-option {
+    min-height: 44px;
+  }
+}
+
 .custom-size {
   display: grid;
   gap: 0.5rem;

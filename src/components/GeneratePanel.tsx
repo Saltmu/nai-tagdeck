@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { type KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
 import type { TokenState } from '../hooks/useToken';
 import {
   CFG_RESCALE_MAX,
@@ -13,6 +13,7 @@ import {
   resolveSize,
   samplerLabel,
   sizeChangePatch,
+  sizeLabel,
   SCALE_MAX,
   SCALE_MIN,
   SEED_MAX,
@@ -21,6 +22,7 @@ import {
   type SizeKey,
 } from '../lib/generation';
 import { FREE_LIMITS } from '../lib/novelai';
+import { SizeIcon } from './icons';
 import { NumberField } from './NumberField';
 
 interface Props {
@@ -34,6 +36,15 @@ function formatPixels(n: number): string {
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
+/** サイズ指定ボタンの向きごとのグルーピング。数字だけでなく向きのピクトグラムと寸法を出す。 */
+const SIZE_GROUPS: Array<{ title: string; keys: readonly SizeKey[] }> = [
+  { title: '縦向き', keys: ['portrait', 'tall'] },
+  { title: '横向き', keys: ['landscape', 'wide'] },
+  { title: '正方形', keys: ['square'] },
+  { title: 'カスタム', keys: ['custom'] },
+];
+const SIZE_ORDER: readonly SizeKey[] = ['portrait', 'tall', 'landscape', 'wide', 'square', 'custom'];
+
 export function GeneratePanel({
   generation,
   onGenerationChange,
@@ -44,6 +55,26 @@ export function GeneratePanel({
   const [customHint, setCustomHint] = useState('');
   const customSize = resolveSize(generation);
   const customPixels = customSize.width * customSize.height;
+  const sizeRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const sizeIndex = SIZE_ORDER.indexOf(generation.size);
+
+  /** サイズ変更。フッターのピクトグラムと同一の状態を操作する。 */
+  const handleSizeChange = (next: SizeKey) => {
+    onGenerationChange(sizeChangePatch(generation, next));
+  };
+  /** サイズのラジオグループ内の矢印キー移動（フッターのピクトグラムと同じ操作感）。 */
+  const onSizeKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const current = Math.max(sizeIndex, 0);
+    let next: number | null = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (current + 1) % SIZE_ORDER.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (current - 1 + SIZE_ORDER.length) % SIZE_ORDER.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = SIZE_ORDER.length - 1;
+    if (next === null) return;
+    e.preventDefault();
+    handleSizeChange(SIZE_ORDER[next]!);
+    sizeRefs.current[next]?.focus();
+  };
   // カスタムを離れたら丸めの案内は残さない（ピクトグラム側から切り替えたときも同じ）。
   useEffect(() => {
     if (generation.size !== 'custom') setCustomHint('');
@@ -52,10 +83,6 @@ export function GeneratePanel({
   const applyCustomSize = (width: number, height: number, hint?: string) => {
     onGenerationChange({ size: 'custom', customWidth: width, customHeight: height });
     setCustomHint(hint ?? '');
-  };
-  /** サイズ選択（セレクト）からの変更。フッターのピクトグラムと同一の状態を操作する。 */
-  const handleSizeChange = (next: SizeKey) => {
-    onGenerationChange(sizeChangePatch(generation, next));
   };
   const applyCustomWidth = (value: number | null) => {
     if (value === null) return;
@@ -91,34 +118,62 @@ export function GeneratePanel({
       )}
 
       <div className="gen-grid">
-        {/* サイズ指定は常時表示する。ピクトグラムを押さないと出てこない作りにしない。 */}
-        <label className="field field-wide" htmlFor={`${id}-size`}>
-          <span>サイズ</span>
-          <select
-            id={`${id}-size`}
-            value={generation.size}
-            onChange={(e) => handleSizeChange(e.target.value as SizeKey)}
-          >
-            {SIZE_PRESETS.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.label}
-              </option>
-            ))}
-            <option value="custom">カスタム {customSize.width}×{customSize.height}</option>
-          </select>
-        </label>
-        <label className="field field-wide" htmlFor={`${id}-mode`}>
-          <span>モード</span>
-          <select
-            id={`${id}-mode`}
-            value={generation.mode}
-            onChange={(e) => onGenerationChange({ mode: e.target.value === 'furry' ? 'furry' : 'anime' })}
-          >
+        {/* モードは一番上。2 つしかないのでセレクトではなくボタン式にする。 */}
+        <div className="field field-wide">
+          <span id={`${id}-mode-label`}>モード</span>
+          <div className="mode-toggle" role="group" aria-labelledby={`${id}-mode-label`}>
             {GENERATION_MODES.map((mode) => (
-              <option key={mode.value} value={mode.value}>{modeLabel(mode.value)}</option>
+              <button
+                key={mode.value}
+                type="button"
+                className="mode-btn"
+                aria-pressed={generation.mode === mode.value}
+                onClick={() => onGenerationChange({ mode: mode.value })}
+              >
+                {modeLabel(mode.value)}
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+        </div>
+        {/* サイズ指定は常時表示する。ピクトグラムを押さないと出てこない作りにしない。 */}
+        <div className="field field-wide">
+          <span id={`${id}-size-label`}>サイズ</span>
+          <div className="size-groups" role="radiogroup" aria-labelledby={`${id}-size-label`} onKeyDown={onSizeKeyDown}>
+            {SIZE_GROUPS.map((group) => (
+              <div key={group.title} className="size-group" role="group" aria-label={group.title}>
+                <span className="size-group-title" aria-hidden="true">{group.title}</span>
+                <div className="size-group-buttons">
+                  {group.keys.map((key) => {
+                    const preset = SIZE_PRESETS.find((s) => s.key === key);
+                    const dims = preset ?? customSize;
+                    const label = preset?.label ?? sizeLabel({ size: key, customWidth: dims.width, customHeight: dims.height });
+                    const index = SIZE_ORDER.indexOf(key);
+                    const isTabbable = sizeIndex >= 0 ? index === sizeIndex : index === 0;
+                    return (
+                      <button
+                        key={key}
+                        ref={(el) => {
+                          sizeRefs.current[index] = el;
+                        }}
+                        type="button"
+                        role="radio"
+                        tabIndex={isTabbable ? 0 : -1}
+                        aria-checked={generation.size === key}
+                        aria-label={label}
+                        title={label}
+                        className="size-option"
+                        onClick={() => handleSizeChange(key)}
+                      >
+                        <SizeIcon width={dims.width} height={dims.height} />
+                        <span>{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
         {generation.size === 'custom' && (
           <div className="field field-wide custom-size">
             <span className="custom-size-title">カスタムサイズ</span>
@@ -172,28 +227,36 @@ export function GeneratePanel({
             </p>
           </div>
         )}
-        <label className="field" htmlFor={`${id}-steps`}>
-          <span>ステップ（〜{FREE_LIMITS.maxSteps}）</span>
-          <NumberField
-            id={`${id}-steps`}
-            value={generation.steps}
-            min={STEPS_MIN}
-            max={FREE_LIMITS.maxSteps}
-            step={1}
-            onChange={(v) => onGenerationChange({ steps: v ?? generation.steps })}
-          />
-        </label>
-        <label className="field" htmlFor={`${id}-scale`}>
-          <span>スケール</span>
-          <NumberField
-            id={`${id}-scale`}
-            value={generation.scale}
-            min={SCALE_MIN}
-            max={SCALE_MAX}
-            step={0.1}
-            onChange={(v) => onGenerationChange({ scale: v ?? generation.scale })}
-          />
-        </label>
+        <div className="field">
+          <label htmlFor={`${id}-steps`}>ステップ（〜{FREE_LIMITS.maxSteps}）</label>
+          <div className="fader-row">
+            <input
+              id={`${id}-steps`}
+              type="range"
+              min={STEPS_MIN}
+              max={FREE_LIMITS.maxSteps}
+              step={1}
+              value={generation.steps}
+              onChange={(e) => onGenerationChange({ steps: Math.round(Number(e.target.value)) })}
+            />
+            <output htmlFor={`${id}-steps`}>{generation.steps}</output>
+          </div>
+        </div>
+        <div className="field">
+          <label htmlFor={`${id}-scale`}>スケール</label>
+          <div className="fader-row">
+            <input
+              id={`${id}-scale`}
+              type="range"
+              min={SCALE_MIN}
+              max={SCALE_MAX}
+              step={0.1}
+              value={generation.scale}
+              onChange={(e) => onGenerationChange({ scale: Math.round(Number(e.target.value) * 10) / 10 })}
+            />
+            <output htmlFor={`${id}-scale`}>{generation.scale.toFixed(1)}</output>
+          </div>
+        </div>
         <label className="field" htmlFor={`${id}-sampler`}>
           <span>サンプラー</span>
           <select

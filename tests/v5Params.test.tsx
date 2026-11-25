@@ -88,19 +88,26 @@ it('shows the Opus free-tier conditions in the page and edits the advanced setti
   expect(onGenerationChange).toHaveBeenCalledWith({ dynamicThresholding: true });
 });
 
-function selectOf(labelText: string): HTMLSelectElement {
-  const label = [...container.querySelectorAll('label')].find((el) => el.textContent?.includes(labelText));
-  const select = label?.querySelector('select');
-  if (!(select instanceof HTMLSelectElement)) throw new Error(`${labelText} の選択肢が見つかりません`);
-  return select;
+/** 生成パネルのサイズ指定ボタン（フッターのピクトグラムとは別）。 */
+function panelSizeButton(label: string): HTMLButtonElement {
+  const found = [...container.querySelectorAll<HTMLButtonElement>('.size-groups [role="radio"]')]
+    .find((b) => b.getAttribute('aria-label') === label);
+  if (!found) throw new Error(`パネルのサイズボタンが見つかりません: ${label}`);
+  return found;
 }
 
-async function chooseSelect(labelText: string, value: string) {
-  const select = selectOf(labelText);
-  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+function panelSizeChecked(): string | null {
+  return container.querySelector('.size-groups [role="radio"][aria-checked="true"]')?.getAttribute('aria-label') ?? null;
+}
+
+async function setRange(labelText: string, value: string) {
+  const label = [...container.querySelectorAll('label')].find((el) => el.textContent?.includes(labelText));
+  const input = label?.parentElement?.querySelector('input[type="range"]');
+  if (!(input instanceof HTMLInputElement)) throw new Error(`${labelText} のフェーダーが見つかりません`);
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
   await act(async () => {
-    setter?.call(select, value);
-    select.dispatchEvent(new Event('change', { bubbles: true }));
+    setter?.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
 
@@ -133,10 +140,10 @@ it('switches to a custom size, picks a suggestion, rounds a width and swaps side
   }
   await act(async () => root.render(<Harness />));
   expect(container.querySelector('.custom-size')).toBeNull();
-  // パネルのサイズ選択は常時表示され、カスタムはピクトグラムを押さずに選べる
-  expect(selectOf('サイズ').value).toBe('portrait');
+  // パネルのサイズ指定は常時表示され、カスタムはピクトグラムを押さずに選べる
+  expect(panelSizeChecked()).toBe('縦 832×1216');
 
-  await chooseSelect('サイズ', 'custom');
+  await act(async () => panelSizeButton('カスタム 832×1216').click());
   expect(onGenerationChange).toHaveBeenCalledWith({ size: 'custom', customWidth: 832, customHeight: 1216 });
   expect(container.querySelector('.custom-size-status')?.textContent).toContain('832×1216（1,011,712 / 1,048,576 px）');
   // フッターのピクトグラムも同じ状態を示す（4 つ目にカスタムが出る）
@@ -158,12 +165,76 @@ it('switches to a custom size, picks a suggestion, rounds a width and swaps side
   expect(container.querySelector('.custom-size-status')?.textContent).toContain('1152×896');
 
   // 逆方向も連動する。フッターのピクトグラムを押すとパネルの選択も変わる
-  const landscapeRadio = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')]
+  const landscapeRadio = [...container.querySelectorAll<HTMLButtonElement>('.size-toggle [role="radio"]')]
     .find((r) => r.getAttribute('aria-label') === '横 1216×832')!;
   await act(async () => landscapeRadio.click());
   expect(onGenerationChange).toHaveBeenCalledWith({ size: 'landscape' });
-  expect(selectOf('サイズ').value).toBe('landscape');
+  expect(panelSizeChecked()).toBe('横 1216×832');
   expect(container.querySelector('.custom-size')).toBeNull();
+});
+
+it('puts mode buttons first, groups size buttons by orientation, and uses faders for steps and scale', async () => {
+  const onGenerationChange = vi.fn();
+  await act(async () => {
+    root.render(
+      <GeneratePanel
+        generation={DEFAULT_GENERATION}
+        onGenerationChange={onGenerationChange}
+        token={token}
+        onOpenSettings={() => {}}
+      />,
+    );
+  });
+
+  // サイズのセレクトボックスは廃止され、パネル内のセレクトはサンプラーとノイズだけ
+  expect(container.querySelectorAll('.generate select')).toHaveLength(2);
+  // 並びはモード → サイズ指定 → ステップ・スケールのフェーダー
+  const grid = container.querySelector('.gen-grid')!;
+  const order = (el: Element | null) => (el ? [...grid.children].indexOf(el) : -1);
+  const mode = container.querySelector('.mode-toggle')!.closest('.field')!;
+  const size = container.querySelector('.size-groups')!.closest('.field')!;
+  const steps = container.querySelector<HTMLInputElement>('input[type="range"][id$="-steps"]');
+  const scale = container.querySelector<HTMLInputElement>('input[type="range"][id$="-scale"]');
+  expect(order(mode)).toBe(0);
+  expect(order(size)).toBe(1);
+  expect(steps).not.toBeNull();
+  expect(scale).not.toBeNull();
+  expect(steps!.min).toBe('1');
+  expect(steps!.max).toBe('28');
+  expect(scale!.min).toBe('0');
+  expect(scale!.max).toBe('10');
+
+  // モードはボタン式で、アニメ／ケモノを切り替えられる
+  const modeButtons = [...container.querySelectorAll<HTMLButtonElement>('.mode-toggle .mode-btn')];
+  expect(modeButtons.map((b) => b.textContent)).toEqual(['アニメ', 'ケモノ']);
+  expect(modeButtons[0]!.getAttribute('aria-pressed')).toBe('true');
+  await act(async () => modeButtons[1]!.click());
+  expect(onGenerationChange).toHaveBeenCalledWith({ mode: 'furry' });
+
+  // サイズボタンは向きごとにグルーピングされ、ピクトグラムと寸法をあわせて表示する
+  const groups = [...container.querySelectorAll('.size-group')].map((g) => g.getAttribute('aria-label'));
+  expect(groups).toEqual(['縦向き', '横向き', '正方形', 'カスタム']);
+  const labels = [...container.querySelectorAll('.size-groups [role="radio"]')].map((b) => b.getAttribute('aria-label'));
+  expect(labels).toEqual([
+    '縦 832×1216',
+    '縦長 768×1344',
+    '横 1216×832',
+    '横長 1344×768',
+    '正方形 1024×1024',
+    'カスタム 832×1216',
+  ]);
+  // ボタンには向きのピクトグラム（SizeIcon の長方形）が入っている
+  expect(container.querySelector('.size-groups [role="radio"] svg rect')).not.toBeNull();
+  await act(async () => panelSizeButton('縦長 768×1344').click());
+  expect(onGenerationChange).toHaveBeenCalledWith({ size: 'tall' });
+
+  // ステップとスケールはフェーダーで、現在値が横に表示される
+  await setRange('ステップ', '12');
+  expect(onGenerationChange).toHaveBeenCalledWith({ steps: 12 });
+  await setRange('スケール', '7.5');
+  expect(onGenerationChange).toHaveBeenCalledWith({ scale: 7.5 });
+  const stepsOutput = container.querySelector('output[for$="-steps"], .fader-row output');
+  expect(stepsOutput?.textContent).toBe(String(DEFAULT_GENERATION.steps));
 });
 
 it('turns per-character negative and center on from the character card', async () => {
