@@ -34,7 +34,7 @@
   flex: none;
 }
 
-/* ヘッダー内のタブ。狭い画面ではアイコンだけにする */
+/* ヘッダー内のタブ。ラベルは狭い画面でも出す（生成ボタンをドックに移して空いた分） */
 .tabbar {
   flex: 1 0 auto;
   display: flex;
@@ -62,38 +62,20 @@
   background: var(--accent-soft);
 }
 
+/* 狭い画面でも画面切替のラベルは表示する（アイコンのみだとどれが何か分からないため） */
 @media (max-width: 804px) {
   .tab {
     padding: 0.45rem 0.55rem;
   }
+}
 
-  .tab-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
+@media (max-width: 389px) {
+  .tab {
+    padding: 0.45rem 0.35rem;
   }
 
-  .tab-count {
-    position: absolute;
-    top: -2px;
-    right: -4px;
-    min-width: 1.3em;
-    padding: 0 0.3em;
-    font-size: 0.65rem;
-    line-height: 1.4;
-  }
-
-  .tab-generate .spinner-small {
-    position: absolute;
-    top: -2px;
-    right: -4px;
-  }
-
-  .tab-dictionary .tab-count {
-    display: none;
+  .tabbar {
+    gap: 0.15rem;
   }
 }
 
@@ -118,5 +100,27 @@
   padding: 0.6rem 1rem;
   background: var(--danger);
   color: var(--accent-text);
+}
+
+/* アイコン（icons.tsx の svg 共通） */
+.icon {
+  display: block;
+  flex: none;
+}
+
+@media (max-width: 519px) {
+  .app-header {
+    gap: 0.4rem;
+  }
+
+  .app-title .brand-wordmark {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .app-title {
+    margin-right: 0.25rem;
+  }
 }
 

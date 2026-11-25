@@ -128,6 +128,7 @@ export function GeneratePanel({
         </label>
         {generation.size === 'custom' && (
           <div className="field field-wide custom-size">
+            <span className="custom-size-title">カスタムサイズ</span>
             <div className="custom-size-fields">
               <label className="field" htmlFor={`${id}-custom-width`}>
                 <span>幅</span>
@@ -280,6 +281,7 @@ export function GeneratePanel({
         </div>
       </details>
 
+      {blocker && token.token && <p className="hint gen-blocker">{blocker}</p>}
       <div className="gen-actions">
         {generating && (
           <button type="button" className="btn" onClick={generator.cancel}>
@@ -296,7 +298,6 @@ export function GeneratePanel({
           {generating ? '生成中…' : '生成する'}
         </button>
       </div>
-      {blocker && token.token && <p className="hint gen-blocker">{blocker}</p>}
     </div>
   );
 }

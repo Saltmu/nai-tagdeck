@@ -2,9 +2,8 @@ import { memo, useCallback, useEffect, useId, useRef, useState, type PointerEven
 import type { PromptCategoryKey, TargetId, WorkTag } from '../types';
 import { categoryLabel } from '../lib/categories';
 import { WEIGHT_MAX, WEIGHT_MIN, WEIGHT_STEP, clampWeight } from '../lib/prompt';
-import { aliasMatchesQuery, highlightTag } from '../lib/tagSearch';
+import { highlightTag } from '../lib/tagSearch';
 import { splitInteraction } from '../lib/interaction';
-import { normalize } from '../lib/tagText';
 import { WeightInput } from './WeightInput';
 import { BookPlusIcon, CheckIcon, CloseIcon, EditIcon } from './icons';
 
@@ -168,7 +167,6 @@ export const TagRow = memo(function TagRow({
   };
   const aliasList = typeof aliases === 'string' ? (aliases ? [aliases] : []) : (aliases ?? []);
   const aliasText = aliasList.join(' / ');
-  const aliasMatched = aliasList.length > 0 && normalize(query).length > 0 && aliasMatchesQuery(aliasList, query);
 
   return (
     <li className={`tag-row${tag.enabled ? '' : ' is-off'}${editing && !sorting ? ' is-editing' : ''}`}>
@@ -191,47 +189,56 @@ export const TagRow = memo(function TagRow({
               if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
             }}
           />
-          {visibleMoveTargets && visibleMoveTargets.length > 0 && onMoveTag && (
-            <>
-              <select
-                className="tag-edit-move"
-                aria-label={`${tag.tag} の移動先カテゴリ`}
-                value={selectedMove ? pendingMove : ''}
-                onChange={(e) => setPendingMove(e.target.value)}
-              >
-                <option value="" disabled>カテゴリ移動</option>
-                {visibleMoveTargets.length === 1
-                  ? visibleMoveTargets[0]!.options.map((opt) => {
-                      const key = moveOptionKey(opt.target, opt.category);
-                      return <option key={key} value={key}>{opt.label}</option>;
-                    })
-                  : visibleMoveTargets.map((group) => (
-                      <optgroup key={group.id} label={group.label}>
-                        {group.options.map((opt) => {
-                          const key = moveOptionKey(opt.target, opt.category);
-                          return <option key={key} value={key}>{`${group.label} / ${opt.label}`}</option>;
-                        })}
-                      </optgroup>
-                    ))}
-              </select>
-              <button
-                type="button"
-                className="btn btn-small"
-                aria-label={`${tag.tag} を移動`}
-                title={hasUnsavedRename ? 'タグ名の変更を先に保存してください' : undefined}
-                disabled={!selectedMove || hasUnsavedRename}
-                onClick={commitMove}
-              >
-                移動
-              </button>
-            </>
-          )}
           <button type="button" className="icon-btn" aria-label="保存" title="保存" onClick={commit}>
             <CheckIcon />
           </button>
           <button type="button" className="icon-btn" aria-label="キャンセル" title="キャンセル" onClick={() => setEditing(false)}>
             <CloseIcon />
           </button>
+          {/* 移動はめったに使わないため折りたたみに入れ、編集行の表には入力と✓／×だけを残す */}
+          {visibleMoveTargets && visibleMoveTargets.length > 0 && onMoveTag && (
+            <details className="accordion tag-edit-move-details">
+              <summary>カテゴリ移動</summary>
+              <div className="accordion-body">
+                <select
+                  className="tag-edit-move"
+                  aria-label={`${tag.tag} の移動先カテゴリ`}
+                  value={selectedMove ? pendingMove : ''}
+                  onChange={(e) => setPendingMove(e.target.value)}
+                >
+                  <option value="" disabled>カテゴリ移動</option>
+                  {visibleMoveTargets.length === 1
+                    ? visibleMoveTargets[0]!.options.map((opt) => {
+                        const key = moveOptionKey(opt.target, opt.category);
+                        return <option key={key} value={key}>{opt.label}</option>;
+                      })
+                    : visibleMoveTargets.map((group) => (
+                        <optgroup key={group.id} label={group.label}>
+                          {group.options.map((opt) => {
+                            const key = moveOptionKey(opt.target, opt.category);
+                            return <option key={key} value={key}>{`${group.label} / ${opt.label}`}</option>;
+                          })}
+                        </optgroup>
+                      ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn btn-small"
+                  aria-label={`${tag.tag} を移動`}
+                  title={hasUnsavedRename ? 'タグ名の変更を先に保存してください' : undefined}
+                  disabled={!selectedMove || hasUnsavedRename}
+                  onClick={commitMove}
+                >
+                  移動
+                </button>
+                <p className="hint">移動先を選んで「移動」を押すと移動します。タグ名の変更とは別に確定します。</p>
+                {hasUnsavedRename && (
+                  <p className="hint" role="note">タグ名を変更したままでは移動できません。先に✓で保存してください。</p>
+                )}
+              </div>
+            </details>
+          )}
+          <p className="tag-edit-hint">Enter で保存・Esc でキャンセル</p>
           {aliasText && <span className="tag-alias tag-alias-edit">日本語名: {aliasText}</span>}
           {error && <span id={errorId} className="tag-edit-error" role="alert">{error}</span>}
         </div>
@@ -242,13 +249,13 @@ export const TagRow = memo(function TagRow({
         >
           <span className="drag-handle" aria-hidden="true">||</span>
           <TagLabel tag={tag.tag} query={query} title={aliasText} />
-          {aliasMatched && aliasText && <AliasLabel alias={aliasText} query={query} />}
+          {aliasText && <AliasLabel alias={aliasText} query={query} />}
         </span>
       ) : (
         <label className="tag-check">
           <input type="checkbox" checked={tag.enabled} onChange={() => onToggle(tag.id)} />
           <TagLabel tag={tag.tag} query={query} title={aliasText} />
-          {aliasMatched && aliasText && <AliasLabel alias={aliasText} query={query} />}
+          {aliasText && <AliasLabel alias={aliasText} query={query} />}
         </label>
       )}
 
@@ -309,7 +316,7 @@ export const TagRow = memo(function TagRow({
           {canRegister && onRegister && !editing && (
             <button
               type="button"
-              className="icon-btn"
+              className="icon-btn tag-register-btn"
               aria-label={`${tag.tag} を辞書に登録`}
               title="このタグを辞書に登録"
               onClick={(event) => {

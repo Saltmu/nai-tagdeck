@@ -18,9 +18,9 @@
   margin-top: 0.65rem;
   padding: 0.15rem 0 0.05rem;
   border-bottom: 1px solid var(--border);
-  /* スクロールしてもヘッダーの直下に残す（top はヘッダーの高さに合わせて JS で設定） */
+  /* スクロールしてもヘッダーの直下に残す。--header-height は App が実測して設定する */
   position: sticky;
-  top: 0;
+  top: var(--header-height);
   z-index: var(--z-editor-tabs);
   background: var(--bg);
 }

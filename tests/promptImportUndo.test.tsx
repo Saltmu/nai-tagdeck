@@ -346,7 +346,7 @@ it('restores a metadata-less history image via fallback and undoes the import', 
   root = createRoot(container);
   await act(async () => root.render(<DialogProvider><DialogSpy /><App onResetAll={() => {}} /></DialogProvider>));
   await click(button('生成'));
-  await click(button('生成する（Ctrl+Enter）'));
+  await click(button('生成する'));
   expect(container.querySelector('.thumb-btn')).not.toBeNull();
 
   await click(button('編集'));

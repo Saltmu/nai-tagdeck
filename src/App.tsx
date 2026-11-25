@@ -4,7 +4,7 @@ import { GeneratePanel } from './components/GeneratePanel';
 import { PromptPreview } from './components/PromptPreview';
 import { Gallery } from './components/Gallery';
 import { GenerateDock } from './components/GenerateDock';
-import { QuickGenerate } from './components/QuickGenerate';
+import { SeedLock } from './components/SeedLock';
 import { LatestPreview } from './components/LatestPreview';
 import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { useDictionary } from './hooks/useDictionary';
@@ -23,7 +23,7 @@ import { usePromptImportApply } from './hooks/usePromptImportApply';
 import { useDialogs } from './components/Dialogs';
 import { isEmptyWorkspace } from './lib/presets';
 import { isDefaultSettings } from './lib/settings';
-import { isDefaultGeneration, resolveSize, type SizeKey } from './lib/generation';
+import { isDefaultGeneration, resolveSize } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { TabSyncNotice } from './components/TabSyncNotice';
@@ -107,6 +107,22 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const imageStore = useImages({ onEvict });
   const generator = useGenerator(imageStore.add);
   const [tab, setTab] = useState<Tab>('editor');
+  // 画面ごとのスクロール位置を覚え、切り替え時に戻す。生成画像の確認とタグ編集を
+  // 行き来しても、毎回スワイプし直す必要がないようにする。未訪問の画面は先頭から開く。
+  const scrollPositionsRef = useRef<Partial<Record<Tab, number>>>({});
+  const prevTabRef = useRef<Tab>(tab);
+  useEffect(() => {
+    const onScroll = () => {
+      scrollPositionsRef.current[tab] = window.scrollY;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [tab]);
+  useLayoutEffect(() => {
+    if (prevTabRef.current === tab) return;
+    prevTabRef.current = tab;
+    window.scrollTo(0, scrollPositionsRef.current[tab] ?? 0);
+  }, [tab]);
   // 広い画面では、画像エリアをクリックしたらドックを閉じる（バーは初期表示と同じ形で残る）
   const [dockCollapse, setDockCollapse] = useState(0);
   const hideDockOnImageClick = (e: MouseEvent<HTMLDivElement>) => {
@@ -263,10 +279,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     (weightSyntax: WeightSyntax) => updateSettings({ weightSyntax }),
     [updateSettings],
   );
-  const handleSizeChange = useCallback(
-    (size: SizeKey) => updateGeneration({ size }),
-    [updateGeneration],
-  );
   const handleClearSeed = useCallback(() => {
     updateGeneration({ seed: null });
     show('シードをランダムに戻しました');
@@ -334,16 +346,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             </button>
           ))}
         </nav>
-        <QuickGenerate
-          size={generation.size}
-          customSize={generation.size === 'custom' ? resolveSize(generation) : undefined}
-          seed={generation.seed}
-          onSizeChange={handleSizeChange}
-          onClearSeed={handleClearSeed}
-          generating={generator.generating}
-          blocker={blocker}
-          onGenerate={startGenerate}
-        />
+        {/* ヘッダーにはシード固定の表示だけを残す。生成ボタンとサイズ選択はドックに一本化した */}
+        <SeedLock seed={generation.seed} onClearSeed={handleClearSeed} />
       </header>
       <SwUpdateNotice />
       <TabSyncNotice

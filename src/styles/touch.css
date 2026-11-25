@@ -17,6 +17,30 @@
     min-height: 44px;
   }
 
+  /* タグ行の重み −／＋ と入力欄も 44px のタップ目標にする。× との間隔も広げる */
+  .tag-row {
+    gap: 0.5rem;
+  }
+
+  .step-btn {
+    width: 44px;
+    min-height: 44px;
+  }
+
+  .weight-control .weight {
+    min-height: 44px;
+  }
+
+  /* 辞書登録はタッチでは行を間引く。辞書画面からも登録できる */
+  .tag-register-btn {
+    display: none;
+  }
+
+  /* キーボードのない画面では Enter / Esc の案内は出さない */
+  .tag-edit-hint {
+    display: none;
+  }
+
   .viewer-seed-apply {
     min-width: 44px;
     min-height: 44px;
