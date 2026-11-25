@@ -40,20 +40,16 @@ async function switchDockTab(label: string) {
   await click(button(label, tabs));
 }
 
-function sizeSelect(): HTMLSelectElement {
-  const label = [...container.querySelectorAll('label')].find((el) => el.textContent?.includes('サイズ'));
-  const select = label?.querySelector('select');
-  if (!(select instanceof HTMLSelectElement)) throw new Error('サイズの選択肢が見つかりません');
-  return select;
+/** 生成パネルのサイズ指定ボタン（フッターのピクトグラムとは別）。 */
+function panelSizeButton(label: string): HTMLButtonElement {
+  const found = [...container.querySelectorAll<HTMLButtonElement>('.size-groups [role="radio"]')]
+    .find((b) => b.getAttribute('aria-label') === label);
+  if (!found) throw new Error(`パネルのサイズボタンが見つかりません: ${label}`);
+  return found;
 }
 
-async function chooseSize(value: string) {
-  const select = sizeSelect();
-  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
-  await act(async () => {
-    setter?.call(select, value);
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+function panelSizeChecked(): string | null {
+  return container.querySelector('.size-groups [role="radio"][aria-checked="true"]')?.getAttribute('aria-label') ?? null;
 }
 
 function sizeRadios(): HTMLButtonElement[] {
@@ -126,12 +122,14 @@ it('keeps the same generate button on the generate tab', async () => {
   expect(sizeRadios()).toHaveLength(3);
 });
 
-it('keeps the panel size select and the footer pictograms in sync', async () => {
+it('keeps the panel size buttons and the footer pictograms in sync', async () => {
   await switchDockTab('生成');
-  expect(sizeSelect().value).toBe('portrait');
+  // パネルにサイズのセレクトボックスはない（ボタン式になった）
+  expect(container.querySelector('.size-groups select')).toBeNull();
+  expect(panelSizeChecked()).toBe('縦 832×1216');
 
-  await chooseSize('custom');
-  expect(sizeSelect().value).toBe('custom');
+  await click(panelSizeButton('カスタム 832×1216'));
+  expect(panelSizeChecked()).toBe('カスタム 832×1216');
   expect(sizeRadios().map((r) => r.getAttribute('aria-label'))).toEqual([
     '縦 832×1216',
     '横 1216×832',
@@ -139,12 +137,12 @@ it('keeps the panel size select and the footer pictograms in sync', async () => 
     'カスタム 832×1216',
   ]);
   expect(sizeRadios()[3]!.getAttribute('aria-checked')).toBe('true');
-  // カスタムの数値入力がパネルに出る（ピクトグラムを押さずにたどり着ける）
+  // カスタムの数値入力がパネルに出る（ボタンの後に置く）
   expect(container.querySelector('.custom-size')).not.toBeNull();
 
   const landscape = sizeRadios().find((r) => r.getAttribute('aria-label') === '横 1216×832')!;
   await click(landscape);
-  expect(sizeSelect().value).toBe('landscape');
+  expect(panelSizeChecked()).toBe('横 1216×832');
   expect(sizeRadios()).toHaveLength(3);
 });
 
