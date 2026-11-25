@@ -96,7 +96,7 @@ npm run dev
 | Variable | `DEPLOY_DIR` | `/home/user/www/nai-tagdeck` のような、FTPS で見える既存の公開ディレクトリの絶対パス |
 | Secret | `DEPLOY_PASSWORD` | FTPS ユーザーのパスワード |
 
-以前の SFTP 用の設定は不要になりました。`DEPLOY_SSH_KEY` シークレットと `DEPLOY_HOST_FINGERPRINT` 変数は使われないため削除できます。以前の `DEPLOY_KNOWN_HOSTS` 変数も削除できます。TLS 証明書は lftp が検証します。
+以前の SFTP 用の設定（`DEPLOY_SSH_KEY` シークレットと `DEPLOY_HOST_FINGERPRINT` 変数）は、deploy.yml の FTPS 化が終わってから削除できます。**現時点の `.github/workflows/deploy.yml` はまだ SFTP 版のため、Actions を使う間は `DEPLOY_PORT` 22、`DEPLOY_SSH_KEY`、`DEPLOY_HOST_FINGERPRINT` が引き続き必要です。** deploy.yml の FTPS 化はワークフロー更新権限の都合でこの PR には含まれていないため、反映されるまでは削除しないでください。以前の `DEPLOY_KNOWN_HOSTS` 変数はすでに不要です。FTPS 化後は TLS 証明書を lftp が検証します。
 
 **Actions → Deploy nai-tagdeck → Run workflow** で `main` を選び、まず **Preview files without uploading** をオンにしたまま実行します。接続と転送予定を確認したら、チェックを外して再実行します。毎回テストとビルドを実行し、ハッシュ付きアセットを先に送ります。サイズが同じアセットは再送しません。その後にページを公開し、配信された `index.html` と `sw.js` がビルドと一致してから、`dist/` に無いファイルを削除します。サーバー側の `.htaccess` と `robots.txt` は残します。公開直前に古いページを開いていたタブは、古いスクリプトが削除されると再読み込みするまで開けないことがあります。
 
