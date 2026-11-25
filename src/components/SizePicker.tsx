@@ -1,13 +1,14 @@
 import { type KeyboardEvent, useRef } from 'react';
-import { SIZE_PRESETS, type SizeKey } from '../lib/generation';
+import { SIZE_PRESETS, sizeLabel, type SizeKey } from '../lib/generation';
 import { SizeIcon } from './icons';
 
 /**
  * サイズのピクトグラム（ラジオグループ）。生成ボタンの横に置き、ドロップダウンを開かずに選べるようにする。
- * 5 つの標準サイズは常に表示し、カスタムも実効寸法のピクトグラムで常に表示する。
- * ドロップダウンをなくしたため、カスタムへの入口もこのピクトグラムが担う。
+ * 元の 3 つ（縦・横・正方形）だけを常時表示し、現在が縦長・横長・カスタムのときだけ、
+ * 選択中のものを 4 つ目として表示する（従来の QuickGenerate と同じ形）。
+ * 縦長・横長・カスタムへの入口は生成パネルのサイズ選択が担う。
  */
-const PICKER_SIZES: readonly SizeKey[] = ['portrait', 'landscape', 'square', 'tall', 'wide', 'custom'];
+const BASE_SIZES: readonly SizeKey[] = ['portrait', 'landscape', 'square'];
 
 interface Props {
   size: SizeKey;
@@ -17,28 +18,30 @@ interface Props {
 }
 
 export function SizePicker({ size, customSize, onSizeChange }: Props) {
+  const extra = BASE_SIZES.includes(size) ? [] : [size];
+  const pickerSizes: readonly SizeKey[] = [...BASE_SIZES, ...extra];
   const radioRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const activeIndex = PICKER_SIZES.indexOf(size);
+  const activeIndex = pickerSizes.indexOf(size);
 
   const onRadioKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const current = Math.max(activeIndex, 0);
     let next: number | null = null;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (current + 1) % PICKER_SIZES.length;
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (current - 1 + PICKER_SIZES.length) % PICKER_SIZES.length;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (current + 1) % pickerSizes.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (current - 1 + pickerSizes.length) % pickerSizes.length;
     else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = PICKER_SIZES.length - 1;
+    else if (e.key === 'End') next = pickerSizes.length - 1;
     if (next === null) return;
     e.preventDefault();
-    onSizeChange(PICKER_SIZES[next]!);
+    onSizeChange(pickerSizes[next]!);
     radioRefs.current[next]?.focus();
   };
 
   return (
     <div className="size-toggle" role="radiogroup" aria-label="画像サイズ" onKeyDown={onRadioKeyDown}>
-      {PICKER_SIZES.map((key, i) => {
+      {pickerSizes.map((key, i) => {
         const preset = SIZE_PRESETS.find((s) => s.key === key);
         const dims = preset ?? customSize;
-        const label = preset?.label ?? `カスタム ${dims.width}×${dims.height}`;
+        const label = preset?.label ?? sizeLabel({ size: key, customWidth: dims.width, customHeight: dims.height });
         const isTabbable = activeIndex >= 0 ? i === activeIndex : i === 0;
         return (
           <button

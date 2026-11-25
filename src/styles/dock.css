@@ -77,16 +77,6 @@
   padding: 0 0.75rem 0.75rem;
 }
 
-/* 生成ボタンはドック下部に固定表示する。パネルをスクロールしても常に押せるようにする */
-.dock-scroll .gen-actions {
-  position: sticky;
-  bottom: 0;
-  margin: 0.6rem -0.75rem -0.75rem;
-  padding: 0.75rem;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-}
-
 .generate > .chip {
   display: inline-block;
 }
@@ -95,17 +85,18 @@
   margin-bottom: 0.5rem;
 }
 
-/* 狭い画面: 画面下端に固定し、下からせり上がるシートにする */
+/* 狭い画面: 画面下端に固定し、下からせり上がるシートにする。
+   生成バーの上に置く（バーの高さは --generate-bar-height で実測する） */
 @media (max-width: 1099px) {
   .pane-generate {
-    padding-bottom: calc(3.75rem + env(safe-area-inset-bottom));
+    padding-bottom: calc(3.75rem + var(--generate-bar-height, 0px) + env(safe-area-inset-bottom));
   }
 
   .dock {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: var(--generate-bar-height, 0px);
     z-index: var(--z-dock);
     padding-bottom: env(safe-area-inset-bottom);
     border-bottom: 0;

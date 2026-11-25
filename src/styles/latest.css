@@ -2,7 +2,7 @@
 .latest-preview {
   position: fixed;
   right: max(0.75rem, env(safe-area-inset-right));
-  bottom: calc(env(safe-area-inset-bottom) + 0.75rem + var(--dock-offset));
+  bottom: calc(env(safe-area-inset-bottom) + 0.75rem + var(--dock-offset) + var(--generate-bar-height, 0px));
   z-index: var(--z-latest-preview);
   display: flex;
   align-items: flex-start;

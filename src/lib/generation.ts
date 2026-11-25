@@ -204,6 +204,18 @@ export function sizeLabel(g: SizeInput): string {
   return SIZE_PRESETS.find((s) => s.key === g.size)?.label ?? g.size;
 }
 
+/**
+ * ピクトグラムと生成パネルのサイズ選択で共通の変更パッチ。
+ * カスタムは現在の実効寸法で入る。どちらを操作しても同じ状態が変わる。
+ */
+export function sizeChangePatch(g: SizeInput, next: SizeKey): Partial<GenerationSettings> {
+  if (next === 'custom') {
+    const { width, height } = resolveSize(g);
+    return { size: 'custom', customWidth: width, customHeight: height };
+  }
+  return { size: next };
+}
+
 export function normalizeGeneration(raw: unknown): GenerationSettings {
   const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>

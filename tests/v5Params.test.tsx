@@ -3,6 +3,7 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CharacterCard } from '../src/components/CharacterCard';
+import { GenerateBar } from '../src/components/GenerateBar';
 import { GeneratePanel } from '../src/components/GeneratePanel';
 import { DialogProvider } from '../src/components/Dialogs';
 import { DEFAULT_GENERATION, normalizeGeneration, type GenerationSettings } from '../src/lib/generation';
@@ -61,11 +62,8 @@ it('shows the Opus free-tier conditions in the page and edits the advanced setti
       <GeneratePanel
         generation={DEFAULT_GENERATION}
         onGenerationChange={onGenerationChange}
-        generator={generator}
         token={token}
         onOpenSettings={() => {}}
-        blocker={null}
-        onGenerate={() => {}}
       />,
     );
   });
@@ -90,33 +88,61 @@ it('shows the Opus free-tier conditions in the page and edits the advanced setti
   expect(onGenerationChange).toHaveBeenCalledWith({ dynamicThresholding: true });
 });
 
+function selectOf(labelText: string): HTMLSelectElement {
+  const label = [...container.querySelectorAll('label')].find((el) => el.textContent?.includes(labelText));
+  const select = label?.querySelector('select');
+  if (!(select instanceof HTMLSelectElement)) throw new Error(`${labelText} の選択肢が見つかりません`);
+  return select;
+}
+
+async function chooseSelect(labelText: string, value: string) {
+  const select = selectOf(labelText);
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+  await act(async () => {
+    setter?.call(select, value);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
 it('switches to a custom size, picks a suggestion, rounds a width and swaps sides', async () => {
   const onGenerationChange = vi.fn();
   function Harness() {
     const [generation, setGeneration] = useState<GenerationSettings>(DEFAULT_GENERATION);
+    const handleChange = (patch: Partial<GenerationSettings>) => {
+      onGenerationChange(patch);
+      setGeneration((prev) => normalizeGeneration({ ...prev, ...patch }));
+    };
     return (
-      <GeneratePanel
-        generation={generation}
-        onGenerationChange={(patch) => {
-          onGenerationChange(patch);
-          setGeneration((prev) => normalizeGeneration({ ...prev, ...patch }));
-        }}
-        generator={generator}
-        token={token}
-        onOpenSettings={() => {}}
-        blocker={null}
-        onGenerate={() => {}}
-      />
+      <>
+        <GeneratePanel
+          generation={generation}
+          onGenerationChange={handleChange}
+          token={token}
+          onOpenSettings={() => {}}
+        />
+        <GenerateBar
+          generation={generation}
+          onGenerationChange={handleChange}
+          generator={generator}
+          token={token}
+          blocker={null}
+          onGenerate={() => {}}
+        />
+      </>
     );
   }
   await act(async () => root.render(<Harness />));
   expect(container.querySelector('.custom-size')).toBeNull();
+  // パネルのサイズ選択は常時表示され、カスタムはピクトグラムを押さずに選べる
+  expect(selectOf('サイズ').value).toBe('portrait');
 
-  const customRadio = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')]
-    .find((r) => r.getAttribute('aria-label') === 'カスタム 832×1216')!;
-  await act(async () => customRadio.click());
+  await chooseSelect('サイズ', 'custom');
   expect(onGenerationChange).toHaveBeenCalledWith({ size: 'custom', customWidth: 832, customHeight: 1216 });
   expect(container.querySelector('.custom-size-status')?.textContent).toContain('832×1216（1,011,712 / 1,048,576 px）');
+  // フッターのピクトグラムも同じ状態を示す（4 つ目にカスタムが出る）
+  expect(container.querySelector('.size-toggle [role="radio"][aria-checked="true"]')?.getAttribute('aria-label')).toBe(
+    'カスタム 832×1216',
+  );
 
   await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="カスタムサイズ 896×1152 にする"]')!.click());
   expect(onGenerationChange).toHaveBeenCalledWith({ size: 'custom', customWidth: 896, customHeight: 1152 });
@@ -130,6 +156,14 @@ it('switches to a custom size, picks a suggestion, rounds a width and swaps side
   await act(async () => swap!.click());
   expect(onGenerationChange).toHaveBeenCalledWith({ size: 'custom', customWidth: 1152, customHeight: 896 });
   expect(container.querySelector('.custom-size-status')?.textContent).toContain('1152×896');
+
+  // 逆方向も連動する。フッターのピクトグラムを押すとパネルの選択も変わる
+  const landscapeRadio = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')]
+    .find((r) => r.getAttribute('aria-label') === '横 1216×832')!;
+  await act(async () => landscapeRadio.click());
+  expect(onGenerationChange).toHaveBeenCalledWith({ size: 'landscape' });
+  expect(selectOf('サイズ').value).toBe('landscape');
+  expect(container.querySelector('.custom-size')).toBeNull();
 });
 
 it('turns per-character negative and center on from the character card', async () => {

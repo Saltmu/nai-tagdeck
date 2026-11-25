@@ -4,6 +4,7 @@ import { GeneratePanel } from './components/GeneratePanel';
 import { PromptPreview } from './components/PromptPreview';
 import { Gallery } from './components/Gallery';
 import { GenerateDock } from './components/GenerateDock';
+import { GenerateBar } from './components/GenerateBar';
 import { SeedLock } from './components/SeedLock';
 import { LatestPreview } from './components/LatestPreview';
 import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
@@ -126,7 +127,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   // 広い画面では、画像エリアをクリックしたらドックを閉じる（バーは初期表示と同じ形で残る）
   const [dockCollapse, setDockCollapse] = useState(0);
   const hideDockOnImageClick = (e: MouseEvent<HTMLDivElement>) => {
-    if ((e.target as Element).closest('.dock')) return;
+    if ((e.target as Element).closest('.dock, .generate-bar')) return;
     if (window.matchMedia?.('(min-width: 1100px)').matches) setDockCollapse((n) => n + 1);
   };
   const settingsRef = useRef(settings);
@@ -455,13 +456,19 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
                 <GeneratePanel
                   generation={generation}
                   onGenerationChange={updateGeneration}
-                  generator={generator}
                   token={token}
                   onOpenSettings={openSettings}
-                  blocker={blocker}
-                  onGenerate={startGenerate}
                 />
               }
+            />
+            {/* 生成ボタンとサイズは、編集タブでも常に下部に置くバーへ移した */}
+            <GenerateBar
+              generation={generation}
+              onGenerationChange={updateGeneration}
+              generator={generator}
+              token={token}
+              blocker={blocker}
+              onGenerate={startGenerate}
             />
           </div>
         </div>

@@ -19,6 +19,7 @@
 @import './styles/workbench.css';
 @import './styles/dock.css';
 @import './styles/generate.css';
+@import './styles/generate-bar.css';
 @import './styles/gallery.css';
 @import './styles/dialog.css';
 @import './styles/viewer.css';
