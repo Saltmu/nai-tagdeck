@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BackupCard } from '../src/components/BackupCard';
 import { DialogProvider } from '../src/components/Dialogs';
-import { backupImportMessage, type Backup } from '../src/lib/backup';
+import { backupImportMessage, type Backup, type BackupImportMode } from '../src/lib/backup';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -56,7 +56,11 @@ afterEach(async () => {
   });
 });
 
-async function mount(onImport = vi.fn(async () => {}), notify = vi.fn(), reloadCount = 0) {
+async function mount(
+  onImport = vi.fn(async (_data: Backup, _mode?: BackupImportMode) => {}),
+  notify = vi.fn(),
+  reloadCount = 0,
+) {
   await act(async () => {
     root.render(
       <DialogProvider>
