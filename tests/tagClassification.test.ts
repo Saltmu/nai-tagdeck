@@ -10,40 +10,22 @@ function entry(tag: string, category: DictEntry['category'], id = `${category}:$
 }
 
 describe('単語ベクトルによる未登録タグ分類', () => {
-  it('同梱辞書で未登録の asymmetrical bomber jacket をキャラは自動分類し、ベースは候補として返す', () => {
+  it('同梱辞書で未登録の asymmetrical bomber jacket をベース・キャラとも自動分類する', () => {
     const index = createTagVectorIndex(sampleDictionary());
 
-    const characterResult = classifyEditorTag('asymmetrical bomber jacket', index, CHARACTER_CATEGORY_KEYS, 'auto');
-    expect(characterResult).toEqual({ category: 'outfit', suggestedCategory: null });
-
-    const baseResult = classifyEditorTag('asymmetrical bomber jacket', index, PROMPT_CATEGORY_KEYS, 'suggest');
-    expect(baseResult).toEqual({ category: 'unclassified', suggestedCategory: 'outfit' });
+    expect(classifyEditorTag('asymmetrical bomber jacket', index, CHARACTER_CATEGORY_KEYS)).toBe('outfit');
+    expect(classifyEditorTag('asymmetrical bomber jacket', index, PROMPT_CATEGORY_KEYS)).toBe('outfit');
   });
 
-  it('共通語がないタグやキャラに存在しないカテゴリのみの語は未分類・候補なしにする', () => {
+  it('共通語がないタグは未分類にし、キャラに存在しないカテゴリの語はベースで自動分類する', () => {
     const index = createTagVectorIndex(sampleDictionary());
 
-    expect(classifyEditorTag('completely unknown xyzzy', index, PROMPT_CATEGORY_KEYS, 'suggest')).toEqual({
-      category: 'unclassified',
-      suggestedCategory: null,
-    });
-    expect(classifyEditorTag('completely unknown xyzzy', index, CHARACTER_CATEGORY_KEYS, 'auto')).toEqual({
-      category: 'unclassified',
-      suggestedCategory: null,
-    });
+    expect(classifyEditorTag('completely unknown xyzzy', index, PROMPT_CATEGORY_KEYS)).toBe('unclassified');
+    expect(classifyEditorTag('completely unknown xyzzy', index, CHARACTER_CATEGORY_KEYS)).toBe('unclassified');
     // 背景・天候のタグと語を共有しても、キャラに存在しないカテゴリへは振り分けない
-    expect(classifyEditorTag('abandoned train station', index, CHARACTER_CATEGORY_KEYS, 'auto')).toEqual({
-      category: 'unclassified',
-      suggestedCategory: null,
-    });
-    expect(classifyEditorTag('rain soaked alley', index, CHARACTER_CATEGORY_KEYS, 'auto')).toEqual({
-      category: 'unclassified',
-      suggestedCategory: null,
-    });
-    expect(classifyEditorTag('abandoned train station', index, PROMPT_CATEGORY_KEYS, 'suggest')).toEqual({
-      category: 'unclassified',
-      suggestedCategory: 'background',
-    });
+    expect(classifyEditorTag('abandoned train station', index, CHARACTER_CATEGORY_KEYS)).toBe('unclassified');
+    expect(classifyEditorTag('rain soaked alley', index, CHARACTER_CATEGORY_KEYS)).toBe('unclassified');
+    expect(classifyEditorTag('abandoned train station', index, PROMPT_CATEGORY_KEYS)).toBe('background');
   });
 
   it('辞書の完全一致（一意・同名複数カテゴリ・対象外カテゴリ）は既存の分類を維持する', () => {
@@ -57,27 +39,12 @@ describe('単語ベクトルによる未登録タグ分類', () => {
     ];
     const index = createTagVectorIndex(entries);
 
-    expect(classifyEditorTag('BLUE_JACKET', index, CHARACTER_CATEGORY_KEYS, 'auto')).toEqual({
-      category: 'outfit',
-      suggestedCategory: null,
-    });
-    expect(classifyEditorTag('sunny park', index, CHARACTER_CATEGORY_KEYS, 'auto')).toEqual({
-      category: 'unclassified',
-      suggestedCategory: null,
-    });
+    expect(classifyEditorTag('BLUE_JACKET', index, CHARACTER_CATEGORY_KEYS)).toBe('outfit');
+    expect(classifyEditorTag('sunny park', index, CHARACTER_CATEGORY_KEYS)).toBe('unclassified');
     // 同名で複数カテゴリに登録されているタグは、他の類似タグがあっても未分類・候補なしを維持する
-    expect(classifyEditorTag('ambiguous jacket', index, CHARACTER_CATEGORY_KEYS, 'auto')).toEqual({
-      category: 'unclassified',
-      suggestedCategory: null,
-    });
-    expect(classifyEditorTag('ambiguous jacket', index, PROMPT_CATEGORY_KEYS, 'suggest')).toEqual({
-      category: 'unclassified',
-      suggestedCategory: null,
-    });
-    expect(classifyEditorTag('lowres', index, PROMPT_CATEGORY_KEYS, 'suggest')).toEqual({
-      category: 'unclassified',
-      suggestedCategory: null,
-    });
+    expect(classifyEditorTag('ambiguous jacket', index, CHARACTER_CATEGORY_KEYS)).toBe('unclassified');
+    expect(classifyEditorTag('ambiguous jacket', index, PROMPT_CATEGORY_KEYS)).toBe('unclassified');
+    expect(classifyEditorTag('lowres', index, PROMPT_CATEGORY_KEYS)).toBe('unclassified');
   });
 
   it('複数カテゴリに出る語は重みを下げ、特定カテゴリに出る語を優先する', () => {
@@ -117,25 +84,25 @@ describe('単語ベクトルによる未登録タグ分類', () => {
   it('辞書の登録・変更・削除に応じて索引を作り直すと次の判定に反映される', () => {
     const baseEntries = [entry('cape', 'outfit', 'e1')];
     expect(
-      classifyEditorTag('velvet winter cape', createTagVectorIndex(baseEntries), CHARACTER_CATEGORY_KEYS, 'auto'),
-    ).toEqual({ category: 'outfit', suggestedCategory: null });
+      classifyEditorTag('velvet winter cape', createTagVectorIndex(baseEntries), CHARACTER_CATEGORY_KEYS),
+    ).toBe('outfit');
 
     // カテゴリ変更
     const updatedEntries = [entry('cape', 'appearance', 'e1')];
     expect(
-      classifyEditorTag('velvet winter cape', createTagVectorIndex(updatedEntries), CHARACTER_CATEGORY_KEYS, 'auto'),
-    ).toEqual({ category: 'appearance', suggestedCategory: null });
+      classifyEditorTag('velvet winter cape', createTagVectorIndex(updatedEntries), CHARACTER_CATEGORY_KEYS),
+    ).toBe('appearance');
 
     // 削除
     expect(
-      classifyEditorTag('velvet winter cape', createTagVectorIndex([]), CHARACTER_CATEGORY_KEYS, 'auto'),
-    ).toEqual({ category: 'unclassified', suggestedCategory: null });
+      classifyEditorTag('velvet winter cape', createTagVectorIndex([]), CHARACTER_CATEGORY_KEYS),
+    ).toBe('unclassified');
 
     // 新規登録
     const addedEntries = [entry('hooded cape', 'outfit', 'e2'), entry('long cape', 'outfit', 'e3')];
     expect(
-      classifyEditorTag('velvet winter cape', createTagVectorIndex(addedEntries), CHARACTER_CATEGORY_KEYS, 'auto'),
-    ).toEqual({ category: 'outfit', suggestedCategory: null });
+      classifyEditorTag('velvet winter cape', createTagVectorIndex(addedEntries), CHARACTER_CATEGORY_KEYS),
+    ).toBe('outfit');
   });
 
   it('同梱辞書の Leave-One-Out 評価を再実行でき、ベース・キャラの件数と精度を算出できる', () => {

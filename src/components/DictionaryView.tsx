@@ -84,8 +84,7 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
     scrollToList.current = false;
     const list = listRef.current;
     if (!list) return;
-    // ページ送りのボタンは一覧の末尾にもある。フォーカスを残すと画面がそこへ戻る。
-    // 一覧へ移すと、次の Tab は行の前にあるページ操作に入る。
+    // ページ送りは一覧の末尾にだけある。ボタンのままフォーカスを残すと画面がそこへ戻るので、一覧へ移す。
     list.focus({ preventScroll: true });
     list.scrollIntoView({ block: 'start' });
   });
@@ -141,13 +140,40 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
     setPageIndex(next);
   };
 
-  const pageNav = (label: string) => (
-    <nav className="dict-pager" aria-label={label}>
-      <button type="button" className="btn" disabled={page === 0 || savingEdit} onClick={() => void showPage(page - 1)}>
-        前を表示
+  // ページ番号は現在ページを中心に最大 5 件だけ並べる（|<< < 1 2 3 4 5 > >>|）
+  const pageWindow = 5;
+  const pageNumbers = useMemo(() => {
+    if (pageCount <= pageWindow) return Array.from({ length: pageCount }, (_, i) => i);
+    const start = Math.min(Math.max(0, page - Math.floor(pageWindow / 2)), pageCount - pageWindow);
+    return Array.from({ length: pageWindow }, (_, i) => start + i);
+  }, [page, pageCount]);
+
+  const pageNav = (
+    <nav className="dict-pager" aria-label="ページ">
+      <button type="button" className="btn" aria-label="最初のページへ" disabled={page === 0 || savingEdit} onClick={() => void showPage(0)}>
+        {'|<<'}
       </button>
-      <button type="button" className="btn" disabled={page >= pageCount - 1 || savingEdit} onClick={() => void showPage(page + 1)}>
-        さらに表示
+      <button type="button" className="btn" aria-label="前のページへ" disabled={page === 0 || savingEdit} onClick={() => void showPage(page - 1)}>
+        {'<'}
+      </button>
+      {pageNumbers.map((n) => (
+        <button
+          key={n}
+          type="button"
+          className="btn"
+          aria-label={`ページ ${n + 1} へ`}
+          aria-current={n === page ? 'page' : undefined}
+          disabled={n === page || savingEdit}
+          onClick={() => void showPage(n)}
+        >
+          {n + 1}
+        </button>
+      ))}
+      <button type="button" className="btn" aria-label="次のページへ" disabled={page >= pageCount - 1 || savingEdit} onClick={() => void showPage(page + 1)}>
+        {'>'}
+      </button>
+      <button type="button" className="btn" aria-label="最後のページへ" disabled={page >= pageCount - 1 || savingEdit} onClick={() => void showPage(pageCount - 1)}>
+        {'>>|'}
       </button>
     </nav>
   );
@@ -360,7 +386,6 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
             {filtered.length}件 / 全{entries.length}件
             {hasPager && `（${pageStart + 1}〜${pageStart + shown.length}件目）`}
           </p>
-          {hasPager && pageNav('一覧の上のページ')}
           <ul className="dict-list">
             {shown.map((entry) =>
               editingId === entry.id ? (
@@ -396,7 +421,7 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
               ),
             )}
           </ul>
-          {hasPager && pageNav('一覧の下のページ')}
+          {hasPager && pageNav}
         </section>
       )}
     </div>

@@ -282,31 +282,6 @@ export const TagRow = memo(function TagRow({
         </div>
       ) : (
         <>
-          {!editing && suggestedCategory && onMoveCategory && (
-            <button
-              type="button"
-              className="btn btn-small tag-category-suggest"
-              aria-label={`${tag.tag} を候補カテゴリ「${categoryLabel(suggestedCategory)}」へ移動`}
-              title={`候補カテゴリ「${categoryLabel(suggestedCategory)}」へ移動`}
-              onClick={() => onMoveCategory(tag.id, suggestedCategory)}
-            >
-              候補: {categoryLabel(suggestedCategory)}
-            </button>
-          )}
-          {!editing && moveDestinations && onMoveCategory && (
-            <select
-              className="tag-category-move"
-              aria-label={`${tag.tag} の移動先カテゴリ`}
-              value=""
-              onChange={(e) => {
-                const to = moveDestinations.find((key) => key === e.target.value);
-                if (to) onMoveCategory(tag.id, to);
-              }}
-            >
-              <option value="" disabled>移動先</option>
-              {moveDestinations.map((key) => <option key={key} value={key}>{categoryLabel(key)}</option>)}
-            </select>
-          )}
           {!editing && (
             <button type="button" className="icon-btn" aria-label={`${tag.tag} を編集`} title="このタグを編集"
               onClick={() => { setDraft(tag.tag); setPendingMove(''); setError(null); setEditing(true); }}>
@@ -360,6 +335,32 @@ export const TagRow = memo(function TagRow({
           >
             ✕
           </button>
+          )}
+          {/* 未分類行の移動系は通常カテゴリと同じ並び（編集・重み・削除）の後ろに置く */}
+          {!editing && suggestedCategory && onMoveCategory && (
+            <button
+              type="button"
+              className="btn btn-small tag-category-suggest"
+              aria-label={`${tag.tag} を候補カテゴリ「${categoryLabel(suggestedCategory)}」へ移動`}
+              title={`候補カテゴリ「${categoryLabel(suggestedCategory)}」へ移動`}
+              onClick={() => onMoveCategory(tag.id, suggestedCategory)}
+            >
+              候補: {categoryLabel(suggestedCategory)}
+            </button>
+          )}
+          {!editing && moveDestinations && onMoveCategory && (
+            <select
+              className="tag-category-move"
+              aria-label={`${tag.tag} の移動先カテゴリ`}
+              value=""
+              onChange={(e) => {
+                const to = moveDestinations.find((key) => key === e.target.value);
+                if (to) onMoveCategory(tag.id, to);
+              }}
+            >
+              <option value="" disabled>移動先</option>
+              {moveDestinations.map((key) => <option key={key} value={key}>{categoryLabel(key)}</option>)}
+            </select>
           )}
         </>
       )}

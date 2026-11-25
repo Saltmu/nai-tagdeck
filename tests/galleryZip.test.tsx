@@ -182,3 +182,15 @@ it('disables pinned zip action when nothing is pinned, renders visual retention 
   });
   expect(onTogglePin).toHaveBeenCalledWith('img-4');
 });
+
+it('shows a dashed empty area instead of the PNG import zone when there are no images', async () => {
+  await renderGallery([]);
+  expect(container.querySelector('.gallery-empty')?.textContent).toBe('生成した画像はここに表示されます');
+  expect(container.querySelector('.png-drop-zone')).toBeNull();
+  expect(container.querySelector('.thumbs')).toBeNull();
+  expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'PNGから読み込む')).toBe(false);
+
+  await renderGallery([image(1)]);
+  expect(container.querySelector('.gallery-empty')).toBeNull();
+  expect(container.querySelector('.thumbs')).not.toBeNull();
+});

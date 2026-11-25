@@ -229,26 +229,6 @@
   line-height: 1.6;
 }
 
-.png-drop-zone {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-  margin: 0.75rem 0;
-  padding: 0.65rem;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-}
-
-.png-drop-zone .hint {
-  margin: 0;
-}
-
-.png-drop-zone.is-dragging {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
 .editor {
   border-radius: var(--radius);
 }

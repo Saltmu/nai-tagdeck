@@ -73,7 +73,7 @@ async function pick(file: File, waitForResult = true) {
   if (waitForResult) await waitForImportResult();
 }
 
-async function drop(file: File, target: Element = container.querySelector('.png-drop-zone')!, waitForResult = true) {
+async function drop(file: File, target: Element = container.querySelector('.editor')!, waitForResult = true) {
   const event = new Event('drop', { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [file] } });
   await act(async () => target.dispatchEvent(event));
@@ -129,7 +129,12 @@ afterEach(async () => {
 
 it('retains the workspace on cancel or error, then applies a drop and only the supported checked settings', async () => {
   const picker = vi.spyOn(container.querySelector<HTMLInputElement>('input[type="file"]')!, 'click');
-  await click(button('PNGから読み込む', container.querySelector('.gallery')!));
+  // 画像欄の「PNGから読み込む」は廃止されたため、プリセット操作メニューから共有ピッカーを開く
+  await click(button('編集'));
+  const menu = container.querySelector<HTMLDetailsElement>('.preset-bar details')!;
+  const trigger = menu.querySelector<HTMLElement>('summary')!;
+  await act(async () => trigger.click());
+  await click(button('PNGから読み込む', menu));
   expect(picker).toHaveBeenCalledOnce();
   await pick(imageFile());
   expect(container.querySelector('dialog')?.textContent).toContain('ベース　3件（未分類 1件）');

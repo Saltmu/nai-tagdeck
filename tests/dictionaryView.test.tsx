@@ -44,7 +44,9 @@ function tags() {
 }
 
 function button(label: string) {
-  return [...container.querySelectorAll('button')].find((node) => node.textContent === label) as HTMLButtonElement | undefined;
+  return [...container.querySelectorAll('button')].find(
+    (node) => node.textContent === label || node.getAttribute('aria-label') === label,
+  ) as HTMLButtonElement | undefined;
 }
 
 async function render(entries: DictEntry[]) {
@@ -115,24 +117,24 @@ it('shows the next page without rendering more than one page, and reaches the la
   expect(tags()).not.toContain('tag0300');
   expect(tags()).not.toContain('tag0600');
   expect(container.querySelector('.dict-count')?.textContent).toBe(`601件 / 全601件（1〜${PAGE_SIZE}件目）`);
-  expect(button('前を表示')?.disabled).toBe(true);
-  expect(button('さらに表示')?.disabled).toBe(false);
+  expect(button('前のページへ')?.disabled).toBe(true);
+  expect(button('次のページへ')?.disabled).toBe(false);
 
-  await click('さらに表示');
+  await click('次のページへ');
   expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
   expect(document.activeElement).toBe(container.querySelector('.dict-list-card'));
   expect(tags()).toHaveLength(PAGE_SIZE);
   expect(tags()[0]).toBe('tag0300');
   expect(tags().at(-1)).toBe('tag0599');
-  expect(button('前を表示')?.disabled).toBe(false);
-  expect(button('さらに表示')?.disabled).toBe(false);
+  expect(button('前のページへ')?.disabled).toBe(false);
+  expect(button('次のページへ')?.disabled).toBe(false);
 
-  await click('さらに表示');
+  await click('次のページへ');
   expect(tags()).toEqual(['tag0600']);
   expect(container.querySelector('.dict-count')?.textContent).toBe('601件 / 全601件（601〜601件目）');
-  expect(button('さらに表示')?.disabled).toBe(true);
+  expect(button('次のページへ')?.disabled).toBe(true);
 
-  await click('前を表示');
+  await click('前のページへ');
   expect(tags()[0]).toBe('tag0300');
   expect(tags()).toHaveLength(PAGE_SIZE);
 });
@@ -140,40 +142,40 @@ it('shows the next page without rendering more than one page, and reaches the la
 it('hides paging when the filtered list fits in one page', async () => {
   await render(numbered('tag', PAGE_SIZE));
   expect(tags()).toHaveLength(PAGE_SIZE);
-  expect(button('さらに表示')).toBeUndefined();
-  expect(button('前を表示')).toBeUndefined();
+  expect(button('次のページへ')).toBeUndefined();
+  expect(button('前のページへ')).toBeUndefined();
   expect(container.querySelector('.dict-count')?.textContent).toBe('300件 / 全300件');
 });
 
 it('returns to the first page when the search query changes', async () => {
   await render([...numbered('red', 400), ...numbered('blue', 400)]);
-  await click('さらに表示');
+  await click('次のページへ');
   expect(tags()[0]).toBe('red0300');
 
   await setSearch('red');
   expect(tags()).toHaveLength(PAGE_SIZE);
   expect(tags()[0]).toBe('red0000');
   expect(tags()).not.toContain('red0300');
-  expect(button('前を表示')?.disabled).toBe(true);
-  expect(button('さらに表示')?.disabled).toBe(false);
+  expect(button('前のページへ')?.disabled).toBe(true);
+  expect(button('次のページへ')?.disabled).toBe(false);
   expect(container.querySelector('.dict-count')?.textContent).toBe(`400件 / 全800件（1〜${PAGE_SIZE}件目）`);
 
   await setSearch('red0300');
   expect(tags()).toEqual(['red0300']);
-  expect(button('さらに表示')).toBeUndefined();
+  expect(button('次のページへ')).toBeUndefined();
 });
 
 it('returns to the first page when the category filter changes', async () => {
   await render([...numbered('q', 400, 'quality'), ...numbered('a', 400, 'appearance')]);
-  await click('さらに表示');
+  await click('次のページへ');
   expect(tags()[0]).toBe('q0300');
 
   await setCategory('appearance');
   expect(tags()).toHaveLength(PAGE_SIZE);
   expect(tags()[0]).toBe('a0000');
   expect(tags()).not.toContain('a0300');
-  expect(button('前を表示')?.disabled).toBe(true);
-  expect(button('さらに表示')?.disabled).toBe(false);
+  expect(button('前のページへ')?.disabled).toBe(true);
+  expect(button('次のページへ')?.disabled).toBe(false);
   expect(container.querySelector('.dict-count')?.textContent).toBe(`400件 / 全800件（1〜${PAGE_SIZE}件目）`);
 });
 
@@ -187,7 +189,7 @@ it('scrolls to the list and asks before discarding an open edit when the page ch
     tagInput.dispatchEvent(new Event('input', { bubbles: true }));
   });
 
-  await click('さらに表示');
+  await click('次のページへ');
   const dialog = container.querySelector('dialog.app-dialog-confirm')!;
   expect(dialog.textContent).toContain('編集中の内容を破棄してページを移動しますか？');
   await act(async () => dialog.querySelector<HTMLButtonElement>('button.btn:not(.btn-danger)')!.click());
@@ -196,14 +198,14 @@ it('scrolls to the list and asks before discarding an open edit when the page ch
   expect(container.querySelector('.dict-count')?.textContent).toContain('1〜300');
   expect(scrollIntoView).not.toHaveBeenCalled();
 
-  await click('さらに表示');
+  await click('次のページへ');
   const confirm = container.querySelector('dialog.app-dialog-confirm')!;
   await act(async () => confirm.querySelector<HTMLButtonElement>('button.btn-danger')!.click());
   expect(container.querySelector('.entry-form')).toBeNull();
   expect(tags()).toEqual(['tag0300']);
   expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
 
-  await click('前を表示');
+  await click('前のページへ');
   expect(tags()[0]).toBe('tag0000');
   expect(container.querySelector('.entry-form')).toBeNull();
 });
@@ -228,33 +230,51 @@ it('keeps the clamped page after the last page disappears and an entry is added 
     );
   });
 
-  await click('さらに表示');
+  await click('次のページへ');
   expect(tags()).toEqual(['tag0300']);
 
   await click('1件減らす');
   expect(tags()).toHaveLength(PAGE_SIZE);
   expect(tags()[0]).toBe('tag0000');
-  expect(button('さらに表示')).toBeUndefined();
+  expect(button('次のページへ')).toBeUndefined();
 
   await click('1件増やす');
   expect(tags()[0]).toBe('tag0000');
   expect(tags()).toHaveLength(PAGE_SIZE);
   expect(tags()).not.toContain('added');
-  expect(button('さらに表示')?.disabled).toBe(false);
+  expect(button('次のページへ')?.disabled).toBe(false);
 });
 
-it('places a pager before the rows and another after them', async () => {
-  await render(numbered('tag', PAGE_SIZE + 1));
-  const list = container.querySelector('.dict-list')!;
+it('places a single pager after the rows with first/prev/numbers/next/last', async () => {
+  await render(numbered('tag', PAGE_SIZE * 2 + 1));
   const pagers = [...container.querySelectorAll('nav.dict-pager')];
-  expect(pagers.map((pager) => pager.getAttribute('aria-label'))).toEqual(['一覧の上のページ', '一覧の下のページ']);
-  expect(pagers[0]!.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(pagers[1]!.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  expect(pagers).toHaveLength(1);
+  expect(pagers[0]!.getAttribute('aria-label')).toBe('ページ');
+  const list = container.querySelector('.dict-list')!;
+  expect(pagers[0]!.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  expect([...pagers[0]!.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+    '|<<', '<', '1', '2', '3', '>', '>>|',
+  ]);
+  expect(button('最初のページへ')?.disabled).toBe(true);
+  expect(button('前のページへ')?.disabled).toBe(true);
+  expect(button('次のページへ')?.disabled).toBe(false);
+  expect(button('最後のページへ')?.disabled).toBe(false);
+  expect(button('1')?.getAttribute('aria-current')).toBe('page');
+
+  await click('3');
+  expect(tags()).toEqual(['tag0600']);
+  expect(button('3')?.getAttribute('aria-current')).toBe('page');
+  expect(button('次のページへ')?.disabled).toBe(true);
+  expect(button('最後のページへ')?.disabled).toBe(true);
+
+  await click('|<<');
+  expect(tags()[0]).toBe('tag0000');
+  expect(button('1')?.getAttribute('aria-current')).toBe('page');
 });
 
 it('asks before a filter change hides the open editor and keeps the draft on cancel', async () => {
   await render(numbered('tag', PAGE_SIZE + 1));
-  await click('さらに表示');
+  await click('次のページへ');
   const edit = container.querySelector<HTMLButtonElement>('.dict-item button')!;
   await act(async () => edit.click());
   const tagInput = container.querySelector<HTMLInputElement>('.entry-form input')!;
@@ -291,7 +311,7 @@ it('applies a filter without asking when the open editor stays on the first page
 
 it('keeps an in-progress search composition and asks only after it ends', async () => {
   await render(numbered('tag', PAGE_SIZE + 1));
-  await click('さらに表示');
+  await click('次のページへ');
   const edit = container.querySelector<HTMLButtonElement>('.dict-item button')!;
   await act(async () => edit.click());
   const tagInput = container.querySelector<HTMLInputElement>('.entry-form input')!;
@@ -340,7 +360,7 @@ it('follows an edited row onto its new page when dictionary order changes', asyn
     );
   });
 
-  await click('さらに表示');
+  await click('次のページへ');
   const edit = [...container.querySelectorAll<HTMLButtonElement>('.dict-item button')].at(-2)!;
   expect(edit.textContent).toBe('編集');
   await act(async () => edit.click());
@@ -359,7 +379,7 @@ it('follows an edited row onto its new page when dictionary order changes', asyn
 
 it('does not discard an edit when IME composition ends on the same search text', async () => {
   await render(numbered('tag', PAGE_SIZE + 1));
-  await click('さらに表示');
+  await click('次のページへ');
   const edit = container.querySelector<HTMLButtonElement>('.dict-item button')!;
   await act(async () => edit.click());
   const tagInput = container.querySelector<HTMLInputElement>('.entry-form input')!;
@@ -396,17 +416,17 @@ it('does not offer to discard a row while its save is still running', async () =
       </DialogProvider>,
     );
   });
-  await click('さらに表示');
-  expect(button('さらに表示')?.disabled).toBe(false);
+  await click('次のページへ');
+  expect(button('次のページへ')?.disabled).toBe(false);
   const edit = container.querySelector<HTMLButtonElement>('.dict-item button')!;
   await act(async () => edit.click());
   await click('保存');
   expect(save).toHaveBeenCalledOnce();
-  expect(button('さらに表示')?.disabled).toBe(true);
+  expect(button('次のページへ')?.disabled).toBe(true);
   expect(container.querySelector('dialog.app-dialog-confirm')).toBeNull();
   expect(container.querySelector('.entry-form')).not.toBeNull();
 
   await act(async () => releaseSave());
   expect(container.querySelector('.entry-form')).toBeNull();
-  expect(button('さらに表示')?.disabled).toBe(false);
+  expect(button('次のページへ')?.disabled).toBe(false);
 });

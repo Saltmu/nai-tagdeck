@@ -359,3 +359,33 @@ it('replaces window drag listeners when a new drag starts before the previous on
     listeners.restore();
   }
 });
+
+it('orders unclassified row controls like a normal row, with the suggestion and move select last', async () => {
+  const onMoveCategory = vi.fn();
+  await act(async () => root.render(
+    <ul>
+      <TagRow
+        tag={tag}
+        onToggle={() => {}}
+        onWeight={() => {}}
+        onEdit={onEdit}
+        onRemove={onRemove}
+        moveDestinations={['quality', 'outfit']}
+        suggestedCategory="outfit"
+        onMoveCategory={onMoveCategory}
+      />
+    </ul>,
+  ));
+  const row = container.querySelector('.tag-row')!;
+  // 通常カテゴリと同じ並び（編集・重み・削除）の後に、推奨カテゴリ表示と移動先ドロップダウン
+  const order = [...row.querySelectorAll(':scope > *')].map((el) => {
+    if (el.matches('button[aria-label$=" を編集"]')) return 'edit';
+    if (el.matches('.weight-control')) return 'weight';
+    if (el.matches('button[aria-label$=" を削除"]')) return 'remove';
+    if (el.matches('.tag-category-suggest')) return 'suggest';
+    if (el.matches('.tag-category-move')) return 'move';
+    return el.className;
+  });
+  expect(order).toEqual(['tag-check', 'edit', 'weight', 'remove', 'suggest', 'move']);
+  expect(container.querySelector('.tag-category-suggest')?.textContent).toBe('候補: 衣装');
+});

@@ -50,6 +50,12 @@
   margin-top: 0.75rem;
 }
 
+.dict-pager [aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .dict-list {
   list-style: none;
   margin: 0;

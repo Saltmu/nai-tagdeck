@@ -34,11 +34,6 @@ export interface VectorPrediction {
   margin: number;
 }
 
-export interface TagRoutingResult {
-  category: PromptCategoryKey;
-  suggestedCategory: PromptTagCategory | null;
-}
-
 const TIE_EPSILON = 1e-12;
 
 export function dictionaryCategories(entries: readonly DictEntry[]): Map<string, Set<CategoryKey>> {
@@ -248,22 +243,21 @@ export function predictTagCategory(
 }
 
 /**
- * 編集画面上部のタグ追加欄で直接入力・貼り付けしたタグの分類先と候補を決める。
- * 辞書完全一致（同名で複数カテゴリに登録されたタグを含む）は既存の分類ルールを維持する。
+ * 編集画面上部のタグ追加欄で直接入力・貼り付けしたタグの分類先を決める。
+ * 辞書完全一致（同名で複数カテゴリに登録されたタグを含む）は既存の分類ルールを維持し、
+ * 未登録タグは根拠が十分なときだけ単語ベクトルの推定カテゴリへ自動で振り分ける。
+ * 根拠が不十分なタグは未分類に入る（未分類行には別途、現在の辞書から候補を表示する）。
  */
 export function classifyEditorTag(
   tag: string,
   index: TagVectorIndex,
   allowed: readonly PromptCategoryKey[],
-  mode: 'auto' | 'suggest',
   config?: TagVectorConfig,
-): TagRoutingResult {
+): PromptCategoryKey {
   const normalized = normalize(tag);
   if (index.byTag.has(normalized)) {
-    return { category: classifyTag(tag, index.byTag, allowed), suggestedCategory: null };
+    return classifyTag(tag, index.byTag, allowed);
   }
   const prediction = predictTagCategory(tag, index, allowed, config);
-  if (!prediction) return { category: 'unclassified', suggestedCategory: null };
-  if (mode === 'auto') return { category: prediction.category, suggestedCategory: null };
-  return { category: 'unclassified', suggestedCategory: prediction.category };
+  return prediction ? prediction.category : 'unclassified';
 }
