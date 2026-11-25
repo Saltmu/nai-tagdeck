@@ -86,19 +86,37 @@ export function parseBackup(text: string): ParsedBackup {
   };
 }
 
+/** バックアップの辞書・プリセットの取り込み方法。merge は追加・上書き、replace はすべて置き換え。 */
+export type BackupImportMode = 'merge' | 'replace';
+
 /** 読み込み確認の本文。補完内容は summary、辞書の行エラーはスクロールする details に分ける。 */
 export function backupImportMessage(
   fileName: string,
   data: Pick<Backup, 'dictionary' | 'presets'>,
   warnings: readonly string[],
   dictionaryErrors: readonly string[],
+  mode: BackupImportMode = 'merge',
+  currentCounts?: { dictionary: number; presets: number },
 ): { summary: string; details: string } {
-  const summary = [
-    `${fileName} を読み込みます。`,
-    `・辞書 ${data.dictionary.length}件、プリセット ${data.presets.length}件を追加・上書きします`,
+  const summary = [`${fileName} を読み込みます。`];
+  if (mode === 'replace') {
+    summary.push(
+      `・現在の辞書・プリセットをすべて削除し、バックアップの辞書 ${data.dictionary.length}件、プリセット ${data.presets.length}件で置き換えます`,
+    );
+    if (currentCounts) {
+      summary.push(
+        `・現在保存されている辞書 ${currentCounts.dictionary}件、プリセット ${currentCounts.presets}件のうち、バックアップにない項目は消去され、元に戻せません`,
+      );
+    }
+    if (data.dictionary.length === 0) summary.push('・バックアップの辞書は 0件のため、辞書は空になります');
+    if (data.presets.length === 0) summary.push('・バックアップのプリセットは 0件のため、プリセットは空になります');
+  } else {
+    summary.push(`・辞書 ${data.dictionary.length}件、プリセット ${data.presets.length}件を追加・上書きします`);
+  }
+  summary.push(
     '・作業中のタグと設定（ネガティブ・生成の設定）は置き換わります',
     ...warnings.map((warning) => `・${warning}`),
-  ];
+  );
   const details: string[] = [];
   if (dictionaryErrors.length > 0) {
     summary.push(`・辞書のうち ${dictionaryErrors.length}件は読めなかったためスキップします`);
@@ -106,6 +124,6 @@ export function backupImportMessage(
     const rest = dictionaryErrors.length - MAX_DICTIONARY_ERRORS_SHOWN;
     if (rest > 0) details.push(`・ほか ${rest}件`);
   }
-  summary.push('', 'よろしいですか？');
+  summary.push('', mode === 'replace' ? '本当に置き換えてよろしいですか？' : 'よろしいですか？');
   return { summary: summary.join('\n'), details: details.join('\n') };
 }

@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BackupCard } from '../src/components/BackupCard';
 import { DialogProvider } from '../src/components/Dialogs';
-import type { Backup } from '../src/lib/backup';
+import { backupImportMessage, type Backup, type BackupImportMode } from '../src/lib/backup';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -56,15 +56,25 @@ afterEach(async () => {
   });
 });
 
-async function mount(onImport = vi.fn(async () => {}), notify = vi.fn()) {
+async function mount(
+  onImport = vi.fn(async (_data: Backup, _mode?: BackupImportMode) => {}),
+  notify = vi.fn(),
+  reloadCount = 0,
+) {
   await act(async () => {
     root.render(
       <DialogProvider>
-        <BackupCard getData={() => empty} onImport={onImport} notify={notify} />
+        <BackupCard getData={() => empty} onImport={onImport} notify={notify} reloadCount={reloadCount} />
       </DialogProvider>,
     );
   });
   return { onImport, notify };
+}
+
+function radio(value: string): HTMLInputElement {
+  const found = container.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`);
+  if (!found) throw new Error(`Radio missing: ${value}`);
+  return found;
 }
 
 it('欠けたセクションは補完内容を示し、辞書のスキップ件数には数えない', async () => {
@@ -88,6 +98,7 @@ it('欠けたセクションは補完内容を示し、辞書のスキップ件�
   focus.mockRestore();
   await act(async () => button('読み込む').click());
   expect(onImport).toHaveBeenCalledTimes(1);
+  expect(onImport.mock.calls[0]?.[1]).toBe('merge');
   expect(notify).toHaveBeenCalledWith('バックアップを読み込みました');
   expect(container.querySelector('.form-error')).toBeNull();
 });
@@ -144,4 +155,65 @@ it('バックアップでないファイルは確認を出さずエラーを出�
   await chooseFile('{"kind":"dictionary"}', 'dict-only.json');
   expect(container.querySelector('dialog')).toBeNull();
   expect(container.querySelector('.form-error')?.textContent).toContain('バックアップファイルではありません');
+});
+
+it('replace モードでは文言とボタンが切り替わり、置き換えで読み込む', async () => {
+  const { onImport, notify } = await mount();
+  await chooseFile(JSON.stringify({
+    kind: 'backup',
+    version: 1,
+    dictionary: [{ tag: 'smile', category: 'appearance' }],
+    presets: [],
+    workspace: {},
+    settings: {},
+    generation: {},
+  }), 'backup.json');
+  expect(message()).toContain('・辞書 1件、プリセット 0件を追加・上書きします');
+  expect(radio('merge').checked).toBe(true);
+  expect(container.querySelector('[role="note"]')).toBeNull();
+  await act(async () => radio('replace').click());
+  expect(message()).toContain('・現在の辞書・プリセットをすべて削除し、バックアップの辞書 1件、プリセット 0件で置き換えます');
+  expect(message()).toContain('・バックアップのプリセットは 0件のため、プリセットは空になります');
+  expect(container.querySelector('[role="note"]')).not.toBeNull();
+  expect(container.querySelector('.btn-danger')?.textContent).toBe('すべて置き換えて読み込む');
+  await act(async () => button('すべて置き換えて読み込む').click());
+  expect(onImport).toHaveBeenCalledTimes(1);
+  expect(onImport.mock.calls[0]?.[1]).toBe('replace');
+  expect(notify).toHaveBeenCalledWith('バックアップの内容ですべて置き換えました');
+  expect(container.querySelector('.form-error')).toBeNull();
+});
+
+it('replace の確認文言は既存件数と空の辞書を示す', () => {
+  const { summary } = backupImportMessage('backup.json', { dictionary: [], presets: [] }, [], [], 'replace', {
+    dictionary: 3,
+    presets: 2,
+  });
+  expect(summary).toContain('・現在の辞書・プリセットをすべて削除し、バックアップの辞書 0件、プリセット 0件で置き換えます');
+  expect(summary).toContain('・現在保存されている辞書 3件、プリセット 2件のうち、バックアップにない項目は消去され、元に戻せません');
+  expect(summary).toContain('・バックアップの辞書は 0件のため、辞書は空になります');
+  expect(summary).toContain('・バックアップのプリセットは 0件のため、プリセットは空になります');
+});
+
+it('確認中に他タブから再読み込みされたらダイアログを閉じて中止する', async () => {
+  const { onImport } = await mount(vi.fn(async () => {}), vi.fn(), 0);
+  await chooseFile(JSON.stringify({
+    kind: 'backup',
+    version: 1,
+    dictionary: [{ tag: 'smile', category: 'appearance' }],
+    presets: [],
+    workspace: {},
+    settings: {},
+    generation: {},
+  }), 'backup.json');
+  expect(container.querySelector('dialog')).not.toBeNull();
+  await act(async () => {
+    root.render(
+      <DialogProvider>
+        <BackupCard getData={() => empty} onImport={onImport} notify={vi.fn()} reloadCount={1} />
+      </DialogProvider>,
+    );
+  });
+  expect(container.querySelector('dialog')).toBeNull();
+  expect(container.querySelector('.form-error')?.textContent).toContain('別のタブから最新データを読み込んだため');
+  expect(onImport).not.toHaveBeenCalled();
 });

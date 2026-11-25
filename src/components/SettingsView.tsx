@@ -1,7 +1,7 @@
 import type { TokenState } from '../hooks/useToken';
 import { TokenSettings } from './TokenSettings';
 import { BackupCard } from './BackupCard';
-import type { Backup } from '../lib/backup';
+import type { Backup, BackupImportMode } from '../lib/backup';
 import { DangerZone } from './DangerZone';
 import { tutorialUrl } from '../lib/tutorialLinks';
 
@@ -9,7 +9,7 @@ interface Props {
   token: TokenState;
   notify: (message: string) => void;
   getBackup: () => Backup;
-  onImportBackup: (data: Backup) => Promise<void>;
+  onImportBackup: (data: Backup, mode?: BackupImportMode) => Promise<void>;
   onResetAll: () => void;
   onShowFirstRun: () => void;
   firstRunDisabled: boolean;

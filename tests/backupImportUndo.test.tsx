@@ -93,6 +93,16 @@ async function importBackup() {
   await click(button('読み込む', confirm));
 }
 
+async function importBackupReplace() {
+  const confirm = await openBackupConfirm();
+  const replaceRadio = confirm.querySelector<HTMLInputElement>('input[type="radio"][value="replace"]');
+  if (!replaceRadio) throw new Error('置き換えのラジオがありません');
+  await click(replaceRadio);
+  expect(confirm.textContent).toContain('・現在の辞書・プリセットをすべて削除し、バックアップの辞書 1件、プリセット 2件で置き換えます');
+  expect(confirm.querySelector('.btn-danger')?.textContent).toBe('すべて置き換えて読み込む');
+  await click(button('すべて置き換えて読み込む', confirm));
+}
+
 function pressUndo() {
   return act(async () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
@@ -166,6 +176,27 @@ it('clears undo after a backup import so the workspace stays with the merged dic
   expect(field('steps')?.value).toBe('12');
   await click(container.querySelector<HTMLButtonElement>('.editor-tab-negative')!);
   expect(field('character-text')?.value).toBe('from-backup');
+  await click(container.querySelector<HTMLButtonElement>('.preset-search input')!);
+  expect(container.textContent).toContain('追加');
+  expect(container.textContent).toContain('基本');
+});
+
+it('replaces dictionary and presets with only the backup content when replace is chosen', async () => {
+  expect(dictionaryCount()).toBe('1');
+  expect(presetName()).toBe('基本');
+
+  await importBackupReplace();
+  expect(container.querySelector('.toast')?.textContent).toContain('バックアップの内容ですべて置き換えました');
+  await openEditor();
+
+  expect(preview()).toBe('backup-tag');
+  expect(presetName()).toBe('');
+  // 既存の辞書 1 件（standing）は消え、バックアップの 1 件だけが残る
+  expect(dictionaryCount()).toBe('1');
+  expect(undoButton().getAttribute('aria-disabled')).toBe('true');
+  await pressUndo();
+  expect(preview()).toBe('backup-tag');
+  expect(dictionaryCount()).toBe('1');
   await click(container.querySelector<HTMLButtonElement>('.preset-search input')!);
   expect(container.textContent).toContain('追加');
   expect(container.textContent).toContain('基本');

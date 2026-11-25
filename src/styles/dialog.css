@@ -182,6 +182,53 @@
   gap: 0.5rem;
 }
 
+/* バックアップ読み込みの取り込み方法ラジオ */
+.backup-import-modes {
+  margin: 0 0 0.9rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.backup-import-modes legend {
+  padding: 0 0.35rem;
+  font-weight: 700;
+}
+
+.backup-import-mode {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.backup-import-mode input {
+  margin-top: 0.2rem;
+  flex: none;
+}
+
+.backup-import-mode-label {
+  display: block;
+  font-weight: 700;
+}
+
+.backup-import-mode-desc {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.backup-import-danger {
+  margin: 0 0 0.9rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  line-height: 1.6;
+}
+
 .png-drop-zone {
   display: flex;
   flex-wrap: wrap;

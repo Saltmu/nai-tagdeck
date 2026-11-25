@@ -4,8 +4,8 @@ import type { Dictionary } from './useDictionary';
 import type { PresetStore } from './usePresets';
 import type { AppDataReplacement } from '../lib/db';
 import { mergeEntries } from '../lib/io';
-import { mergePresets } from '../lib/presets';
-import type { Backup } from '../lib/backup';
+import { mergePresets, sortPresets } from '../lib/presets';
+import type { Backup, BackupImportMode } from '../lib/backup';
 import type { GenerationSettings } from '../lib/generation';
 import type { WorkspaceAction } from '../lib/workspace';
 
@@ -55,7 +55,7 @@ export function useBackupTransfer({
   );
 
   const importBackup = useCallback(
-    async (data: Backup) => {
+    async (data: Backup, mode: BackupImportMode = 'merge') => {
       if (importingRef.current) {
         throw new Error('別のバックアップを読み込み中です。完了してからやり直してください');
       }
@@ -68,12 +68,16 @@ export function useBackupTransfer({
             if (!dictionaryRef.current.loaded) {
               throw new Error('辞書の読み込みが完了していないため保存できません');
             }
-            const mergedPresets = mergePresets(presetsRef.current.presets, data.presets);
+            const nextPresets =
+              mode === 'replace' ? sortPresets(data.presets) : mergePresets(presetsRef.current.presets, data.presets);
             return {
-              dictionary: (current) => mergeEntries(current, data.dictionary, 'merge'),
+              dictionary:
+                mode === 'replace'
+                  ? mergeEntries([], data.dictionary, 'replace')
+                  : (current) => mergeEntries(current, data.dictionary, 'merge'),
               kv: {
                 workspace: data.workspace,
-                presets: mergedPresets,
+                presets: nextPresets,
                 activePreset: null,
                 settings: data.settings,
                 generation: data.generation,
@@ -83,9 +87,11 @@ export function useBackupTransfer({
           // commitAll が true のときは useTabSync の snapshot 経由で全ストアへ反映済み
           if (committed) return;
         }
-        await dictionaryRef.current.importEntries(data.dictionary, 'merge');
+        await dictionaryRef.current.importEntries(data.dictionary, mode);
         const currentPresets = presetsRef.current;
-        currentPresets.setPresets(mergePresets(currentPresets.presets, data.presets));
+        currentPresets.setPresets(
+          mode === 'replace' ? sortPresets(data.presets) : mergePresets(currentPresets.presets, data.presets),
+        );
         currentPresets.setActiveId(null);
         dispatch({ type: 'replace', workspace: data.workspace });
         updateSettings(data.settings);

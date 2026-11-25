@@ -1,21 +1,34 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { backupImportMessage, parseBackup, toBackupJSON, type Backup } from '../lib/backup';
+import { parseBackup, toBackupJSON, type Backup, type BackupImportMode } from '../lib/backup';
 import { dateStamp, downloadText } from '../lib/browser';
-import { useDialogs } from './Dialogs';
+import { BackupImportDialog } from './BackupImportDialog';
 
 interface Props {
   getData: () => Backup;
-  onImport: (data: Backup) => Promise<void>;
+  onImport: (data: Backup, mode?: BackupImportMode) => Promise<void>;
   notify: (message: string) => void;
   importDisabled?: boolean;
   /** 他タブから再読み込みされた回数。読み込み途中で増えたら保留中の確認を中止する。 */
   reloadCount?: number;
 }
 
+interface PendingImport {
+  fileName: string;
+  data: Backup;
+  warnings: string[];
+  dictionaryErrors: string[];
+  currentCounts?: { dictionary: number; presets: number };
+  controller: AbortController;
+  startedReloadCount: number;
+}
+
+const RELOAD_ABORT_MESSAGE =
+  '別のタブから最新データを読み込んだため、バックアップの読み込みを中止しました。もう一度選択してください';
+
 export function BackupCard({ getData, onImport, notify, importDisabled = false, reloadCount = 0 }: Props) {
-  const dialogs = useDialogs();
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [pending, setPending] = useState<PendingImport | null>(null);
   const importingRef = useRef(false);
   const onImportRef = useRef(onImport);
   onImportRef.current = onImport;
@@ -25,6 +38,8 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
   reloadCountRef.current = reloadCount;
   const mountedRef = useRef(true);
   const activeOpAbortRef = useRef<AbortController | null>(null);
+  const pendingRef = useRef<PendingImport | null>(null);
+  pendingRef.current = pending;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -36,6 +51,13 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
 
   useEffect(() => {
     activeOpAbortRef.current?.abort();
+  }, [reloadCount]);
+
+  // 確認ダイアログを開いている途中で他タブから再読み込みされたら、確認を中止する。
+  useEffect(() => {
+    if (!pendingRef.current) return;
+    setPending(null);
+    setError(RELOAD_ABORT_MESSAGE);
   }, [reloadCount]);
 
   const handleFile = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -50,7 +72,7 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
       const parsed = parseBackup(await file.text());
       if (!mountedRef.current) return;
       if (reloadCountRef.current !== startedReloadCount) {
-        setError('別のタブから最新データを読み込んだため、バックアップの読み込みを中止しました。もう一度選択してください');
+        setError(RELOAD_ABORT_MESSAGE);
         return;
       }
       if (controller.signal.aborted) return;
@@ -64,34 +86,52 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
       }
       setError(null);
       const { data, warnings, dictionaryErrors } = parsed;
-      const message = backupImportMessage(file.name, data, warnings, dictionaryErrors);
-      const ok = await dialogs.confirm(message.summary, {
-        okLabel: '読み込む',
-        details: message.details || undefined,
-        signal: controller.signal,
-      });
-      if (!ok || controller.signal.aborted || !mountedRef.current) return;
-      if (reloadCountRef.current !== startedReloadCount) {
-        setError('別のタブから最新データを読み込んだため、バックアップの読み込みを中止しました。もう一度選択してください');
-        return;
-      }
-      if (importDisabledRef.current) {
-        setError('保存データの読み込み中または同期ロック中のため、バックアップを読み込めません');
-        return;
-      }
-      importingRef.current = true;
-      setImporting(true);
+      let currentCounts: { dictionary: number; presets: number } | undefined;
       try {
-        await onImportRef.current(data);
-        if (mountedRef.current) notify('バックアップを読み込みました');
-      } catch (err) {
-        if (mountedRef.current) setError(`読み込めませんでした: ${String(err)}`);
-      } finally {
-        importingRef.current = false;
-        if (mountedRef.current) setImporting(false);
+        const current = getData();
+        if (Array.isArray(current?.dictionary) && Array.isArray(current?.presets)) {
+          currentCounts = { dictionary: current.dictionary.length, presets: current.presets.length };
+        }
+      } catch {
+        currentCounts = undefined;
       }
+      setPending({ fileName: file.name, data, warnings, dictionaryErrors, currentCounts, controller, startedReloadCount });
     } finally {
       if (activeOpAbortRef.current === controller) activeOpAbortRef.current = null;
+    }
+  };
+
+  const handleDialogCancel = () => {
+    setPending(null);
+  };
+
+  const handleDialogConfirm = async (mode: BackupImportMode) => {
+    const confirmed = pendingRef.current;
+    setPending(null);
+    if (!confirmed) return;
+    const { data, controller, startedReloadCount } = confirmed;
+    if (controller.signal.aborted || !mountedRef.current) return;
+    if (reloadCountRef.current !== startedReloadCount) {
+      setError(RELOAD_ABORT_MESSAGE);
+      return;
+    }
+    if (importDisabledRef.current) {
+      setError('保存データの読み込み中または同期ロック中のため、バックアップを読み込めません');
+      return;
+    }
+    if (importingRef.current) return;
+    importingRef.current = true;
+    setImporting(true);
+    try {
+      await onImportRef.current(data, mode);
+      if (mountedRef.current) {
+        notify(mode === 'replace' ? 'バックアップの内容ですべて置き換えました' : 'バックアップを読み込みました');
+      }
+    } catch (err) {
+      if (mountedRef.current) setError(`読み込めませんでした: ${String(err)}`);
+    } finally {
+      importingRef.current = false;
+      if (mountedRef.current) setImporting(false);
     }
   };
 
@@ -129,6 +169,18 @@ export function BackupCard({ getData, onImport, notify, importDisabled = false, 
         <p className="form-error" role="alert">
           {error}
         </p>
+      )}
+      {pending && (
+        <BackupImportDialog
+          fileName={pending.fileName}
+          data={pending.data}
+          warnings={pending.warnings}
+          dictionaryErrors={pending.dictionaryErrors}
+          currentCounts={pending.currentCounts}
+          signal={pending.controller.signal}
+          onCancel={handleDialogCancel}
+          onConfirm={handleDialogConfirm}
+        />
       )}
     </section>
   );

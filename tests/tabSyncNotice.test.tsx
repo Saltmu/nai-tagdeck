@@ -631,6 +631,61 @@ describe('multi-tab sync notice & conflict resolution', () => {
     expect(snapshot.kv.generation).toMatchObject({ mode: 'furry', size: 'square' });
   });
 
+  it('replaces dictionary and presets through commitAll when replace is chosen, keeping the restore atomic', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'before-backup' });
+    await writeFromOtherTab({
+      workspace: initialWs,
+      dictionary: [{ id: 'd1', tag: 'existing-tag', category: 'quality', alias: '', default_weight: 1, sort_order: 0, updated_at: '2026-01-01' }],
+      presets: [{ id: 'p0', name: '既存プリセット', workspace: initialWs, updated_at: '2026-01-01' }],
+    }, false);
+    await mountApp();
+    await click(button('設定'));
+
+    const peer = new FakeBroadcastChannel('nai-tagdeck:sync');
+    const observedAtNotice: Array<{ msg: unknown; snapshot: Awaited<ReturnType<typeof readAllAppData>> }> = [];
+    peer.onmessage = (event) => {
+      void readAllAppData().then((snapshot) => {
+        observedAtNotice.push({ msg: event.data, snapshot });
+      });
+    };
+
+    const backupWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'restored-ws-tag' });
+    const backupJson = JSON.stringify({
+      app: 'nai-tagdeck',
+      kind: 'backup',
+      version: 1,
+      dictionary: [{ id: 'd2', tag: 'restored-dict-tag', category: 'quality', alias: '', default_weight: 1, sort_order: 0, updated_at: '2026-01-02' }],
+      presets: [{ id: 'p1', name: '復元プリセット', workspace: backupWs, updated_at: '2026-01-02' }],
+      workspace: backupWs,
+      settings: { weightSyntax: 'brace', characterNegativePrompt: 'custom-neg' },
+      generation: { mode: 'furry', size: 'square', steps: 20, scale: 6, sampler: 'k_euler_ancestral', noiseSchedule: 'karras', seed: null, cfgRescale: 0, dynamicThresholding: false },
+    });
+    const file = new File([backupJson], 'backup.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => backupJson });
+    const input = container.querySelector<HTMLInputElement>('.backup-actions input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush(30);
+    const confirm = container.querySelector<HTMLDialogElement>('dialog.app-dialog-confirm');
+    const replaceRadio = confirm!.querySelector<HTMLInputElement>('input[type="radio"][value="replace"]');
+    if (!replaceRadio) throw new Error('置き換えのラジオがありません');
+    await click(replaceRadio);
+    expect(confirm!.textContent).toContain('・現在の辞書・プリセットをすべて削除し、バックアップの辞書 1件、プリセット 1件で置き換えます');
+    await click(button('すべて置き換えて読み込む', confirm!));
+    await flush(450);
+    peer.close();
+
+    expect(container.querySelector('.toast')?.textContent).toContain('バックアップの内容ですべて置き換えました');
+    expect(observedAtNotice).toHaveLength(1);
+    const { snapshot } = observedAtNotice[0]!;
+    // 既存の辞書・プリセットは消え、バックアップの内容だけが残る
+    expect(snapshot.dictionary.map((e) => e.tag)).toEqual(['restored-dict-tag']);
+    expect((snapshot.kv.presets as Array<{ name: string }>).map((p) => p.name)).toEqual(['復元プリセット']);
+    expect((snapshot.kv.workspace as typeof backupWs).base.quality.map((t) => t.tag)).toEqual(['restored-ws-tag']);
+  });
+
   it('disables overlapping backup imports while one restore is committing and keeps backup import enabled after an autosave error', async () => {
     const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'masterpiece' });
     await writeFromOtherTab({ workspace: initialWs }, false);
