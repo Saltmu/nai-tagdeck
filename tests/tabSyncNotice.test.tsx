@@ -468,6 +468,47 @@ describe('multi-tab sync notice & conflict resolution', () => {
     expect((saved.kv.presets as Array<{ name: string }>).map((p) => p.name)).toEqual(['別タブのプリセット']);
   });
 
+  it('shows the loading/locked message when a backup is selected while sync is already locked', async () => {
+    const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'masterpiece' });
+    await writeFromOtherTab({ workspace: initialWs }, false);
+    await mountApp();
+    await click(button('設定'));
+    await waitForMount('.settings');
+
+    // 他タブからの更新通知で同期ロックがかかった状態でバックアップを選択する
+    await act(async () => {
+      await writeFromOtherTab({ workspace: initialWs }, true);
+    });
+
+    let releaseFileText!: (text: string) => void;
+    const emptyBackupJson = JSON.stringify({
+      app: 'nai-tagdeck',
+      kind: 'backup',
+      version: 1,
+      dictionary: [],
+      presets: [],
+      workspace: emptyWorkspace(),
+      settings: { weightSyntax: 'numeric', characterNegativePrompt: 'lowres, aliasing, ' },
+      generation: { mode: 'anime', size: 'portrait', steps: 28, scale: 5, sampler: 'k_euler_ancestral', noiseSchedule: 'karras', seed: null, cfgRescale: 0, dynamicThresholding: false },
+    });
+    const file = new File([emptyBackupJson], 'backup.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', {
+      value: () => new Promise<string>((resolve) => { releaseFileText = resolve; }),
+    });
+
+    const input = container.querySelector<HTMLInputElement>('.backup-actions input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // 読み取り開始時点ですでにロックされていた場合は、従来通り読み込み中メッセージになる
+    await act(async () => { releaseFileText(emptyBackupJson); });
+    await flush(80);
+
+    expect(container.querySelector('.form-error')?.textContent).toContain('保存データの読み込み中または同期ロック中のため、バックアップを読み込めません');
+  });
+
   it('cancels a pending backup file read when Settings unmounts before file.text resolves', async () => {
     const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'masterpiece' });
     await writeFromOtherTab({ workspace: initialWs }, false);
