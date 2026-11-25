@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dist/ を Linux から SFTP（パスワード認証）でレンタルサーバーへアップロードする。
+# dist/ を Linux から FTPS（明示的 TLS、パスワード認証）でレンタルサーバーへアップロードする。
 #
 #   npm run deploy:linux            テスト・ビルドしてからアップロード
 #   npm run deploy:linux -- --dry   アップロードせず、送る・消すファイルの一覧だけ表示
@@ -9,15 +9,16 @@
 # 書くか、実行時に環境変数で渡す。例は deploy/config.linux.example を参照。
 # パスワードはリポジトリにもこのスクリプトにも持たない。ログやコマンドラインにも出さない。
 #
-# 認証は SFTP のパスワード認証がメイン。公開鍵認証はプランの関係で使えないため、
-# DEPLOY_SSH_KEY_FILE は任意のフォールバックとしてのみ残してある（通常は使わない）。
-# 転送は lftp の SFTP（mirror）で行う。rsync over ssh だけには頼らない。
+# 転送は lftp の FTPS（ftp:// + 明示的 TLS、21番）で行う。SFTP（22番）は使わない。
+# 理由: さくらのレンタルサーバ「ライトプラン」では SSH が使えず（SSH は
+# スタンダードプラン以上）、SFTP の口がそもそもない。ライトでは FTP/FTPS が
+# デプロイの経路になる。認証は FTPS のパスワード認証。公開鍵認証はライトでは
+# 使えないため、鍵認証の経路はこのスクリプトに無い。
+# TLS 証明書は検証する（ssl:verify-certificate / ssl:check-hostname）。
 #
-# 注意: さくらのレンタルサーバは国外 IP からのパスワード認証を制限しているため、
-# 国外のマシンからだとパスワードが正しくても弾かれる場合がある。その場合は
-# 日本国内の IP から実行すること（例: 手元の Linux / Windows 機）。
-# GitHub Actions の認証失敗 "Permission denied (publickey,password)" は
-# スクリプトのバグではなく、認証情報・IP 制限側の問題であることが多い。
+# 注意: さくらのレンタルサーバの国外IPアドレスフィルタが有効だと、FTP でも
+# ログイン後のファイル一覧取得やコピーが制限される。フィルタが有効な場合は
+# サーバーコントロールパネルで無効にするか、国内の IP から実行すること。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,7 +36,7 @@ done
 # ファイルを読み込む前に、明示された環境変数を退避しておく。ファイル側の
 # 代入で上書きされないよう、読み込み後に退避した値を戻す。
 declare -A _ENV_OVERRIDES=()
-for _var in DEPLOY_HOST DEPLOY_PORT DEPLOY_USER DEPLOY_DIR DEPLOY_HOST_FINGERPRINT DEPLOY_SSH_KEY_FILE DEPLOY_PASSWORD LFTP_PASSWORD; do
+for _var in DEPLOY_HOST DEPLOY_PORT DEPLOY_USER DEPLOY_DIR DEPLOY_PASSWORD LFTP_PASSWORD; do
   if [[ -n "${!_var:-}" ]]; then
     _ENV_OVERRIDES["$_var"]="${!_var}"
   fi
@@ -51,11 +52,9 @@ done
 unset _ENV_OVERRIDES _var
 
 DEPLOY_HOST="${DEPLOY_HOST:-}"
-DEPLOY_PORT="${DEPLOY_PORT:-22}"
+DEPLOY_PORT="${DEPLOY_PORT:-21}"
 DEPLOY_USER="${DEPLOY_USER:-}"
 DEPLOY_DIR="${DEPLOY_DIR:-}"
-DEPLOY_HOST_FINGERPRINT="${DEPLOY_HOST_FINGERPRINT:-}"
-DEPLOY_SSH_KEY_FILE="${DEPLOY_SSH_KEY_FILE:-}"
 # パスワードは DEPLOY_PASSWORD か LFTP_PASSWORD（Actions と同じ名前）のどちらか。
 DEPLOY_PASSWORD_VALUE="${DEPLOY_PASSWORD:-${LFTP_PASSWORD:-}}"
 
@@ -68,77 +67,24 @@ fail() { echo "エラー: $*" >&2; exit 1; }
 [[ "$DEPLOY_DIR" =~ ^(/[[:alnum:]_.-]+)+/?$ ]] || fail "DEPLOY_DIR は絶対パスにしてください。"
 [[ "$DEPLOY_DIR" =~ /\.\.?(/|$) ]] && fail "DEPLOY_DIR に . や .. を含めないでください。"
 
-for cmd in ssh-keyscan ssh-keygen lftp; do
-  command -v "$cmd" >/dev/null 2>&1 || fail "$cmd が見つかりません。lftp は sudo apt install lftp で入ります。"
-done
+command -v lftp >/dev/null 2>&1 || fail "lftp が見つかりません。sudo apt install lftp で入れてください。"
 
-# --- ホスト鍵の検証 ---
-TMP_DIR="$(mktemp -d)"
-trap 'rm -rf -- "$TMP_DIR"' EXIT
-KNOWN_HOSTS="$TMP_DIR/known_hosts"
-SCANNED="$TMP_DIR/scanned_keys"
-if ! ssh-keyscan -T 10 -p "$DEPLOY_PORT" "$DEPLOY_HOST" > "$SCANNED" 2>/dev/null; then
-  fail "SFTP サーバーからホスト鍵を取得できませんでした（$DEPLOY_HOST:$DEPLOY_PORT に到達できません）。"
-fi
-
-EXPECTED_FINGERPRINT="${DEPLOY_HOST_FINGERPRINT%=}"
-if [[ -z "$EXPECTED_FINGERPRINT" ]]; then
-  if [[ "$DRY" == true ]]; then
-    echo "観測されたホスト指紋（未検証）:"
-    ssh-keygen -E sha256 -lf "$SCANNED" | awk '{print $2, $NF}'
-    echo "注意: 指紋の確認のみで終了しました。SFTP ログインや配付のプレビューは行っていません。"
-    echo "WinSCP またはホスティング事業者で照合した指紋を DEPLOY_HOST_FINGERPRINT に設定してから、再度 --dry を実行してください。"
-    exit 0
+# --- 認証方法の決定（FTPS パスワード認証のみ） ---
+if [[ -z "$DEPLOY_PASSWORD_VALUE" ]]; then
+  if [[ -t 0 ]]; then
+    # 対話式ならパスワードを端末で入力してもらう（画面には表示しない）。
+    printf 'FTPS パスワードを入力してください: ' >&2
+    IFS= read -r -s DEPLOY_PASSWORD_VALUE
+    echo >&2
+    [[ -n "$DEPLOY_PASSWORD_VALUE" ]] || fail "パスワードが入力されませんでした。"
+  else
+    fail "パスワード認証の情報がありません。DEPLOY_PASSWORD（または LFTP_PASSWORD）を設定するか、対話式のターミナルで実行してパスワードを入力してください。sshpass は不要です（lftp が --env-password でパスワードを渡します）。"
   fi
-  fail "DEPLOY_HOST_FINGERPRINT を設定してください（--dry なら未設定でも指紋の確認だけできます）。"
 fi
-[[ "$EXPECTED_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]] \
-  || fail "DEPLOY_HOST_FINGERPRINT は検証済みの SHA256 指紋（SHA256:…）にしてください。"
+export LFTP_PASSWORD="$DEPLOY_PASSWORD_VALUE"
+unset DEPLOY_PASSWORD_VALUE
 
-MATCHED=false
-while IFS= read -r entry; do
-  key_info="$(ssh-keygen -E sha256 -lf - <<< "$entry" 2>/dev/null)" || continue
-  read -r _ fingerprint _ <<< "$key_info"
-  if [[ "$fingerprint" == "$EXPECTED_FINGERPRINT" ]]; then
-    printf '%s\n' "$entry" > "$KNOWN_HOSTS"
-    MATCHED=true
-    break
-  fi
-done < "$SCANNED"
-[[ "$MATCHED" == true ]] || fail "SFTP ホスト鍵が DEPLOY_HOST_FINGERPRINT と一致しません。指紋を確認してから更新してください。"
-
-# --- 認証方法の決定（メイン: SFTP パスワード認証。鍵は任意のフォールバック） ---
-# ssh の -p は sftp では別意味になるため、ポートは -o Port= で指定する（lftp の connect-program 共通）。
-SSH_BASE_OPTS="-o Port=$DEPLOY_PORT -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o UserKnownHostsFile=$KNOWN_HOSTS -o VerifyHostKeyDNS=no -o ConnectTimeout=15"
-AUTH_MODE=""
-if [[ -n "$DEPLOY_PASSWORD_VALUE" ]]; then
-  AUTH_MODE="password"
-elif [[ -t 0 ]]; then
-  # 対話式ならパスワードを端末で入力してもらう（画面には表示しない）。
-  printf 'SFTP パスワードを入力してください: ' >&2
-  IFS= read -r -s DEPLOY_PASSWORD_VALUE
-  echo >&2
-  [[ -n "$DEPLOY_PASSWORD_VALUE" ]] || fail "パスワードが入力されませんでした。"
-  AUTH_MODE="password"
-elif [[ -n "$DEPLOY_SSH_KEY_FILE" ]]; then
-  # 任意のフォールバック（プランの関係で通常は使えない）。パスワードが無い場合のみ。
-  [[ -f "$DEPLOY_SSH_KEY_FILE" ]] || fail "DEPLOY_SSH_KEY_FILE が見つかりません: $DEPLOY_SSH_KEY_FILE"
-  AUTH_MODE="key"
-else
-  fail "パスワード認証の情報がありません。DEPLOY_PASSWORD（または LFTP_PASSWORD）を設定するか、対話式のターミナルで実行してパスワードを入力してください。sshpass は不要です（lftp が --env-password でパスワードを渡します）。"
-fi
-
-if [[ "$AUTH_MODE" == "password" ]]; then
-  export LFTP_PASSWORD="$DEPLOY_PASSWORD_VALUE"
-  unset DEPLOY_PASSWORD_VALUE
-  SSH_CONNECT_OPTS="$SSH_BASE_OPTS -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1"
-  OPEN_CMD="open --env-password -u \"$DEPLOY_USER\" \"sftp://$DEPLOY_HOST:$DEPLOY_PORT\""
-  echo "注意: SFTP パスワード認証を使います。国外 IP からはホスティング側の制限で弾かれる場合があります。"
-else
-  SSH_CONNECT_OPTS="$SSH_BASE_OPTS -o PubkeyAuthentication=yes -o IdentitiesOnly=yes -o IdentityFile=$DEPLOY_SSH_KEY_FILE -o BatchMode=yes -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no"
-  OPEN_CMD="open -u \"$DEPLOY_USER,\" \"sftp://$DEPLOY_HOST:$DEPLOY_PORT\""
-  echo "注意: 公開鍵認証（フォールバック）を使います。"
-fi
+OPEN_CMD="open --env-password -u \"$DEPLOY_USER\" \"ftp://$DEPLOY_HOST:$DEPLOY_PORT\""
 
 run_lftp() {
   {
@@ -147,8 +93,12 @@ run_lftp() {
       'set xfer:use-temp-file yes' \
       'set net:timeout 20' \
       'set net:max-retries 2' \
-      'set sftp:auto-confirm no' \
-      "set sftp:connect-program \"ssh -a -x $SSH_CONNECT_OPTS\"" \
+      'set ftp/ssl-force true' \
+      'set ftp/ssl-protect-data true' \
+      'set ftp/ssl-auth TLS' \
+      'set ssl:verify-certificate yes' \
+      'set ssl:check-hostname yes' \
+      'set ftp:passive-mode true' \
       "$OPEN_CMD" \
       "cd \"${DEPLOY_DIR%/}\""
     cat
@@ -162,6 +112,9 @@ if [[ "$SKIP_BUILD" == false ]]; then
   (cd "$ROOT" && npm run build)
 fi
 [[ -f "$ROOT/dist/index.html" ]] || fail "dist/index.html がありません。ビルドに失敗していないか確認してください。"
+
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf -- "$TMP_DIR"' EXIT
 
 echo
 if [[ "$DRY" == true ]]; then
