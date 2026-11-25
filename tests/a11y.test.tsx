@@ -223,6 +223,41 @@ describe('QuickGenerate radiogroup', () => {
     expect(radios[3]!.tabIndex).toBe(0);
   });
 
+  it('shows a custom size as a fourth radio with its effective dimensions', async () => {
+    function Harness({ initial }: { initial: SizeKey }) {
+      const [size, setSize] = useState(initial);
+      return (
+        <QuickGenerate
+          size={size}
+          customSize={{ width: 896, height: 1152 }}
+          seed={null}
+          onSizeChange={(next) => setSize(next)}
+          onClearSeed={() => {}}
+          generating={false}
+          blocker={null}
+          onGenerate={() => {}}
+        />
+      );
+    }
+    await act(async () => root.render(<Harness key="custom" initial="custom" />));
+    let radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(radios.map((r) => r.getAttribute('aria-label'))).toEqual([
+      '縦 832×1216',
+      '横 1216×832',
+      '正方形 1024×1024',
+      'カスタム 896×1152',
+    ]);
+    expect(radios[3]!.getAttribute('aria-checked')).toBe('true');
+
+    await act(async () => {
+      radios[3]!.focus();
+      radios[3]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    radios = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(radios).toHaveLength(3);
+    expect(radios[0]!.getAttribute('aria-checked')).toBe('true');
+  });
+
   it('shows a seed lock button only while a seed is fixed', async () => {
     const onClearSeed = vi.fn();
     function Harness({ seed }: { seed: number | null }) {

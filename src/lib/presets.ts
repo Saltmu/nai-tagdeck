@@ -4,7 +4,7 @@ import {
   modeLabel,
   normalizeGeneration,
   samplerLabel,
-  SIZE_PRESETS,
+  sizeLabel,
   type GenerationSettings,
 } from './generation';
 import { newId, normalizeId } from './id';
@@ -84,12 +84,15 @@ export function normalizePresets(raw: unknown): Preset[] {
   );
 }
 
-/** 保存用にシードを除いた生成設定。 */
+/** 保存用にシードを除いた生成設定。カスタム時はカスタム寸法も含める。 */
 export function presetGenerationOf(generation: GenerationSettings): PresetGeneration {
   const normalized = normalizeGeneration(generation);
   return {
     mode: normalized.mode,
     size: normalized.size,
+    ...(normalized.size === 'custom'
+      ? { customWidth: normalized.customWidth, customHeight: normalized.customHeight }
+      : {}),
     steps: normalized.steps,
     scale: normalized.scale,
     sampler: normalized.sampler,
@@ -101,10 +104,9 @@ export function presetGenerationOf(generation: GenerationSettings): PresetGenera
 
 /** 保存ダイアログに出す、シードを含まない生成設定の要約。 */
 export function presetGenerationSummary(generation: PresetGeneration): string {
-  const size = SIZE_PRESETS.find((preset) => preset.key === generation.size)?.label ?? generation.size;
   return [
     modeLabel(generation.mode),
-    size,
+    sizeLabel(generation),
     `${generation.steps} steps`,
     `スケール ${generation.scale}`,
     samplerLabel(generation.sampler),
@@ -242,8 +244,17 @@ export function sameWorkspace(a: PresetWorkspace, b: PresetWorkspace): boolean {
 }
 
 function samePresetGeneration(preset: PresetGeneration, current: GenerationSettings): boolean {
-  for (const key of Object.keys(preset) as (keyof PresetGeneration)[]) {
+  const keys: (keyof PresetGeneration)[] = [
+    'mode', 'size', 'steps', 'scale', 'sampler', 'noiseSchedule', 'cfgRescale', 'dynamicThresholding',
+  ];
+  for (const key of keys) {
     if (!Object.is(preset[key], current[key])) return false;
+  }
+  // どちらかがカスタムなら寸法も比べる。プリセット側がプリセットで現在がカスタム
+  // （またはその逆）の場合、size の差だけでも false になるが、寸法の有無も明示する。
+  if (preset.size === 'custom' || current.size === 'custom') {
+    if (!Object.is(preset.customWidth, current.customWidth)) return false;
+    if (!Object.is(preset.customHeight, current.customHeight)) return false;
   }
   return true;
 }
@@ -278,6 +289,17 @@ export function presetLoadExtras(
     for (const key of Object.keys(preset.generation) as (keyof PresetGeneration)[]) {
       const value = preset.generation[key];
       if (!Object.is(value, current.generation[key])) generation[key] = value as never;
+    }
+    // サイズが変わり、どちらかがカスタムなら寸法も差分にする。プリセットへ戻るときは
+    // 寸法を undefined にして、Undo でカスタムへ戻すときに元の寸法を復元できるようにする。
+    if (preset.generation.size !== current.generation.size &&
+        (preset.generation.size === 'custom' || current.generation.size === 'custom')) {
+      if (!Object.is(preset.generation.customWidth, current.generation.customWidth)) {
+        generation.customWidth = preset.generation.customWidth;
+      }
+      if (!Object.is(preset.generation.customHeight, current.generation.customHeight)) {
+        generation.customHeight = preset.generation.customHeight;
+      }
     }
     if (Object.keys(generation).length > 0) extras.generation = generation;
   }

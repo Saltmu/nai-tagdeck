@@ -3,7 +3,7 @@ import type { DictEntry, PromptCategoryKey, TagGroups, Workspace, WorkTag } from
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from './categories';
 import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
 import {
-  NOISE_SCHEDULES, SAMPLERS, SCALE_MAX, SCALE_MIN, SIZE_PRESETS, normalizeCfgRescale, normalizeScale, normalizeSeed, normalizeSteps,
+  NOISE_SCHEDULES, SAMPLERS, SCALE_MAX, SCALE_MIN, SIZE_PRESETS, isValidFreeSize, normalizeCfgRescale, normalizeScale, normalizeSeed, normalizeSteps,
   type GenerationSettings,
 } from './generation';
 import { newId } from './id';
@@ -56,6 +56,9 @@ function generationFrom(comment: Fields, isFurry: boolean, explicitMode?: Genera
     add('mode', '生成モード', 'furry', 'ケモノ');
   }
   const size = SIZE_PRESETS.find((s) => s.width === comment.width && s.height === comment.height);
+  const customSize = !size && isValidFreeSize(comment.width, comment.height)
+    ? { width: comment.width as number, height: comment.height as number }
+    : undefined;
   const seed = normalizeSeed(comment.seed);
   const steps = normalizeSteps(comment.steps);
   const scale = typeof comment.scale === 'number' && Number.isFinite(comment.scale) &&
@@ -65,7 +68,13 @@ function generationFrom(comment: Fields, isFurry: boolean, explicitMode?: Genera
   const sampler = SAMPLERS.find((s) => s.value === comment.sampler);
   const schedule = NOISE_SCHEDULES.find((s) => s === comment.noise_schedule);
   add('seed', 'シード', seed !== null && seed === comment.seed ? seed : undefined);
-  add('size', 'サイズ', size?.key, size?.label);
+  if (customSize) {
+    values.customWidth = customSize.width;
+    values.customHeight = customSize.height;
+    add('size', 'サイズ', 'custom', `カスタム ${customSize.width}×${customSize.height}`);
+  } else {
+    add('size', 'サイズ', size?.key, size?.label);
+  }
   add('steps', 'ステップ', steps === comment.steps ? steps : undefined);
   add('scale', 'ガイダンス', scale);
   add('sampler', 'サンプラー', sampler?.value, sampler?.label);

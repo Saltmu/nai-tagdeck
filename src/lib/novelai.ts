@@ -12,7 +12,15 @@ export const NAI_MODEL = 'nai-diffusion-5-full';
 export const REQUEST_TIMEOUT_MS = 120_000;
 
 /** Opus プランで Anlas を消費しない条件（最新の条件は公式で確認すること）。 */
-export const FREE_LIMITS = { maxPixels: 1024 * 1024, maxSteps: 28, nSamples: 1 } as const;
+export const FREE_LIMITS = {
+  maxPixels: 1024 * 1024,
+  maxSteps: 28,
+  nSamples: 1,
+  /** サイズは 64 の倍数で指定する。 */
+  sizeStep: 64,
+  minSide: 64,
+  maxSide: 2048,
+} as const;
 
 /**
  * 公式UIの UC プリセット「heavy」の文面。ネガティブの既定値として使い、設定で編集できる。
@@ -51,7 +59,21 @@ export const DEFAULT_PARAMS: Omit<GenerationParams, 'seed'> = {
 };
 
 export function isFreeGeneration(p: Pick<GenerationParams, 'width' | 'height' | 'steps'>): boolean {
-  return p.width * p.height <= FREE_LIMITS.maxPixels && p.steps <= FREE_LIMITS.maxSteps;
+  const validSide = (side: number): boolean =>
+    Number.isFinite(side) &&
+    Number.isInteger(side) &&
+    side >= FREE_LIMITS.minSide &&
+    side <= FREE_LIMITS.maxSide &&
+    side % FREE_LIMITS.sizeStep === 0;
+  return (
+    validSide(p.width) &&
+    validSide(p.height) &&
+    p.width * p.height <= FREE_LIMITS.maxPixels &&
+    Number.isFinite(p.steps) &&
+    Number.isInteger(p.steps) &&
+    p.steps >= 1 &&
+    p.steps <= FREE_LIMITS.maxSteps
+  );
 }
 
 export function randomSeed(): number {

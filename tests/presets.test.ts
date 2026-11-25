@@ -391,6 +391,46 @@ describe('プリセットの生成設定', () => {
     expect(samePreset(updated!, { ...edited, workspace: updated!.workspace })).toBe(true);
   });
 
+  it('カスタムサイズをプリセットに保存し、要約・比較・復元する', () => {
+    const custom = { ...DEFAULT_GENERATION, size: 'custom' as const, customWidth: 896, customHeight: 1152, seed: 5 };
+    const saved = createPreset('カスタム', ws, { generation: custom, characterNegativePrompt: 'lowres' });
+    expect(saved.generation).toEqual(presetGenerationOf(custom));
+    expect(saved.generation).toMatchObject({ size: 'custom', customWidth: 896, customHeight: 1152 });
+    expect(saved.generation).not.toHaveProperty('seed');
+    expect(presetGenerationSummary(saved.generation!)).toBe(
+      'アニメ · カスタム 896×1152 · 28 steps · スケール 5 · Euler Ancestral',
+    );
+
+    const loaded = { workspace: saved.workspace, generation: { ...custom, seed: 99 }, characterNegativePrompt: 'lowres' };
+    expect(samePreset(saved, loaded)).toBe(true);
+    expect(samePreset(saved, { ...loaded, generation: { ...loaded.generation, customWidth: 1152, customHeight: 896 } })).toBe(false);
+    expect(samePreset(saved, { ...loaded, generation: { ...loaded.generation, size: 'portrait' } })).toBe(false);
+    expect(presetLoadExtras(saved, { generation: DEFAULT_GENERATION, characterNegativePrompt: 'blurry' })).toEqual({
+      generation: { size: 'custom', customWidth: 896, customHeight: 1152 },
+      characterNegativePrompt: 'lowres',
+    });
+
+    // プリセットへ戻るときは寸法を undefined で差分にし、Undo でカスタムへ戻せるようにする
+    const portraitPreset = createPreset('縦', ws, { generation: DEFAULT_GENERATION, characterNegativePrompt: 'blurry' });
+    expect(presetLoadExtras(portraitPreset, { generation: custom, characterNegativePrompt: 'blurry' })).toEqual({
+      generation: { size: 'portrait', customWidth: undefined, customHeight: undefined },
+    });
+
+    // バックアップでカスタム寸法ごと往復する
+    const json = toBackupJSON({
+      dictionary: [],
+      presets: [saved],
+      workspace: ws,
+      settings: DEFAULT_SETTINGS,
+      generation: custom,
+    });
+    const parsed = parseBackup(json);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.data.presets[0]).toEqual(saved);
+    expect(parsed.data.generation).toMatchObject({ size: 'custom', customWidth: 896, customHeight: 1152 });
+  });
+
   it('読み込みで変える項目だけを返し、シードは含めない', () => {
     const preset = createPreset('ケモノ', ws, furry);
     expect(presetLoadExtras(preset, {

@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CharacterCard } from '../src/components/CharacterCard';
 import { GeneratePanel } from '../src/components/GeneratePanel';
 import { DialogProvider } from '../src/components/Dialogs';
-import { DEFAULT_GENERATION } from '../src/lib/generation';
+import { DEFAULT_GENERATION, normalizeGeneration, type GenerationSettings } from '../src/lib/generation';
 import { newCharacter } from '../src/lib/workspace';
 import type { Generator } from '../src/hooks/useGenerator';
 import type { TokenState } from '../src/hooks/useToken';
@@ -88,6 +88,51 @@ it('shows the Opus free-tier conditions in the page and edits the advanced setti
   expect(onGenerationChange).toHaveBeenCalledWith({ cfgRescale: 0.35 });
   await act(async () => inputOf('ダイナミックしきい値').click());
   expect(onGenerationChange).toHaveBeenCalledWith({ dynamicThresholding: true });
+});
+
+it('switches to a custom size, picks a suggestion, rounds a width and swaps sides', async () => {
+  const onGenerationChange = vi.fn();
+  function Harness() {
+    const [generation, setGeneration] = useState<GenerationSettings>(DEFAULT_GENERATION);
+    return (
+      <GeneratePanel
+        generation={generation}
+        onGenerationChange={(patch) => {
+          onGenerationChange(patch);
+          setGeneration((prev) => normalizeGeneration({ ...prev, ...patch }));
+        }}
+        generator={generator}
+        token={token}
+        onOpenSettings={() => {}}
+        blocker={null}
+        onGenerate={() => {}}
+      />
+    );
+  }
+  await act(async () => root.render(<Harness />));
+  expect(container.querySelector('.custom-size')).toBeNull();
+
+  const sizeSelect = container.querySelector<HTMLSelectElement>('select[id$="-size"]')!;
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+  await act(async () => {
+    setter?.call(sizeSelect, 'custom');
+    sizeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(onGenerationChange).toHaveBeenCalledWith({ size: 'custom', customWidth: 832, customHeight: 1216 });
+  expect(container.querySelector('.custom-size-status')?.textContent).toContain('832×1216（1,011,712 / 1,048,576 px）');
+
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="カスタムサイズ 896×1152 にする"]')!.click());
+  expect(onGenerationChange).toHaveBeenCalledWith({ size: 'custom', customWidth: 896, customHeight: 1152 });
+  expect(container.querySelector('.custom-size-status')?.textContent).toContain('896×1152（1,032,192 / 1,048,576 px）');
+
+  await commitNumber('幅', '900');
+  expect(onGenerationChange).toHaveBeenCalledWith({ size: 'custom', customWidth: 896, customHeight: 1152 });
+  expect(container.querySelector('.custom-size-status')?.textContent).toContain('丸め');
+
+  const swap = [...container.querySelectorAll('button')].find((b) => b.textContent === '縦横を入れ替え');
+  await act(async () => swap!.click());
+  expect(onGenerationChange).toHaveBeenCalledWith({ size: 'custom', customWidth: 1152, customHeight: 896 });
+  expect(container.querySelector('.custom-size-status')?.textContent).toContain('1152×896');
 });
 
 it('turns per-character negative and center on from the character card', async () => {

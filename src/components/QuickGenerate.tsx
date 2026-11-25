@@ -2,15 +2,17 @@ import { type KeyboardEvent, useRef } from 'react';
 import { SIZE_PRESETS, type SizeKey } from '../lib/generation';
 import { LockIcon, SizeIcon, SparkleIcon } from './icons';
 
-/** ヘッダーに常時出すサイズ。tall / wide は選ばれている間だけ 4 つ目に足す。 */
+/** ヘッダーに常時出すサイズ。tall / wide / custom は選ばれている間だけ 4 つ目に足す。 */
 const QUICK_SIZES: readonly SizeKey[] = ['portrait', 'landscape', 'square'];
 
 function headerSizes(size: SizeKey): SizeKey[] {
-  return size === 'tall' || size === 'wide' ? [...QUICK_SIZES, size] : [...QUICK_SIZES];
+  return size === 'tall' || size === 'wide' || size === 'custom' ? [...QUICK_SIZES, size] : [...QUICK_SIZES];
 }
 
 interface Props {
   size: SizeKey;
+  /** size === 'custom' のときの実効寸法。未指定なら既定サイズで表示する。 */
+  customSize?: { width: number; height: number };
   /** null ならランダム。固定中だけ解除ボタンを出す。 */
   seed: number | null;
   onSizeChange: (size: SizeKey) => void;
@@ -22,7 +24,7 @@ interface Props {
 }
 
 /** どのタブからでも、サイズを選んですぐ生成できるようにする。 */
-export function QuickGenerate({ size, seed, onSizeChange, onClearSeed, generating, blocker, onGenerate }: Props) {
+export function QuickGenerate({ size, customSize, seed, onSizeChange, onClearSeed, generating, blocker, onGenerate }: Props) {
   const radioRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const generateRef = useRef<HTMLButtonElement>(null);
   // 解除ボタンで Enter を押し続けたとき、フォーカス先の生成ボタンが連打を受け取らないようにする
@@ -49,7 +51,9 @@ export function QuickGenerate({ size, seed, onSizeChange, onClearSeed, generatin
     <div className="quick-generate">
       <div className="size-toggle" role="radiogroup" aria-label="画像サイズ" onKeyDown={onRadioKeyDown}>
         {sizes.map((key, i) => {
-          const preset = SIZE_PRESETS.find((s) => s.key === key)!;
+          const preset = SIZE_PRESETS.find((s) => s.key === key);
+          const dims = preset ?? customSize ?? { width: 832, height: 1216 };
+          const label = preset?.label ?? `カスタム ${dims.width}×${dims.height}`;
           const isTabbable = activeIndex >= 0 ? i === activeIndex : i === 0;
           return (
             <button
@@ -59,12 +63,12 @@ export function QuickGenerate({ size, seed, onSizeChange, onClearSeed, generatin
               role="radio"
               tabIndex={isTabbable ? 0 : -1}
               aria-checked={size === key}
-              aria-label={preset.label}
-              title={preset.label}
+              aria-label={label}
+              title={label}
               className="size-btn"
               onClick={() => onSizeChange(key)}
             >
-              <SizeIcon width={preset.width} height={preset.height} />
+              <SizeIcon width={dims.width} height={dims.height} />
             </button>
           );
         })}

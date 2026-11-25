@@ -25,7 +25,7 @@ import { usePromptImportApply } from './hooks/usePromptImportApply';
 import { useDialogs } from './components/Dialogs';
 import { isEmptyWorkspace } from './lib/presets';
 import { isDefaultSettings } from './lib/settings';
-import { isDefaultGeneration, sizeOf, type SizeKey } from './lib/generation';
+import { isDefaultGeneration, resolveSize, type SizeKey } from './lib/generation';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { TabSyncNotice } from './components/TabSyncNotice';
@@ -325,6 +325,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         </nav>
         <QuickGenerate
           size={generation.size}
+          customSize={generation.size === 'custom' ? resolveSize(generation) : undefined}
           seed={generation.seed}
           onSizeChange={handleSizeChange}
           onClearSeed={handleClearSeed}
@@ -398,7 +399,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               generation={generation}
               settingsReady={settingsReady}
               workspaceReady={loaded}
-              canvasSize={sizeOf(generation.size)}
+              canvasSize={resolveSize(generation)}
               shown={tab === 'editor'}
             />
           </div>
@@ -406,7 +407,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             <Gallery
               images={imageStore.images}
               generating={generator.generating}
-              pendingSize={sizeOf(generation.size)}
+              pendingSize={resolveSize(generation)}
               evictedCount={imageStore.evictedCount}
               onDismissEviction={imageStore.dismissEviction}
               onRemove={imageStore.remove}

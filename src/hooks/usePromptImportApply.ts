@@ -46,6 +46,13 @@ function generationPatchFromImport(
     const value = next[key];
     if (value !== undefined && !Object.is(value, current[key])) patch[key] = value as never;
   }
+  // サイズが変わり、どちらかがカスタムなら寸法もパッチに含める。プリセットへ戻るときは
+  // 寸法を undefined にして、Undo でカスタムへ戻すときに元の寸法を復元できるようにする。
+  if (values.size !== undefined && values.size !== current.size &&
+      (values.size === 'custom' || current.size === 'custom')) {
+    if (!Object.is(next.customWidth, current.customWidth)) patch.customWidth = next.customWidth;
+    if (!Object.is(next.customHeight, current.customHeight)) patch.customHeight = next.customHeight;
+  }
   return patch;
 }
 

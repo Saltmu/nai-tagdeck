@@ -43,6 +43,40 @@
   min-width: 0;
 }
 
+.custom-size {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.custom-size-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.custom-size-fields .field {
+  flex: 1;
+  min-width: 7rem;
+}
+
+.custom-size-fields input {
+  width: 100%;
+}
+
+.custom-size-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.custom-size-status {
+  margin: 0;
+}
+
 .gen-summary {
   margin: 0;
   color: var(--muted);
