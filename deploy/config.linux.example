@@ -1,33 +1,28 @@
 # Linux デプロイ用の設定例。deploy/config.linux.local にコピーして値を書く。
 # このファイル（config.linux.local）は *.local で Git 管理外。絶対にコミットしないこと。
-# パスワードや秘密鍵のパスをリポジトリに入れないこと。
+# パスワードをリポジトリに入れないこと。
 #
 # 使い方:
 #   cp deploy/config.linux.example deploy/config.linux.local
 #   # config.linux.local を編集する
 #   npm run deploy:linux -- --dry   # 確認のみ
 #   npm run deploy:linux            # 本番デプロイ
+#
+# 転送は FTPS（明示的 TLS、21番）です。SFTP は使いません。
+# さくらのレンタルサーバ「ライトプラン」では SSH が使えず（SSH はスタンダード
+# プラン以上）、SFTP の口がそもそもありません。ライトでは FTPS がデプロイの経路です。
 
-# SFTP 接続先ホスト名（必須）
+# FTPS 接続先ホスト名（必須）
 DEPLOY_HOST=s-shin.sakura.ne.jp
-# SFTP ポート（省略時は 22）
-DEPLOY_PORT=22
-# SFTP ユーザー名（必須）
+# FTPS ポート（省略時は 21）
+DEPLOY_PORT=21
+# FTPS ユーザー名（必須）
 DEPLOY_USER=
 # 公開ディレクトリの絶対パス（必須）
 DEPLOY_DIR=/home/s-shin/www/shishio/nai-tagdeck
-# SFTP サーバーの SHA-256 指紋（必須。--dry なら未設定でも指紋の確認だけできる）
-# WinSCP の「タブ → サーバー／プロトコル情報」またはホスティング事業者で確認済みの値を使うこと。
-DEPLOY_HOST_FINGERPRINT=SHA256:8aKnpeKzFIHclsLyGPzZ12GdgKI2lAoJJ7AM/MxqDu4
 
-# --- 認証（メイン: SFTP パスワード認証） ---
-# SFTP ユーザーのパスワード。未設定の場合は対話式のターミナルで入力を求める。
-# 国外 IP からのパスワード認証はホスティング側で制限される場合があるため、
-# 国外からはデプロイできないことがある。その場合は国内の IP から実行すること。
+# --- 認証（FTPS パスワード認証） ---
+# FTPS ユーザーのパスワード。未設定の場合は対話式のターミナルで入力を求める。
+# 国外IPアドレスフィルタが有効だと、ログイン後のファイル操作が制限される場合がある。
+# その場合はサーバーコントロールパネルでフィルタを無効にするか、国内の IP から実行すること。
 # DEPLOY_PASSWORD=
-#
-# --- 任意のフォールバック: 公開鍵認証 ---
-# プランの関係で通常は使えない。パスワードが無い場合のみ使う。
-# 秘密鍵のパス（パスフレーズなし、OpenSSH 形式。WinSCP の .ppk は不可）。
-# サーバー側で対応する公開鍵を登録しておくこと。
-# DEPLOY_SSH_KEY_FILE=$HOME/.ssh/id_ed25519_nai_tagdeck
