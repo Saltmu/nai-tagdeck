@@ -120,6 +120,8 @@ it('downloads only pinned images in a zip without confirmation dialog and marks 
   await act(async () => {
     zipButton().click();
   });
+  // imageZip は動的 import のため、ZIP 保存が終わるまで待つ
+  await vi.waitFor(() => expect(saved).toHaveLength(1), { timeout: 5000 });
 
   expect(saved).toHaveLength(1);
   expect(container.querySelector('dialog[open]')).toBeNull();

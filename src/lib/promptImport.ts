@@ -1,5 +1,5 @@
 import type { GeneratedImage } from '../hooks/useImages';
-import type { DictEntry, PromptCategoryKey, TagGroups, Workspace, WorkTag } from '../types';
+import type { DictEntry, PromptCategoryKey, TagGroups, WorkTag } from '../types';
 import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from './categories';
 import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from './characterLimits';
 import {
@@ -10,9 +10,12 @@ import { newId } from './id';
 import type { GenerationMode } from './novelai';
 import { readPngMetadata } from './pngMetadata';
 import { parseTagList } from './prompt';
+import type { PromptImport, PromptImportGeneration } from './promptImportShared';
 import { normalize } from './tagText';
 import { classifyTag, dictionaryCategories } from './tagClassification';
 import { emptyGroups, newCharacter, normalizeCenter } from './workspace';
+
+export { importedBaseForMode, type PromptImport, type PromptImportGeneration } from './promptImportShared';
 
 type Fields = Record<string, unknown>;
 
@@ -37,7 +40,7 @@ function readCenter(centers: unknown): { x: number; y: number } | undefined {
 
 const FUR_DATASET_PREFIX = /^\s*(fur[\s_]+dataset)(?:\s*[,\n]+\s*|\s*$)/i;
 
-function generationFrom(comment: Fields, isFurry: boolean, explicitMode?: GenerationMode) {
+function generationFrom(comment: Fields, isFurry: boolean, explicitMode?: GenerationMode): PromptImportGeneration {
   const values: Partial<GenerationSettings> = {};
   const labels: string[] = [];
   const skipped: string[] = [];
@@ -86,28 +89,6 @@ function generationFrom(comment: Fields, isFurry: boolean, explicitMode?: Genera
     add('dynamicThresholding', 'ダイナミックしきい値', comment.dynamic_thresholding, comment.dynamic_thresholding ? 'オン' : 'オフ');
   }
   return { values, labels, skipped };
-}
-
-export interface PromptImport {
-  base: Workspace['base'];
-  furDataset?: string;
-  characters: Workspace['characters'];
-  negative?: Workspace['negative'];
-  characterNegative?: string;
-  generation: ReturnType<typeof generationFrom>;
-  notes: string[];
-}
-
-export function importedBaseForMode(result: Pick<PromptImport, 'base' | 'furDataset'>, mode: GenerationMode): Workspace['base'] {
-  if (!result.furDataset || mode === 'furry') return result.base;
-  const key = normalize(result.furDataset);
-  const exists = Object.values(result.base).some((tags) => tags.some((t) => normalize(t.tag) === key));
-  if (exists) return result.base;
-  // 品質カテゴリは PROMPT_CATEGORY_KEYS の先頭なので、分類済みタグがあっても送信時の先頭に保てる
-  return {
-    ...result.base,
-    quality: [{ id: newId(), enabled: true, tag: result.furDataset, weight: 1 }, ...result.base.quality],
-  };
 }
 
 interface AssembleCharacter {

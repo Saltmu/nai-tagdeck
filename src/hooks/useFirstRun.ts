@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type Dispatch } from 'react';
 import type { Workspace } from '../types';
 import type { WorkspaceAction } from '../lib/workspace';
 import { isEmptyWorkspace } from '../lib/presets';
-import { createSampleWorkspace } from '../lib/sampleWorkspace';
 import { tutorialUrl } from '../lib/tutorialLinks';
 import { useDialogs } from '../components/Dialogs';
 import type { Dictionary } from './useDictionary';
@@ -80,6 +79,8 @@ export function useFirstRun({ ready, hasExistingData, dictionary, workspace, dis
       if (choice === 'sample' || choice === 'dictionary') {
         await dictionary.restoreInitial();
         if (choice === 'sample') {
+          // choice === 'sample' 確定後にだけ読む（初期チャンクには含めない）
+          const { createSampleWorkspace } = await import('../lib/sampleWorkspace');
           // ネガティブはタグの例に含めず、作業中のものを残す
           dispatch({ type: 'replace', workspace: { ...createSampleWorkspace(), negative: workspace.negative } });
           presets.setActiveId(null);

@@ -4,7 +4,7 @@ import { useDialogs } from '../components/Dialogs';
 import type { PromptSource } from '../components/PromptImportDialog';
 import { type GenerationSettings, normalizeGeneration } from '../lib/generation';
 import { generationSaveForOverwrite, isEmptyWorkspace, overwritePreset, samePreset, sameWorkTags, type Preset } from '../lib/presets';
-import { importedBaseForMode, type PromptImport } from '../lib/promptImport';
+import { importedBaseForMode, type PromptImport } from '../lib/promptImportShared';
 import { defaultNegativeTags, type WorkspaceAction } from '../lib/workspace';
 import type { DictEntry, Settings, Workspace, WorkTag } from '../types';
 import type { UndoExtras } from './useTagUndo';
