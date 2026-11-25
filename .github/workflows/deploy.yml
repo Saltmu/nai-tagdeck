@@ -34,16 +34,14 @@ jobs:
       - run: npm run build
       - name: Install deployment tools
         run: sudo apt-get update && sudo apt-get install -y lftp
-      - name: Upload the build over SFTP
+      - name: Upload the build over FTPS
         env:
           DRY_RUN: ${{ inputs.dry_run }}
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '21' }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           LFTP_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
-          DEPLOY_HOST_FINGERPRINT: ${{ vars.DEPLOY_HOST_FINGERPRINT }}
         run: |
           if [[ ! "$DEPLOY_HOST" =~ ^[[:alnum:]][[:alnum:].-]*$ ||
                 ! "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]]; then
@@ -51,66 +49,16 @@ jobs:
             exit 1
           fi
 
-          ssh_dir=$(mktemp -d)
           check_dir=$(mktemp -d)
-          trap 'rm -rf -- "$ssh_dir" "$check_dir"' EXIT
+          trap 'rm -rf -- "$check_dir"' EXIT
           umask 077
-          expected_fingerprint="${DEPLOY_HOST_FINGERPRINT%=}"
-          discover_fingerprint=false
-          if [[ "$DRY_RUN" == true && -z "$DEPLOY_HOST_FINGERPRINT" ]]; then
-            discover_fingerprint=true
-          elif [[ ! "$expected_fingerprint" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
-            echo '::error::Set DEPLOY_HOST_FINGERPRINT to the verified SHA256 fingerprint of the SFTP server.'
-            exit 1
-          fi
-
-          if ! env -u LFTP_PASSWORD -u DEPLOY_SSH_KEY ssh-keyscan -T 10 -p "$DEPLOY_PORT" "$DEPLOY_HOST" > "$ssh_dir/scanned_keys" 2>/dev/null; then
-            echo '::error::Could not retrieve a host key from the SFTP server.'
-            exit 1
-          fi
-
-          if [[ "$discover_fingerprint" == true ]]; then
-            echo 'Observed host fingerprints (unverified):'
-            ssh-keygen -E sha256 -lf "$ssh_dir/scanned_keys" | awk '{print $2, $NF}'
-            echo '::notice::Fingerprint discovery only. SFTP login and deployment preview were skipped. Verify one fingerprint independently before setting DEPLOY_HOST_FINGERPRINT.'
-            exit 0
-          fi
-
-          while IFS= read -r entry; do
-            if key_info=$(ssh-keygen -E sha256 -lf - <<< "$entry" 2>/dev/null); then
-              read -r _ fingerprint _ <<< "$key_info"
-              if [[ "$fingerprint" == "$expected_fingerprint" ]]; then
-                printf '%s\n' "$entry" > "$ssh_dir/known_hosts"
-                break
-              fi
-            fi
-          done < "$ssh_dir/scanned_keys"
-
-          if [[ ! -s "$ssh_dir/known_hosts" ]]; then
-            echo '::error::No SFTP host key matches DEPLOY_HOST_FINGERPRINT. Verify the server fingerprint before updating the variable.'
-            exit 1
-          fi
 
           : "${DEPLOY_USER:?Set the production DEPLOY_USER secret}"
+          : "${LFTP_PASSWORD:?Set the production DEPLOY_PASSWORD secret}"
           if [[ ! "$DEPLOY_USER" =~ ^[[:alnum:]_][[:alnum:]_-]*$ ||
                 ! "$DEPLOY_DIR" =~ ^(/[[:alnum:]_.-]+)+/?$ ||
                 "$DEPLOY_DIR" =~ /\.\.?(/|$) ]]; then
             echo '::error::Check the production username and absolute deployment directory.'
-            exit 1
-          fi
-
-          if [[ -n "$DEPLOY_SSH_KEY" ]]; then
-            key_file="$ssh_dir/id_deploy"
-            printf '%s\n' "${DEPLOY_SSH_KEY//$'\r'/}" > "$key_file"
-            chmod 600 "$key_file"
-            unset DEPLOY_SSH_KEY
-            ssh_connect_opts="-o PubkeyAuthentication=yes -o IdentitiesOnly=yes -o IdentityFile=$key_file -o BatchMode=yes -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no"
-            open_cmd="open -u \"$DEPLOY_USER,\" \"sftp://$DEPLOY_HOST:$DEPLOY_PORT\""
-          elif [[ -n "$LFTP_PASSWORD" ]]; then
-            ssh_connect_opts="-o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1"
-            open_cmd="open --env-password -u \"$DEPLOY_USER\" \"sftp://$DEPLOY_HOST:$DEPLOY_PORT\""
-          else
-            echo '::error::Set either the DEPLOY_SSH_KEY or DEPLOY_PASSWORD secret in the production environment.'
             exit 1
           fi
 
@@ -120,10 +68,14 @@ jobs:
                 'set cmd:fail-exit yes' \
                 'set net:timeout 20' \
                 'set net:max-retries 2' \
-                'set sftp:auto-confirm no' \
-                "set sftp:connect-program \"ssh -a -x $ssh_connect_opts -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o VerifyHostKeyDNS=no -o UserKnownHostsFile=$ssh_dir/known_hosts -o ConnectTimeout=15\"" \
+                'set ftp:ssl-force true' \
+                'set ftp:ssl-protect-data true' \
+                'set ftp:ssl-auth TLS' \
+                'set ssl:verify-certificate yes' \
+                'set ssl:check-hostname yes' \
+                'set ftp:passive-mode true' \
                 'set xfer:use-temp-file yes' \
-                "$open_cmd" \
+                "open --env-password -u \"$DEPLOY_USER\" \"ftp://$DEPLOY_HOST:$DEPLOY_PORT\"" \
                 "cd \"${DEPLOY_DIR%/}\""
               cat
               printf '%s\n' 'bye'
@@ -146,26 +98,3 @@ jobs:
           #    until reload. Issue #33 asks to remove those files.
           if [[ "$DRY_RUN" == true ]]; then
             printf '%s\n' \
-              "mirror --reverse --no-perms --ignore-time --verbose $preview dist/assets assets" \
-              "mirror --reverse --delete --no-perms --transfer-all --verbose --exclude-glob .htaccess --exclude-glob robots.txt --exclude ^assets/ $preview dist ." \
-              "mirror --reverse --delete --no-perms --ignore-time --verbose $preview dist/assets assets" \
-              | run_lftp
-          else
-            printf '%s\n' \
-              'mirror --reverse --no-perms --ignore-time --verbose dist/assets assets' \
-              'mirror --reverse --delete --no-perms --transfer-all --verbose --exclude-glob .htaccess --exclude-glob robots.txt --exclude ^assets/ dist .' \
-              "get index.html -o \"$check_dir/index.html\"" \
-              "get sw.js -o \"$check_dir/sw.js\"" \
-              | run_lftp
-            if ! cmp -s dist/index.html "$check_dir/index.html"; then
-              echo '::error::The published index.html does not match the build. Old hashed assets were kept.'
-              exit 1
-            fi
-            if ! cmp -s dist/sw.js "$check_dir/sw.js"; then
-              echo '::error::The published sw.js does not match the build. Old hashed assets were kept.'
-              exit 1
-            fi
-            printf '%s\n' \
-              'mirror --reverse --delete --no-perms --ignore-time --verbose dist/assets assets' \
-              | run_lftp
-          fi
