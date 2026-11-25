@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+# dist/ を Linux から SFTP（パスワード認証）でレンタルサーバーへアップロードする。
+#
+#   npm run deploy:linux            テスト・ビルドしてからアップロード
+#   npm run deploy:linux -- --dry   アップロードせず、送る・消すファイルの一覧だけ表示
+#   npm run deploy:linux -- --skip-build  テスト・ビルドを省略して dist/ をそのまま送る
+#
+# 接続先は環境変数で指定する。deploy/config.linux.local（Git 管理外、*.local で無視）に
+# 書くか、実行時に環境変数で渡す。例は deploy/config.linux.example を参照。
+# パスワードはリポジトリにもこのスクリプトにも持たない。ログやコマンドラインにも出さない。
+#
+# 認証は SFTP のパスワード認証がメイン。公開鍵認証はプランの関係で使えないため、
+# DEPLOY_SSH_KEY_FILE は任意のフォールバックとしてのみ残してある（通常は使わない）。
+# 転送は lftp の SFTP（mirror）で行う。rsync over ssh だけには頼らない。
+#
+# 注意: さくらのレンタルサーバは国外 IP からのパスワード認証を制限しているため、
+# 国外のマシンからだとパスワードが正しくても弾かれる場合がある。その場合は
+# 日本国内の IP から実行すること（例: 手元の Linux / Windows 機）。
+# GitHub Actions の認証失敗 "Permission denied (publickey,password)" は
+# スクリプトのバグではなく、認証情報・IP 制限側の問題であることが多い。
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DRY=false
+SKIP_BUILD=false
+for arg in "$@"; do
+  case "$arg" in
+    --dry) DRY=true ;;
+    --skip-build) SKIP_BUILD=true ;;
+    *) echo "不明な引数: $arg（--dry / --skip-build のみ）" >&2; exit 1 ;;
+  esac
+done
+
+# --- 設定の読み込み（環境変数が優先） ---
+CONFIG_FILE="$ROOT/deploy/config.linux.local"
+if [[ -f "$CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  set -a; source "$CONFIG_FILE"; set +a
+fi
+
+DEPLOY_HOST="${DEPLOY_HOST:-}"
+DEPLOY_PORT="${DEPLOY_PORT:-22}"
+DEPLOY_USER="${DEPLOY_USER:-}"
+DEPLOY_DIR="${DEPLOY_DIR:-}"
+DEPLOY_HOST_FINGERPRINT="${DEPLOY_HOST_FINGERPRINT:-}"
+DEPLOY_SSH_KEY_FILE="${DEPLOY_SSH_KEY_FILE:-}"
+# パスワードは DEPLOY_PASSWORD か LFTP_PASSWORD（Actions と同じ名前）のどちらか。
+DEPLOY_PASSWORD_VALUE="${DEPLOY_PASSWORD:-${LFTP_PASSWORD:-}}"
+
+fail() { echo "エラー: $*" >&2; exit 1; }
+
+# deploy.yml と同じ検証
+[[ "$DEPLOY_HOST" =~ ^[[:alnum:]][[:alnum:].-]*$ ]] || fail "DEPLOY_HOST を設定してください（ホスト名）。"
+[[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]] || fail "DEPLOY_PORT は 1〜5 桁の数字にしてください。"
+[[ "$DEPLOY_USER" =~ ^[[:alnum:]_][[:alnum:]_-]*$ ]] || fail "DEPLOY_USER を設定してください。"
+[[ "$DEPLOY_DIR" =~ ^(/[[:alnum:]_.-]+)+/?$ ]] || fail "DEPLOY_DIR は絶対パスにしてください。"
+[[ "$DEPLOY_DIR" =~ /\.\.?(/|$) ]] && fail "DEPLOY_DIR に . や .. を含めないでください。"
+
+for cmd in ssh-keyscan ssh-keygen lftp; do
+  command -v "$cmd" >/dev/null 2>&1 || fail "$cmd が見つかりません。lftp は sudo apt install lftp で入ります。"
+done
+
+# --- ホスト鍵の検証 ---
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf -- "$TMP_DIR"' EXIT
+KNOWN_HOSTS="$TMP_DIR/known_hosts"
+SCANNED="$TMP_DIR/scanned_keys"
+if ! ssh-keyscan -T 10 -p "$DEPLOY_PORT" "$DEPLOY_HOST" > "$SCANNED" 2>/dev/null; then
+  fail "SFTP サーバーからホスト鍵を取得できませんでした（$DEPLOY_HOST:$DEPLOY_PORT に到達できません）。"
+fi
+
+EXPECTED_FINGERPRINT="${DEPLOY_HOST_FINGERPRINT%=}"
+if [[ -z "$EXPECTED_FINGERPRINT" ]]; then
+  if [[ "$DRY" == true ]]; then
+    echo "観測されたホスト指紋（未検証）:"
+    ssh-keygen -E sha256 -lf "$SCANNED" | awk '{print $2, $NF}'
+    echo "注意: 指紋の確認のみで終了しました。SFTP ログインや配付のプレビューは行っていません。"
+    echo "WinSCP またはホスティング事業者で照合した指紋を DEPLOY_HOST_FINGERPRINT に設定してから、再度 --dry を実行してください。"
+    exit 0
+  fi
+  fail "DEPLOY_HOST_FINGERPRINT を設定してください（--dry なら未設定でも指紋の確認だけできます）。"
+fi
+[[ "$EXPECTED_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]] \
+  || fail "DEPLOY_HOST_FINGERPRINT は検証済みの SHA256 指紋（SHA256:…）にしてください。"
+
+MATCHED=false
+while IFS= read -r entry; do
+  key_info="$(ssh-keygen -E sha256 -lf - <<< "$entry" 2>/dev/null)" || continue
+  read -r _ fingerprint _ <<< "$key_info"
+  if [[ "$fingerprint" == "$EXPECTED_FINGERPRINT" ]]; then
+    printf '%s\n' "$entry" > "$KNOWN_HOSTS"
+    MATCHED=true
+    break
+  fi
+done < "$SCANNED"
+[[ "$MATCHED" == true ]] || fail "SFTP ホスト鍵が DEPLOY_HOST_FINGERPRINT と一致しません。指紋を確認してから更新してください。"
+
+# --- 認証方法の決定（メイン: SFTP パスワード認証。鍵は任意のフォールバック） ---
+# ssh の -p は sftp では別意味になるため、ポートは -o Port= で指定する（lftp の connect-program 共通）。
+SSH_BASE_OPTS="-o Port=$DEPLOY_PORT -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o UserKnownHostsFile=$KNOWN_HOSTS -o VerifyHostKeyDNS=no -o ConnectTimeout=15"
+AUTH_MODE=""
+if [[ -n "$DEPLOY_PASSWORD_VALUE" ]]; then
+  AUTH_MODE="password"
+elif [[ -t 0 ]]; then
+  # 対話式ならパスワードを端末で入力してもらう（画面には表示しない）。
+  printf 'SFTP パスワードを入力してください: ' >&2
+  IFS= read -r -s DEPLOY_PASSWORD_VALUE
+  echo >&2
+  [[ -n "$DEPLOY_PASSWORD_VALUE" ]] || fail "パスワードが入力されませんでした。"
+  AUTH_MODE="password"
+elif [[ -n "$DEPLOY_SSH_KEY_FILE" ]]; then
+  # 任意のフォールバック（プランの関係で通常は使えない）。パスワードが無い場合のみ。
+  [[ -f "$DEPLOY_SSH_KEY_FILE" ]] || fail "DEPLOY_SSH_KEY_FILE が見つかりません: $DEPLOY_SSH_KEY_FILE"
+  AUTH_MODE="key"
+else
+  fail "パスワード認証の情報がありません。DEPLOY_PASSWORD（または LFTP_PASSWORD）を設定するか、対話式のターミナルで実行してパスワードを入力してください。sshpass は不要です（lftp が --env-password でパスワードを渡します）。"
+fi
+
+if [[ "$AUTH_MODE" == "password" ]]; then
+  export LFTP_PASSWORD="$DEPLOY_PASSWORD_VALUE"
+  unset DEPLOY_PASSWORD_VALUE
+  SSH_CONNECT_OPTS="$SSH_BASE_OPTS -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1"
+  OPEN_CMD="open --env-password -u \"$DEPLOY_USER\" \"sftp://$DEPLOY_HOST:$DEPLOY_PORT\""
+  echo "注意: SFTP パスワード認証を使います。国外 IP からはホスティング側の制限で弾かれる場合があります。"
+else
+  SSH_CONNECT_OPTS="$SSH_BASE_OPTS -o PubkeyAuthentication=yes -o IdentitiesOnly=yes -o IdentityFile=$DEPLOY_SSH_KEY_FILE -o BatchMode=yes -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no"
+  OPEN_CMD="open -u \"$DEPLOY_USER,\" \"sftp://$DEPLOY_HOST:$DEPLOY_PORT\""
+  echo "注意: 公開鍵認証（フォールバック）を使います。"
+fi
+
+run_lftp() {
+  {
+    printf '%s\n' \
+      'set cmd:fail-exit yes' \
+      'set net:timeout 20' \
+      'set net:max-retries 2' \
+      'set sftp:auto-confirm no' \
+      "set sftp:connect-program \"ssh -a -x $SSH_CONNECT_OPTS\"" \
+      "$OPEN_CMD" \
+      "cd \"${DEPLOY_DIR%/}\"" \
+    cat
+    printf '%s\n' 'bye'
+  } | lftp --norc -f /dev/stdin
+}
+
+# --- テスト・ビルド ---
+if [[ "$SKIP_BUILD" == false ]]; then
+  (cd "$ROOT" && npm test)
+  (cd "$ROOT" && npm run build)
+fi
+[[ -f "$ROOT/dist/index.html" ]] || fail "dist/index.html がありません。ビルドに失敗していないか確認してください。"
+
+echo
+echo "$DEPLOY_HOST:$DEPLOY_PORT → $DEPLOY_DIR${DRY:+ [確認のみ]}"
+
+PREVIEW=""
+if [[ "$DRY" == true ]]; then
+  PREVIEW="--dry-run"
+fi
+
+# 1. ハッシュ付きアセットを先に送る（まだ削除しない）
+printf '%s\n' \
+  "mirror --reverse --no-perms --ignore-time --verbose $PREVIEW dist/assets assets" \
+  | (cd "$ROOT" && run_lftp)
+# 2. ページ類を公開する。dist/ に無いファイルは消す（assets/・.htaccess・robots.txt は除く）
+printf '%s\n' \
+  "mirror --reverse --delete --no-perms --transfer-all --verbose --exclude-glob .htaccess --exclude-glob robots.txt --exclude ^assets/ $PREVIEW dist ." \
+  | (cd "$ROOT" && run_lftp)
+
+if [[ "$DRY" == false ]]; then
+  # 3. 配信された index.html / sw.js がビルドと一致するか確認する
+  CHECK_DIR="$TMP_DIR/check"
+  mkdir -p "$CHECK_DIR"
+  printf '%s\n' \
+    "get index.html -o \"$CHECK_DIR/index.html\"" \
+    "get sw.js -o \"$CHECK_DIR/sw.js\"" \
+    | (cd "$ROOT" && run_lftp)
+  cmp -s "$ROOT/dist/index.html" "$CHECK_DIR/index.html" \
+    || fail "配信された index.html がビルドと一致しません。古いハッシュ付きアセットは残してあります。"
+  cmp -s "$ROOT/dist/sw.js" "$CHECK_DIR/sw.js" \
+    || fail "配信された sw.js がビルドと一致しません。古いハッシュ付きアセットは残してあります。"
+  # 4. 古いハッシュ付きアセットだけを削除する
+  printf '%s\n' \
+    "mirror --reverse --delete --no-perms --ignore-time --verbose dist/assets assets" \
+    | (cd "$ROOT" && run_lftp)
+fi
+
+echo
+if [[ "$DRY" == true ]]; then
+  echo "確認のみで終了しました（アップロードしていません）。"
+else
+  echo "デプロイしました。"
+fi

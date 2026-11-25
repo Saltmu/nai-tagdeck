@@ -118,6 +118,19 @@ npm run dev
 </details>
 
 <details>
+<summary>Linux から rsync / SSH でアップロード</summary>
+
+Windows の WinSCP 版（`npm run deploy`）は Linux では使えません。Linux では `scripts/deploy-linux.sh`（`npm run deploy:linux`）を使います。GitHub Actions 版（`deploy.yml`、lftp）とは別の経路ですが、転送の順序（アセット先行 → ページ公開 → `index.html` / `sw.js` の一致確認 → 古いアセット削除）と、サーバー側の `.htaccess` / `robots.txt` を残す点は同じです。
+
+1. [設定例](deploy/config.linux.example) を `deploy/config.linux.local` にコピーし、接続先と認証方法を設定します（Git 管理外のためコミットされません）。
+2. `npm run deploy:linux -- --dry` で、アップロードと削除の対象を確認します。`DEPLOY_HOST_FINGERPRINT` 未設定の場合は指紋の確認だけで終了します。
+3. `npm run deploy:linux` でテスト・ビルドを実行し、公開先を `dist/` に同期します。`--skip-build` でテスト・ビルドを省略できます。
+
+認証は SFTP のパスワード認証（`DEPLOY_PASSWORD`、未設定なら対話入力）がメインです。公開鍵認証はプランの関係で使えないため、鍵は任意のフォールバックとしてのみ残してあります。パスワード認証は国外 IP から制限される場合があるため、国外のマシンからデプロイできないときは国内の IP から実行してください。GitHub Actions で `Permission denied (publickey,password)` になった場合は、スクリプトのバグではなく認証情報か IP 制限側の問題であることが多いです。
+
+</details>
+
+<details>
 <summary>配信設定と検索エンジン向けの設定</summary>
 
 - ビルド時に `index.html` へ CSP が入り、通信先を配信元と `image.novelai.net` に制限します。画像は `blob:` のみを許可します。`frame-ancestors 'none'` は meta では効かないため、[Apache の設定例](deploy/htaccess.example) の HTTP ヘッダーに含めています。キャッシュ制御も同じ設定例を参照してください。
