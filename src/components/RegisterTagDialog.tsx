@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent 
 import { createPortal } from 'react-dom';
 import type { CategoryKey } from '../types';
 import { CATEGORIES, isCategoryKey } from '../lib/categories';
+import { isImeComposing } from '../lib/browser';
 import { clampWeight } from '../lib/prompt';
 import { WeightInput } from './WeightInput';
 
@@ -91,7 +92,7 @@ export function RegisterTagDialog({ tag, category, weight: initialWeight, onClos
   const onKeyDown = (e: KeyboardEvent<HTMLFormElement>) => {
     if (e.key !== 'Enter') return;
     // 変換確定の Enter は IME に渡す。preventDefault すると変換自体が確定しないことがある。
-    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    if (isImeComposing(e)) return;
     // Ctrl/Cmd+Enter は生成のショートカット。押しっぱなしの Enter でも登録しない。
     if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
       e.preventDefault();

@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Workspace } from '../types';
 import type { PresetStore } from '../hooks/usePresets';
 import type { UndoExtras } from '../hooks/useTagUndo';
+import { isImeComposing } from '../lib/browser';
 import { modeLabel, type GenerationSettings } from '../lib/generation';
 import {
   createPreset,
@@ -296,7 +297,7 @@ function PresetSearch({ inputId, presets, active, onPick }: SearchProps) {
         onBlur={close}
         onKeyDown={(e) => {
           // IME 変換確定の Enter は無視する
-          if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+          if (isImeComposing(e)) return;
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
             if (!open) {

@@ -86,3 +86,13 @@ export function scrollOptionIntoList(list: HTMLElement, option: HTMLElement): vo
   if (top < 0) list.scrollTop += top;
   else if (bottom > list.clientHeight) list.scrollTop += bottom - list.clientHeight;
 }
+
+/**
+ * IME 変換中のキーイベントかを判定する。
+ * Safari 等の互換性のため `nativeEvent.isComposing` と `keyCode === 229` の両方を見る。
+ */
+export function isImeComposing(
+  event: { isComposing?: boolean; keyCode?: number; nativeEvent?: { isComposing?: boolean } },
+): boolean {
+  return Boolean(event.isComposing || event.nativeEvent?.isComposing || event.keyCode === 229);
+}

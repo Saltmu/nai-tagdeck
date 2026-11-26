@@ -1,5 +1,5 @@
 import type { DictEntry } from '../types';
-import { categoryIndex, parseCategory } from './categories';
+import { categoryIndex, categoryLabel, parseCategory } from './categories';
 import { normalizeId } from './id';
 import { clampWeight } from './prompt';
 import { normalize } from './tagText';
@@ -291,4 +291,8 @@ export function findDuplicateGroups(entries: readonly DictEntry[]): DuplicateGro
     .filter((group) => group.length > 1)
     .map((group) => ({ tag: group[0]!.tag, entries: group }))
     .sort((a, b) => b.entries.length - a.entries.length || a.tag.localeCompare(b.tag));
+}
+
+export function duplicateEntryMessage(entry: Pick<DictEntry, 'tag' | 'category'>): string {
+  return `「${entry.tag}」は ${categoryLabel(entry.category)} に登録済みです`;
 }

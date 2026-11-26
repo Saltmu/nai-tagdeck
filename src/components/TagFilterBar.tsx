@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from 'react';
+import { isImeComposing } from '../lib/browser';
 import type { TagFilter } from '../lib/tagSearch';
 import { EditorActions } from './EditorActions';
 import { CloseIcon, SearchIcon } from './icons';
@@ -78,7 +79,7 @@ export function TagFilterBar({
           spellCheck={false}
           onChange={(event) => onQueryChange(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+            if (event.key === 'Escape' && !isImeComposing(event)) {
               event.preventDefault();
               closeSearch();
             }

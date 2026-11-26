@@ -18,10 +18,7 @@ type TagAction =
   | { type: 'toggle'; id: string }
   | { type: 'setWeight'; id: string; weight: number }
   | { type: 'setTag'; id: string; tag: string }
-  /** 以前は取り消し通知の対象を示すだけだった。履歴は操作全般を記録するので、reducer では無視する。 */
-  | { type: 'remove'; id: string; undo?: boolean }
-  /** 消したタグを元の位置に戻す。同じタグが今あれば重複させず、現在のタグを優先する。 */
-  | { type: 'restore'; tag: WorkTag; index: number }
+  | { type: 'remove'; id: string }
   | { type: 'move'; id: string; delta: -1 | 1 }
   /** ドラッグで id のタグを index 番目へ動かす。 */
   | { type: 'moveTo'; id: string; index: number }
@@ -40,7 +37,6 @@ export type WorkspaceAction =
   /** category が 'negative' のときは target によらずネガティブを操作する。 */
   | (TagAction & { target: TargetId; category: WorkspaceCategoryKey })
   | { type: 'addMany'; items: readonly AddTagItem[] }
-  | { type: 'moveFromUnclassified'; target: TargetId; id: string; to: PromptCategoryKey }
   | {
       type: 'moveTag';
       fromTarget: TargetId;
@@ -204,13 +200,6 @@ function reduceTags(tags: WorkTag[], action: TagAction): WorkTag[] {
     }
     case 'remove':
       return tags.filter((t) => t.id !== action.id);
-    case 'restore': {
-      const key = normalize(action.tag.tag);
-      if (tags.some((t) => t.id === action.tag.id || normalize(t.tag) === key)) return tags;
-      const next = [...tags];
-      next.splice(Math.min(Math.max(action.index, 0), tags.length), 0, { ...action.tag });
-      return next;
-    }
     case 'move':
       return moveItem(tags, action.id, action.delta);
     case 'moveTo': {
@@ -258,7 +247,7 @@ function updateGroups(groups: TagGroups, category: PromptCategoryKey, action: Ta
 }
 
 /** 画面に出している呼び名。未入力のときは並び順の既定名。 */
-function displayedCharacterName(character: Character, index: number): string {
+export function displayedCharacterName(character: Pick<Character, 'name'>, index: number): string {
   return character.name.trim() || `キャラ${index + 1}`;
 }
 
@@ -423,8 +412,6 @@ export function workspaceReducer(state: Workspace, action: WorkspaceAction): Wor
       return normalizeWorkspace(action.workspace);
     case 'commit':
       return action.workspace;
-    case 'moveFromUnclassified':
-      return moveTagBetweenGroups(state, action.target, 'unclassified', action.id, action.target, action.to);
     case 'moveTag':
       return moveTagBetweenGroups(
         state,

@@ -63,17 +63,21 @@ export const DEFAULT_PARAMS: Omit<GenerationParams, 'seed'> = {
   dynamicThresholding: false,
 };
 
-export function isFreeGeneration(p: Pick<GenerationParams, 'width' | 'height' | 'steps'>): boolean {
-  const validSide = (side: number): boolean =>
+/** 64 の倍数・[minSide, maxSide]・maxPixels 以下を満たす寸法か。 */
+export function isValidFreeSize(width: unknown, height: unknown): boolean {
+  const validSide = (side: unknown): side is number =>
+    typeof side === 'number' &&
     Number.isFinite(side) &&
     Number.isInteger(side) &&
     side >= FREE_LIMITS.minSide &&
     side <= FREE_LIMITS.maxSide &&
     side % FREE_LIMITS.sizeStep === 0;
+  return validSide(width) && validSide(height) && width * height <= FREE_LIMITS.maxPixels;
+}
+
+export function isFreeGeneration(p: Pick<GenerationParams, 'width' | 'height' | 'steps'>): boolean {
   return (
-    validSide(p.width) &&
-    validSide(p.height) &&
-    p.width * p.height <= FREE_LIMITS.maxPixels &&
+    isValidFreeSize(p.width, p.height) &&
     Number.isFinite(p.steps) &&
     Number.isInteger(p.steps) &&
     p.steps >= 1 &&

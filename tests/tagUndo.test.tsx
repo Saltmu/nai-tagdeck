@@ -28,7 +28,7 @@ const names = () => ws.base.appearance.map((t) => t.tag);
 const historyButton = (name: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!;
 const idOf = (tag: string) => ws.base.appearance.find((t) => t.tag === tag)!.id;
 const removeTag = (tag: string) =>
-  run(() => api.dispatch({ type: 'remove', target: BASE, category: 'appearance', id: idOf(tag), undo: true }));
+  run(() => api.dispatch({ type: 'remove', target: BASE, category: 'appearance', id: idOf(tag) }));
 const focusField = () => {
   const input = document.createElement('input');
   document.body.append(input);
@@ -157,7 +157,14 @@ it('undoes weight changes, reordering, bulk toggle, quick picks, moves and repla
 
   await run(() => api.dispatch({ type: 'add', target: BASE, category: 'unclassified', tag: 'loose' }));
   const loose = ws.base.unclassified[0]!.id;
-  await run(() => api.dispatch({ type: 'moveFromUnclassified', target: BASE, id: loose, to: 'outfit' }));
+  await run(() => api.dispatch({
+    type: 'moveTag',
+    fromTarget: BASE,
+    fromCategory: 'unclassified',
+    id: loose,
+    toTarget: BASE,
+    toCategory: 'outfit',
+  }));
   expect(ws.base.outfit.map((t) => t.tag)).toEqual(['loose']);
   await run(() => api.undo());
   expect(ws.base.unclassified.map((t) => t.tag)).toEqual(['loose']);

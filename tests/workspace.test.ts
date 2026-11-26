@@ -416,11 +416,25 @@ describe('normalizeWorkspace', () => {
     );
     const hat = start.base.unclassified[0]!;
     const scarf = start.base.unclassified[1]!;
-    const moved = workspaceReducer(start, { type: 'moveFromUnclassified', target: BASE, id: hat.id, to: 'outfit' });
+    const moved = workspaceReducer(start, {
+      type: 'moveTag',
+      fromTarget: BASE,
+      fromCategory: 'unclassified',
+      id: hat.id,
+      toTarget: BASE,
+      toCategory: 'outfit',
+    });
     expect(moved.base.outfit.map((t) => t.tag)).toEqual(['hat']);
     expect(moved.base.outfit[0]).toBe(start.base.outfit[0]);
     expect(moved.base.unclassified.map((t) => t.tag)).toEqual(['scarf']);
-    const movedScarf = workspaceReducer(moved, { type: 'moveFromUnclassified', target: BASE, id: scarf.id, to: 'outfit' });
+    const movedScarf = workspaceReducer(moved, {
+      type: 'moveTag',
+      fromTarget: BASE,
+      fromCategory: 'unclassified',
+      id: scarf.id,
+      toTarget: BASE,
+      toCategory: 'outfit',
+    });
     expect(movedScarf.base.outfit.map((t) => t.tag)).toEqual(['hat', 'scarf']);
     expect(movedScarf.base.unclassified).toEqual([]);
   });
@@ -524,10 +538,12 @@ describe('normalizeWorkspace', () => {
     );
     const baseActionId = baseAction.base.unclassified[0]!.id;
     const movedInBase = workspaceReducer(baseAction, {
-      type: 'moveFromUnclassified',
-      target: BASE,
+      type: 'moveTag',
+      fromTarget: BASE,
+      fromCategory: 'unclassified',
       id: baseActionId,
-      to: 'pose',
+      toTarget: BASE,
+      toCategory: 'pose',
     });
     expect(movedInBase.base.unclassified).toEqual([]);
     expect(movedInBase.base.pose.map((t) => t.tag)).toEqual(['source#hug']);

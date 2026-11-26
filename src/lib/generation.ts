@@ -119,17 +119,7 @@ export function normalizeSeed(n: unknown): number | null {
   return Math.trunc(Math.min(SEED_MAX, Math.max(0, n)));
 }
 
-/** 64 の倍数・[minSide, maxSide]・maxPixels 以下を満たす寸法か。 */
-export function isValidFreeSize(width: unknown, height: unknown): boolean {
-  const validSide = (side: unknown): side is number =>
-    typeof side === 'number' &&
-    Number.isFinite(side) &&
-    Number.isInteger(side) &&
-    side >= FREE_LIMITS.minSide &&
-    side <= FREE_LIMITS.maxSide &&
-    side % FREE_LIMITS.sizeStep === 0;
-  return validSide(width) && validSide(height) && width * height <= FREE_LIMITS.maxPixels;
-}
+export { isValidFreeSize } from './novelai';
 
 function roundStep(n: number): number {
   const step = FREE_LIMITS.sizeStep;

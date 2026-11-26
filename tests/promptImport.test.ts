@@ -162,21 +162,40 @@ describe('NovelAI PNG import', () => {
     const before = workspaceReducer(emptyWorkspace(), { type: 'replace', workspace: { ...result, negative: [] } });
     const toggleId = before.base.unclassified[1]!.id;
     const toggled = workspaceReducer(before, { type: 'toggle', target: BASE, category: 'unclassified', id: toggleId });
-    const moved = workspaceReducer(toggled, { type: 'moveFromUnclassified', target: BASE, to: 'outfit', id: toggleId });
+    const moved = workspaceReducer(toggled, {
+      type: 'moveTag',
+      fromTarget: BASE,
+      fromCategory: 'unclassified',
+      id: toggleId,
+      toTarget: BASE,
+      toCategory: 'outfit',
+    });
     expect(moved.base.outfit).toEqual([toggled.base.unclassified[1]]);
     expect(moved.base.unclassified).toEqual([before.base.unclassified[0]]);
     const duplicate = normalizeWorkspace({
       ...moved,
       base: { ...moved.base, unclassified: [...moved.base.unclassified, { id: 'dup', tag: 'a', weight: 1, enabled: true }] },
     });
-    expect(workspaceReducer(duplicate, { type: 'moveFromUnclassified', target: BASE, to: 'outfit', id: 'dup' }).base.outfit)
-      .toEqual(moved.base.outfit);
+    expect(workspaceReducer(duplicate, {
+      type: 'moveTag',
+      fromTarget: BASE,
+      fromCategory: 'unclassified',
+      id: 'dup',
+      toTarget: BASE,
+      toCategory: 'outfit',
+    }).base.outfit).toEqual(moved.base.outfit);
     expect(buildPrompt(moved.base, 'numeric')).toBe('b');
     const character = moved.characters[0]!;
-    const action = { type: 'moveFromUnclassified', target: character.id, id: character.tags.unclassified[0]!.id } as const;
-    expect(workspaceReducer(moved, { ...action, to: 'quality' })).toBe(moved);
-    expect(workspaceReducer(moved, { ...action, to: 'pose', id: 'missing' })).toBe(moved);
-    expect(workspaceReducer(moved, { ...action, to: 'pose' }).characters[0]?.tags.pose).toEqual(character.tags.unclassified);
+    const action = {
+      type: 'moveTag',
+      fromTarget: character.id,
+      fromCategory: 'unclassified',
+      id: character.tags.unclassified[0]!.id,
+      toTarget: character.id,
+    } as const;
+    expect(workspaceReducer(moved, { ...action, toCategory: 'quality' })).toBe(moved);
+    expect(workspaceReducer(moved, { ...action, toCategory: 'pose', id: 'missing' })).toBe(moved);
+    expect(workspaceReducer(moved, { ...action, toCategory: 'pose' }).characters[0]?.tags.pose).toEqual(character.tags.unclassified);
     expect(normalizeWorkspace({ base: {}, characters: [{ tags: {} }] }).characters[0]?.tags.unclassified).toEqual([]);
     expect(sameWorkspace(before, moved)).toBe(false);
     const preset = createPreset('image', moved);
