@@ -9,6 +9,7 @@ NovelAI Diffusion V5 向けのタグ編集・画像生成アプリ。React / Typ
 | 対象 | 主なファイル |
 | --- | --- |
 | 画面構成と状態の受け渡し | [src/App.tsx](src/App.tsx)、[src/components/](src/components/)、[src/hooks/](src/hooks/) |
+| デザインガイドとスタイル | [docs/design-guidelines.md](docs/design-guidelines.md)、[src/styles.css](src/styles.css)、[src/styles/tokens.css](src/styles/tokens.css) |
 | 編集状態とプロンプトの組み立て | [workspace.ts](src/lib/workspace.ts)、[prompt.ts](src/lib/prompt.ts)、[categories.ts](src/lib/categories.ts) |
 | 辞書・候補・入出力 | [useDictionary.ts](src/hooks/useDictionary.ts)、[suggest.ts](src/lib/suggest.ts)、[io.ts](src/lib/io.ts)、[sampleDictionary.ts](src/lib/sampleDictionary.ts) |
 | 保存・復元と移行 | [db.ts](src/lib/db.ts)、[usePersistence.ts](src/hooks/usePersistence.ts)、[backup.ts](src/lib/backup.ts)、[presets.ts](src/lib/presets.ts) |
@@ -17,6 +18,7 @@ NovelAI Diffusion V5 向けのタグ編集・画像生成アプリ。React / Typ
 
 ## 変更時に守る動作
 
+- UI やスタイルを変更するときは、[デザインガイド](docs/design-guidelines.md) に従い、[tokens.css](src/styles/tokens.css) のトークンと共通部品クラスを優先する。既存スタイルの一括書き換えはせず、触る箇所から段階的に揃える。
 - タグの OFF は出力・生成から外す操作。編集状態、プリセット、バックアップには ON/OFF、重み、並び順を保存する。キャラクターの保存上限と生成対象の上限は [characterLimits.ts](src/lib/characterLimits.ts) を参照する。
 - 保存形式を変更する場合は、IndexedDB の既存データ、プリセット、バックアップからの読み込みも確認する。旧形式の文字列ネガティブは作業中のタグへ移行し、ネガティブを持たない旧プリセットの読み込みでは作業中の値を使う。保存時の競合を避けるため、`usePersistence` は読み込み成功後に書き込みを開始し、書き込みを直列化する。
 - アプリのデータはブラウザに保存する。トークンはセッションまたはローカルストレージに保持し、バックアップの対象外とする。生成画像の一時履歴はタブのメモリに置く。

@@ -10,7 +10,7 @@
 }
 
 .app-dialog::backdrop {
-  background: rgb(0 0 0 / 0.5);
+  background: var(--backdrop, rgb(0 0 0 / 0.5));
 }
 
 .app-dialog-confirm {
