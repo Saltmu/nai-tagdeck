@@ -220,7 +220,16 @@
 
 .gen-error p {
   flex: 1;
+  min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.gen-error-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.15rem;
 }
 

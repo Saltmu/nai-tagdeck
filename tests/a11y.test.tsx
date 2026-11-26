@@ -171,6 +171,39 @@ describe('GenerateDock tablist', () => {
     expect(document.activeElement).toBe(tab2);
     expect(tab2.getAttribute('aria-selected')).toBe('true');
   });
+
+  it('copies the error message from the dock error banner', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', Object.assign(Object.create(navigator), { clipboard: { writeText } }));
+    vi.useFakeTimers();
+
+    await act(async () =>
+      root.render(
+        <GenerateDock
+          collapseSignal={0}
+          generating={false}
+          error="リクエストの内容が受け付けられませんでした（bad input）"
+          onDismissError={() => {}}
+          promptPanel={<div>prompt</div>}
+          generatePanel={<div>generate</div>}
+          referencePanel={<div>reference</div>}
+        />,
+      ),
+    );
+
+    const copyBtn = container.querySelector<HTMLButtonElement>('.gen-error button[aria-label="エラーをコピー"]')!;
+    expect(copyBtn).not.toBeNull();
+    await act(async () => {
+      copyBtn.click();
+    });
+    expect(writeText).toHaveBeenCalledWith('リクエストの内容が受け付けられませんでした（bad input）');
+    expect(copyBtn.getAttribute('aria-label')).toBe('エラーをコピー済み');
+
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(copyBtn.getAttribute('aria-label')).toBe('エラーをコピー');
+  });
 });
 
 describe('SizePicker radiogroup', () => {

@@ -1,5 +1,6 @@
 import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { ChevronUpIcon } from './icons';
+import { copyText } from '../lib/browser';
+import { CheckIcon, ChevronUpIcon, CopyIcon } from './icons';
 
 export type DockTab = 'prompt' | 'generate' | 'reference';
 
@@ -47,6 +48,40 @@ export function GenerateDock({
   });
   const [tab, setTab] = useState<DockTab>('prompt');
   const [open, setOpen] = useState(false);
+  const [errorCopied, setErrorCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+  const latestErrorRef = useRef(error);
+  latestErrorRef.current = error;
+
+  useEffect(() => {
+    setErrorCopied(false);
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    }
+  }, [error]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  const copyError = async () => {
+    const targetError = error;
+    if (!targetError) return;
+    const ok = await copyText(targetError);
+    if (!ok || !mountedRef.current || latestErrorRef.current !== targetError) return;
+    setErrorCopied(true);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => {
+      setErrorCopied(false);
+      copyTimerRef.current = null;
+    }, 1500);
+  };
 
   // 狭い画面ではドックが下端に固定される。高さの分だけ通知を持ち上げる。
   useEffect(() => {
@@ -130,9 +165,20 @@ export function GenerateDock({
       {error && (
         <div className="gen-error" role="alert">
           <p>{error}</p>
-          <button type="button" className="icon-btn" aria-label="エラーを閉じる" onClick={onDismissError}>
-            ✕
-          </button>
+          <div className="gen-error-actions">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={errorCopied ? 'エラーをコピー済み' : 'エラーをコピー'}
+              title={errorCopied ? 'コピー済み' : 'エラーをコピー'}
+              onClick={() => void copyError()}
+            >
+              {errorCopied ? <CheckIcon /> : <CopyIcon />}
+            </button>
+            <button type="button" className="icon-btn" aria-label="エラーを閉じる" onClick={onDismissError}>
+              ✕
+            </button>
+          </div>
         </div>
       )}
       <div className="dock-bar" onPointerDown={onBarPointerDown} onPointerUp={onBarPointerUp} onPointerCancel={() => { dragStart.current = null; }}>

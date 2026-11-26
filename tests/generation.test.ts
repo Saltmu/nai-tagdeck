@@ -238,6 +238,71 @@ describe('parseRetryAfter', () => {
   });
 });
 
+  describe('sanitizeErrorMessage & base64 打ち切り', () => {
+    it('エラー内の長い base64 や data URL を先頭 64 文字で打ち切り、周囲の理由は残す', async () => {
+      const longBase64 = `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk${'A'.repeat(400)}==`;
+      vi.stubGlobal(
+        'fetch',
+        async () =>
+          new Response(
+            JSON.stringify({
+              statusCode: 400,
+              message: `Invalid director_reference_images[0]: "${longBase64}" (expected 1024x1536)`,
+            }),
+            { status: 400 },
+          ),
+      );
+      const err = await requestImages('pst-ok', {} as never).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(NovelAIError);
+      const msg = (err as NovelAIError).message;
+      expect(msg).toContain(longBase64.slice(0, 64) + '…');
+      expect(msg).not.toContain(longBase64);
+      expect(msg).toContain('(expected 1024x1536)');
+
+      const dataUrl = `data:image/png;base64,${longBase64}`;
+      vi.stubGlobal(
+        'fetch',
+        async () =>
+          new Response(
+            JSON.stringify({ detail: [{ msg: `bad input ${dataUrl} at index 0` }] }),
+            { status: 400 },
+          ),
+      );
+      const err2 = await requestImages('pst-ok', {} as never).catch((e: unknown) => e);
+      expect((err2 as NovelAIError).message).toBe(`bad input ${dataUrl.slice(0, 64)}… at index 0`);
+
+      const direct = describeError(new NovelAIError(400, `value=${longBase64} failed`));
+      expect(direct).toContain(`${longBase64.slice(0, 64)}…`);
+      expect(direct).not.toContain(longBase64);
+      expect(direct).toContain('failed');
+
+      const hugeText = 'エラー詳細: ' + 'あ'.repeat(400);
+      const capped = describeError(new Error(hugeText));
+      expect(capped.length).toBeLessThan(340);
+      expect(capped).toContain('…');
+    });
+
+    it('配列の message フィールドも結合し、通常文言や識別子は壊さない', async () => {
+      vi.stubGlobal(
+        'fetch',
+        async () =>
+          new Response(
+            JSON.stringify({
+              message: [
+                'parameters.director_reference_secondary_strength_values must be <= 1',
+                'parameters.steps must not be greater than 50',
+              ],
+            }),
+            { status: 400 },
+          ),
+      );
+      const err = await requestImages('pst-ok', {} as never).catch((e: unknown) => e);
+      expect((err as NovelAIError).message).toBe(
+        'parameters.director_reference_secondary_strength_values must be <= 1, parameters.steps must not be greater than 50',
+      );
+    });
+  });
+
 describe('describeError', () => {
   it('状態コードごとの説明', () => {
     expect(describeError(new NovelAIError(401, ''))).toContain('トークン');
