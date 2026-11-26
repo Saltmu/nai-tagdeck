@@ -123,6 +123,35 @@ describe('requestImages', () => {
     expect(JSON.parse(await part.text())).toEqual(body);
   });
 
+  it('精密参照があるときは FormData に director_ref_0 パートを添付し request JSON 内はパート名に置き換える', async () => {
+    const fetchMock = vi.fn(async () => new Response(PNG, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const refBase64 = toBase64(PNG);
+    const body = buildGenerateRequest({
+      prompt: 'a',
+      negative: '',
+      characters: [],
+      params: { ...toParams(DEFAULT_GENERATION, 1) },
+      references: [{ imageBase64: refBase64, type: 'character', strength: 1 }],
+    });
+
+    await requestImages('pst-secret', body);
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const form = init.body as FormData;
+    const reqPart = form.get('request') as File;
+    const refPart = form.get('director_ref_0') as File;
+    expect(refPart).toBeInstanceOf(File);
+    expect(refPart.type).toBe('image/png');
+    expect(refPart.name).toBe('blob');
+    expect(new Uint8Array(await refPart.arrayBuffer())).toEqual(PNG);
+
+    const parsedReq = JSON.parse(await reqPart.text());
+    expect(parsedReq.parameters.director_reference_images).toEqual(['director_ref_0']);
+    // 元の body は破壊しない
+    expect(body.parameters.director_reference_images).toEqual([refBase64]);
+  });
+
   it('改行や非 ASCII を含むトークンは fetch 前に拒否し、通信エラーに誤分類しない', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
