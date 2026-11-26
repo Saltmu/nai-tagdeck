@@ -376,22 +376,52 @@ export function parseRetryAfter(value: string | null, now = Date.now()): number 
   return Math.max(0, Math.ceil((timestamp - now) / 1000));
 }
 
+const BASE64_PREVIEW_LENGTH = 64;
+const MAX_ERROR_DETAIL_LENGTH = 300;
+const DATA_URL_BASE64_RE = /data:[^;\s,"']+?;base64,[A-Za-z0-9+/=_-]+/gi;
+const LONG_BASE64_RE = /(?<![A-Za-z0-9_-])[A-Za-z0-9+/]{65,}[A-Za-z0-9+/=]*/g;
+
+/**
+ * エラー文に含まれる長い base64 / data URL 文字列を先頭 64 文字で打ち切り、全体長も上限に収める。
+ */
+export function sanitizeErrorMessage(raw: string, maxLength = MAX_ERROR_DETAIL_LENGTH): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  const truncateMatch = (match: string) =>
+    match.length > BASE64_PREVIEW_LENGTH ? `${match.slice(0, BASE64_PREVIEW_LENGTH)}…` : match;
+  const redacted = trimmed
+    .replace(DATA_URL_BASE64_RE, truncateMatch)
+    .replace(LONG_BASE64_RE, truncateMatch);
+  return redacted.length > maxLength ? `${redacted.slice(0, maxLength)}…` : redacted;
+}
+
+function extractArrayMessages(items: unknown[]): string[] {
+  return items
+    .map((item) => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object') {
+        const record = item as { msg?: unknown; message?: unknown };
+        const msg = typeof record.msg === 'string' ? record.msg : typeof record.message === 'string' ? record.message : '';
+        return msg.trim();
+      }
+      return '';
+    })
+    .filter((msg) => msg.length > 0);
+}
+
 function extractErrorField(data: Record<string, unknown>): string | null {
   for (const key of ['message', 'error', 'detail'] as const) {
     const value = data[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'string' && value.trim()) return sanitizeErrorMessage(value);
+    if (Array.isArray(value)) {
+      const messages = extractArrayMessages(value);
+      if (messages.length > 0) return sanitizeErrorMessage(messages.join(', '));
+    }
   }
   const nestedError = data.error;
   if (nestedError && typeof nestedError === 'object') {
     const message = (nestedError as { message?: unknown }).message;
-    if (typeof message === 'string' && message.trim()) return message.trim();
-  }
-  if (Array.isArray(data.detail)) {
-    const messages = data.detail
-      .map((item) => (item && typeof item === 'object' ? (item as { msg?: unknown }).msg : null))
-      .filter((msg): msg is string => typeof msg === 'string' && msg.trim().length > 0)
-      .map((msg) => msg.trim());
-    if (messages.length > 0) return messages.join(', ');
+    if (typeof message === 'string' && message.trim()) return sanitizeErrorMessage(message);
   }
   return null;
 }
@@ -418,7 +448,7 @@ async function readErrorMessage(res: Response, signal?: AbortSignal): Promise<st
   const trimmed = text.trim();
   const contentType = res.headers?.get('content-type') ?? '';
   if (contentType.includes('text/html') || trimmed.startsWith('<')) return '';
-  return trimmed.slice(0, 300);
+  return sanitizeErrorMessage(trimmed);
 }
 
 function createTimeoutError(): Error {
@@ -530,11 +560,12 @@ export function describeError(error: unknown): string {
     return '生成がタイムアウトしました。時間をおいてもう一度お試しください';
   }
   if (error instanceof NovelAIError) {
-    const detail = error.message ? `（${error.message}）` : '';
+    const cleanMessage = sanitizeErrorMessage(error.message);
+    const detail = cleanMessage ? `（${cleanMessage}）` : '';
     const corr = error.correlationId ? ` [ID: ${error.correlationId}]` : '';
     switch (error.status) {
       case 0:
-        return error.message;
+        return cleanMessage;
       case 400:
         return `リクエストの内容が受け付けられませんでした${detail}`;
       case 401:
@@ -559,7 +590,7 @@ export function describeError(error: unknown): string {
   }
   if (error instanceof TypeError) return 'NovelAI に接続できませんでした。通信状態を確認してください';
   if (error instanceof SyntaxError) return '応答を読み取れませんでした';
-  return `生成できませんでした: ${String(error)}`;
+  return `生成できませんでした: ${sanitizeErrorMessage(String(error))}`;
 }
 
 // ---- Anlas 残高（GET /user/subscription） ----

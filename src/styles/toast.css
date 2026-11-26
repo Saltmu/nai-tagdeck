@@ -11,6 +11,7 @@
   color: var(--toast-text);
   box-shadow: var(--shadow-pop);
   transform: translateX(-50%);
+  overflow-wrap: anywhere;
   pointer-events: none;
 }
 
