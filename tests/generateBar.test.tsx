@@ -181,6 +181,18 @@ it('shows the Anlas estimate and balance above the generate button, and refreshe
   });
 });
 
+it('shows unknown estimate when subscription refresh fails after generation', async () => {
+  await vi.waitFor(() => {
+    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 0 / 残高 18,000');
+  });
+  vi.mocked(fetchSubscription).mockRejectedValueOnce(new Error('network error'));
+  await click(generateButtons()[0]!);
+  await vi.waitFor(() => {
+    expect(fetchSubscription).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 — / 残高 取得できませんでした');
+  });
+});
+
 it('shows the plan and the granted/purchased breakdown in the token settings', async () => {
   await vi.waitFor(() => {
     expect(container.querySelector('.anlas-line')?.textContent).toContain('残高 18,000');

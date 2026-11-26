@@ -46,7 +46,7 @@ export function GenerateBar({
   const resolvedEstimate =
     estimate ??
     estimateAnlasCost({
-      subscription: anlas?.subscription ?? null,
+      subscription: anlas?.status === 'ready' ? anlas.subscription : null,
       baseIsFree: isFreeGeneration({ width: customSize.width, height: customSize.height, steps: generation.steps }),
       referenceCount,
     });
