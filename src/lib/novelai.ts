@@ -98,12 +98,28 @@ export interface CharacterInput {
 
 export type GenerationMode = 'anime' | 'furry';
 
+export type PreciseReferenceType = 'character' | 'style' | 'outfit';
+
+export const PRECISE_REFERENCE_STRENGTH_MIN = 0.1;
+export const PRECISE_REFERENCE_STRENGTH_MAX = 5;
+export const PRECISE_REFERENCE_STRENGTH_STEP = 0.05;
+export const DEFAULT_PRECISE_REFERENCE_STRENGTH = 1;
+
+export interface PreciseReferenceInput {
+  /** raw base64（data URL 接頭辞なし）。 */
+  imageBase64: string;
+  type: PreciseReferenceType;
+  /** 0.1〜5.0。0 は不可とし、無効化は UI 側の enabled で行う。 */
+  strength: number;
+}
+
 export interface GenerateInput {
   prompt: string;
   negative: string;
   characters: readonly CharacterInput[];
   params: GenerationParams;
   mode?: GenerationMode;
+  references?: readonly PreciseReferenceInput[];
 }
 
 type Point = { x: number; y: number };
@@ -129,12 +145,35 @@ export interface GenerateRequest {
 // 誰かが位置を持つときは use_coords: true。指定のないキャラは中央 (0.5, 0.5)。
 const NO_POSITION: Point = { x: 0, y: 0 };
 
+function referenceBaseCaption(type: PreciseReferenceType): string {
+  switch (type) {
+    case 'character':
+      return 'character';
+    case 'style':
+      return 'style';
+    case 'outfit':
+      return 'costume';
+  }
+}
+
+function clampReferenceStrength(strength: number): number {
+  if (!Number.isFinite(strength)) return DEFAULT_PRECISE_REFERENCE_STRENGTH;
+  return Math.min(PRECISE_REFERENCE_STRENGTH_MAX, Math.max(PRECISE_REFERENCE_STRENGTH_MIN, strength));
+}
+
 /**
  * 公式UIは品質タグと UC プリセットの文面をクライアント側で展開してから送るので、
  * こちらも展開済みの文字列を渡す（品質タグはタグ編集画面で、ネガティブは設定で持つ）。
  * v4_prompt / v4_negative_prompt を省くと 500 になるため、常に両方入れる。
  */
-export function buildGenerateRequest({ prompt, negative, characters, params, mode = 'anime' }: GenerateInput): GenerateRequest {
+export function buildGenerateRequest({
+  prompt,
+  negative,
+  characters,
+  params,
+  mode = 'anime',
+  references,
+}: GenerateInput): GenerateRequest {
   // V5 のモード切替は専用 API パラメータではなく、ベースプロンプト先頭のタグで指定する。
   const basePrompt = mode === 'furry' ? prefixFurryDataset(prompt) : prompt;
   const useCoords = characters.some((c) => c.center !== undefined);
@@ -143,6 +182,19 @@ export function buildGenerateRequest({ prompt, negative, characters, params, mod
     base_caption: base,
     char_captions: chars.map((c) => ({ char_caption: text(c), centers: [pointOf(c)] })),
   });
+  const referenceParams =
+    references && references.length > 0
+      ? {
+          director_reference_images: references.map((r) => r.imageBase64.replace(/^data:[^,]*,/, '')),
+          director_reference_descriptions: references.map((r) => ({
+            caption: { base_caption: referenceBaseCaption(r.type), char_captions: [] },
+            legacy_uc: false,
+          })),
+          director_reference_strength_values: references.map((r) => clampReferenceStrength(r.strength)),
+          director_reference_secondary_strength_values: references.map(() => 0),
+          director_reference_information_extracted: references.map(() => 1),
+        }
+      : {};
 
   return {
     input: basePrompt,
@@ -190,6 +242,7 @@ export function buildGenerateRequest({ prompt, negative, characters, params, mod
         legacy_uc: false,
       },
       negative_prompt: negative,
+      ...referenceParams,
     },
   };
 }

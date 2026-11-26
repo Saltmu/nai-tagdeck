@@ -117,7 +117,7 @@ describe('Dialogs initial focus', () => {
 });
 
 describe('GenerateDock tablist', () => {
-  it('supports roving tabIndex, aria-controls, and arrow/Home/End navigation', async () => {
+  it('supports roving tabIndex, aria-controls, and arrow/Home/End navigation across 3 tabs', async () => {
     await act(async () =>
       root.render(
         <GenerateDock
@@ -127,16 +127,19 @@ describe('GenerateDock tablist', () => {
           onDismissError={() => {}}
           promptPanel={<div>prompt</div>}
           generatePanel={<div>generate</div>}
+          referencePanel={<div>reference</div>}
         />,
       ),
     );
     const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
-    expect(tabs).toHaveLength(2);
-    const [tab0, tab1] = tabs as [HTMLButtonElement, HTMLButtonElement];
+    expect(tabs).toHaveLength(3);
+    const [tab0, tab1, tab2] = tabs as [HTMLButtonElement, HTMLButtonElement, HTMLButtonElement];
     expect(tab0.tabIndex).toBe(0);
     expect(tab1.tabIndex).toBe(-1);
+    expect(tab2.tabIndex).toBe(-1);
 
     const panels = [...container.querySelectorAll<HTMLElement>('[role="tabpanel"]')];
+    expect(panels).toHaveLength(3);
     expect(tab0.getAttribute('aria-controls')).toBe(panels[0]!.id);
     expect(panels[0]!.getAttribute('aria-labelledby')).toBe(tab0.id);
 
@@ -150,7 +153,14 @@ describe('GenerateDock tablist', () => {
     expect(tab1.getAttribute('aria-selected')).toBe('true');
 
     await act(async () => {
-      tab1.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+      tab1.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    expect(document.activeElement).toBe(tab2);
+    expect(tab2.tabIndex).toBe(0);
+    expect(tab2.getAttribute('aria-selected')).toBe('true');
+
+    await act(async () => {
+      tab2.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
     });
     expect(document.activeElement).toBe(tab0);
     expect(tab0.getAttribute('aria-selected')).toBe('true');
@@ -158,7 +168,8 @@ describe('GenerateDock tablist', () => {
     await act(async () => {
       tab0.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
     });
-    expect(document.activeElement).toBe(tab1);
+    expect(document.activeElement).toBe(tab2);
+    expect(tab2.getAttribute('aria-selected')).toBe('true');
   });
 });
 

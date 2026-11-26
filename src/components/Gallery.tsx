@@ -5,7 +5,7 @@ import { imageFileName } from '../lib/imageFileName';
 import { MAX_IMAGE_HISTORY_COUNT, summarizeImageHistory } from '../lib/imageHistory';
 import { ChunkErrorBoundary } from './ChunkErrorBoundary';
 import { GalleryMeter } from './GalleryMeter';
-import { DownloadIcon, PinIcon } from './icons';
+import { DownloadIcon, MoreIcon, PinIcon } from './icons';
 import { useDialogs } from './Dialogs';
 import type { PromptSource } from './PromptImportDialog';
 
@@ -28,6 +28,7 @@ interface Props {
   onTogglePin: (id: string) => void;
   onPickPng?: () => void;
   onReadPng: (source: PromptSource) => void;
+  onUseAsReference?: (image: GeneratedImage) => void;
 }
 
 /** 先頭（最新）の1枚は全幅で大きく見せる。その幅の上限を縦横比から決めるため --ar を渡す。 */
@@ -52,10 +53,12 @@ export function Gallery({
   onTogglePin,
   onPickPng,
   onReadPng,
+  onUseAsReference,
 }: Props) {
   const dialogs = useDialogs();
   const id = useId();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState<GalleryFilter>('all');
   const [compareMode, setCompareMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -65,6 +68,8 @@ export function Gallery({
   const zippingRef = useRef(false);
   const imagesRef = useRef(images);
   imagesRef.current = images;
+  const openMenuWrapRef = useRef<HTMLDivElement | null>(null);
+  const moreButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const zipAlive = useRef(true);
   useEffect(() => {
     zipAlive.current = true;
@@ -83,10 +88,38 @@ export function Gallery({
       if (!prev) return null;
       return idSet.has(prev[0]) && idSet.has(prev[1]) ? prev : null;
     });
+    setMenuOpenId((prev) => (prev && idSet.has(prev) ? prev : null));
     if (images.length < 2) {
       setCompareMode(false);
     }
   }, [images]);
+
+  useEffect(() => {
+    if (compareMode) setMenuOpenId(null);
+  }, [compareMode]);
+
+  useEffect(() => {
+    if (!menuOpenId) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (openMenuWrapRef.current && !openMenuWrapRef.current.contains(e.target as Node)) {
+        setMenuOpenId(null);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        const targetId = menuOpenId;
+        setMenuOpenId(null);
+        moreButtonRefs.current[targetId]?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [menuOpenId]);
 
   const stats = summarizeImageHistory(images);
   const { pinnedCount, isAtLimit, usedMb, maxMb } = stats;
@@ -343,8 +376,9 @@ export function Gallery({
             const displayNumber = globalIndex >= 0 ? images.length - globalIndex : visibleImages.length - i;
             const selectedIndex = selectedIds.indexOf(img.id);
             const compareBadge = selectedIndex === 0 ? 'A' : selectedIndex === 1 ? 'B' : null;
+            const menuOpen = !compareMode && menuOpenId === img.id;
             return (
-              <li key={img.id} className="thumb-frame" style={ratioVar(img.width, img.height)}>
+              <li key={img.id} className={`thumb-frame${menuOpen ? ' is-menu-open' : ''}`} style={ratioVar(img.width, img.height)}>
                 <div className={`thumb${img.pinned ? ' is-pinned' : ''}${compareBadge ? ' is-selected' : ''}`}>
                   <button
                     type="button"
@@ -394,6 +428,44 @@ export function Gallery({
                   >
                     <DownloadIcon />
                   </button>
+                  {!compareMode && onUseAsReference && (
+                    <div className="thumb-menu-wrap" ref={menuOpen ? openMenuWrapRef : undefined}>
+                      <button
+                        ref={(el) => { moreButtonRefs.current[img.id] = el; }}
+                        type="button"
+                        className="btn thumb-more"
+                        aria-haspopup="menu"
+                        aria-expanded={menuOpen}
+                        aria-controls={menuOpen ? `${id}-menu-${img.id}` : undefined}
+                        aria-label={`生成画像 ${displayNumber}のメニュー`}
+                        title="その他の操作"
+                        onClick={() => setMenuOpenId((prev) => (prev === img.id ? null : img.id))}
+                      >
+                        <MoreIcon />
+                      </button>
+                      {menuOpen && (
+                        <div
+                          id={`${id}-menu-${img.id}`}
+                          className="thumb-menu"
+                          role="menu"
+                          aria-label={`生成画像 ${displayNumber}の操作`}
+                        >
+                          <button
+                            type="button"
+                            className="thumb-menu-item"
+                            role="menuitem"
+                            autoFocus
+                            onClick={() => {
+                              setMenuOpenId(null);
+                              onUseAsReference(img);
+                            }}
+                          >
+                            参照に使う
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </li>
             );
@@ -423,6 +495,14 @@ export function Gallery({
               onDownload={() => downloadImage(openImage)}
               onTogglePin={() => onTogglePin(openImage.id)}
               onImportPrompt={onPickPng ? () => openImport(openImage.blob, imageFileName(openImage), openImage) : undefined}
+              onUseAsReference={
+                onUseAsReference
+                  ? () => {
+                      setOpenId(null);
+                      onUseAsReference(openImage);
+                    }
+                  : undefined
+              }
             />
           </Suspense>
         </ChunkErrorBoundary>

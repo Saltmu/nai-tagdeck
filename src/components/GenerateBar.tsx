@@ -2,9 +2,10 @@ import { useLayoutEffect, useRef } from 'react';
 import type { Generator } from '../hooks/useGenerator';
 import type { TokenState } from '../hooks/useToken';
 import type { AnlasState } from '../hooks/useAnlas';
-import { estimateAnlasCost, type AnlasEstimate } from '../lib/anlasEstimate';
+import { estimateAnlasCost, PRECISE_REFERENCE_ANLAS, type AnlasEstimate } from '../lib/anlasEstimate';
 import { resolveSize, sizeChangePatch, type GenerationSettings, type SizeKey } from '../lib/generation';
 import { isFreeGeneration } from '../lib/novelai';
+import { referenceTypeLabel, type PreciseReferenceItem } from '../lib/referenceImage';
 import { AnlasLine } from './AnlasBalance';
 import { SizePicker } from './SizePicker';
 
@@ -22,6 +23,12 @@ interface Props {
   estimate?: AnlasEstimate;
   /** 有効な精密参照の枚数（#130 用。estimate 未指定時の見積もりに使う）。 */
   referenceCount?: number;
+  /** 有効な精密参照の先頭アイテム（ON インジケーター表示用）。 */
+  activeReference?: PreciseReferenceItem | null;
+  /** インジケーターから精密参照を一時 OFF にする。 */
+  onDisableReference?: () => void;
+  /** インジケーター押下で参照画像タブを開く。 */
+  onOpenReferenceTab?: () => void;
 }
 
 /**
@@ -39,16 +46,20 @@ export function GenerateBar({
   anlas,
   estimate,
   referenceCount,
+  activeReference,
+  onDisableReference,
+  onOpenReferenceTab,
 }: Props) {
   const barRef = useRef<HTMLElement>(null);
   const { generating } = generator;
   const customSize = resolveSize(generation);
+  const effectiveReferenceCount = referenceCount ?? (activeReference ? 1 : 0);
   const resolvedEstimate =
     estimate ??
     estimateAnlasCost({
       subscription: anlas?.status === 'ready' ? anlas.subscription : null,
       baseIsFree: isFreeGeneration({ width: customSize.width, height: customSize.height, steps: generation.steps }),
-      referenceCount,
+      referenceCount: effectiveReferenceCount,
     });
 
   // 狭い画面では下端に固定するため、実測の高さを --generate-bar-height として公開する。
@@ -82,6 +93,40 @@ export function GenerateBar({
   return (
     <section ref={barRef} className="generate-bar" aria-label="生成操作">
       {anlas && <AnlasLine anlas={anlas} estimate={resolvedEstimate} />}
+      {activeReference && (
+        <div className="gen-ref-indicator" role="status">
+          {onOpenReferenceTab ? (
+            <button
+              type="button"
+              className="gen-ref-summary"
+              onClick={onOpenReferenceTab}
+              aria-label={`精密参照 ON（${referenceTypeLabel(activeReference.type)} / +${PRECISE_REFERENCE_ANLAS} Anlas）。参照画像パネルを開く`}
+            >
+              <img src={activeReference.previewUrl} alt="" className="gen-ref-thumb" />
+              <span className="gen-ref-text">
+                精密参照 ON（{referenceTypeLabel(activeReference.type)} / +{PRECISE_REFERENCE_ANLAS} Anlas）
+              </span>
+            </button>
+          ) : (
+            <div className="gen-ref-summary">
+              <img src={activeReference.previewUrl} alt="" className="gen-ref-thumb" />
+              <span className="gen-ref-text">
+                精密参照 ON（{referenceTypeLabel(activeReference.type)} / +{PRECISE_REFERENCE_ANLAS} Anlas）
+              </span>
+            </div>
+          )}
+          {onDisableReference && (
+            <button
+              type="button"
+              className="btn btn-small gen-ref-disable"
+              onClick={onDisableReference}
+              aria-label="精密参照を一時 OFF にする"
+            >
+              一時 OFF
+            </button>
+          )}
+        </div>
+      )}
       {blocker && token.token && <p className="hint gen-blocker">{blocker}</p>}
       <div className="gen-actions">
         <SizePicker size={generation.size} customSize={customSize} onSizeChange={handleSizeChange} />

@@ -1,0 +1,126 @@
+/* ---- reference panel: 精密参照タブ ---- */
+.reference-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.reference-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.reference-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.reference-title {
+  margin: 0;
+  font-size: var(--text-base);
+}
+
+.reference-empty {
+  display: grid;
+  justify-items: start;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.reference-intro,
+.reference-cost-note {
+  margin: 0;
+}
+
+.reference-body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.reference-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.reference-thumb {
+  width: 68px;
+  height: 68px;
+  flex: none;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.reference-preview-meta {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.reference-name {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.reference-enable-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reference-type-group {
+  display: flex;
+  gap: 0.25rem;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.reference-type-btn {
+  flex: 1;
+  min-height: 40px;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.reference-type-btn:hover {
+  color: var(--text);
+}
+
+.reference-type-btn[aria-checked='true'] {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow);
+}

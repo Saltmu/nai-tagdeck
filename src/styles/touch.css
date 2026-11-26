@@ -61,7 +61,13 @@
   }
 
   .mode-btn,
-  .size-option {
+  .size-option,
+  .reference-type-btn {
+    min-height: 44px;
+  }
+
+  .gen-ref-disable,
+  .thumb-menu-item {
     min-height: 44px;
   }
 }

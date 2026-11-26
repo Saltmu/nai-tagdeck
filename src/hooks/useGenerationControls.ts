@@ -3,6 +3,7 @@ import type { Settings } from '../types';
 import type { Generator } from './useGenerator';
 import type { GenerationSettings } from '../lib/generation';
 import type { buildCharacterPrompts } from '../lib/prompt';
+import type { PreciseReferenceItem } from '../lib/referenceImage';
 
 interface Args {
   generator: Generator;
@@ -13,6 +14,7 @@ interface Args {
   negativePrompt: string;
   settings: Settings;
   generation: GenerationSettings;
+  activeReferences?: readonly PreciseReferenceItem[];
   show: (message: string, duration?: number) => void;
   onOpenSettings: () => void;
   /** 競合解決中など、グローバルショートカットと生成開始を止める間は true。 */
@@ -27,6 +29,7 @@ export function useGenerationControls({
   negativePrompt,
   settings,
   generation,
+  activeReferences,
   show,
   onOpenSettings,
   shortcutsDisabled = false,
@@ -62,8 +65,9 @@ export function useGenerationControls({
         ...(c.center ? { center: c.center } : {}),
       })),
       settings: generation,
+      references: activeReferences,
     });
-  }, [generating, shortcutsDisabled, generate, token, basePrompt, missingPrompt, characterPrompts, negativePrompt, settings, generation, show, onOpenSettings]);
+  }, [generating, shortcutsDisabled, generate, token, basePrompt, missingPrompt, characterPrompts, negativePrompt, settings, generation, activeReferences, show, onOpenSettings]);
 
   // Ctrl+Enter（Mac は ⌘+Enter）でどこからでも生成する
   useEffect(() => {

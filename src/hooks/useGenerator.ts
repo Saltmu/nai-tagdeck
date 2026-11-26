@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { buildGenerateRequest, describeError, randomSeed, requestImages, type GenerateRequest } from '../lib/novelai';
+import {
+  buildGenerateRequest,
+  describeError,
+  randomSeed,
+  requestImages,
+  type GenerateRequest,
+  type PreciseReferenceInput,
+} from '../lib/novelai';
 import { toParams, type GenerationSettings } from '../lib/generation';
 import { promptSelectsFurry } from '../lib/prompt';
+import {
+  prepareReferenceImageBase64,
+  ReferenceImageError,
+  type PreciseReferenceItem,
+} from '../lib/referenceImage';
 import type { GeneratedCharacterDetail, GeneratedImageParams, NewImage } from './useImages';
 
 export interface GenerateArgs {
@@ -10,6 +22,7 @@ export interface GenerateArgs {
   negative: string;
   characters: Array<{ prompt: string; negative: string; center?: { x: number; y: number } }>;
   settings: GenerationSettings;
+  references?: readonly PreciseReferenceItem[];
 }
 
 export interface Generator {
@@ -55,7 +68,7 @@ export function useGenerator(
   useEffect(() => () => controller.current?.abort(), []);
 
   const generate = useCallback(
-    async ({ token, prompt, negative, characters, settings }: GenerateArgs) => {
+    async ({ token, prompt, negative, characters, settings, references }: GenerateArgs) => {
       if (controller.current) return; // 同時に1件まで
       const ctrl = new AbortController();
       controller.current = ctrl;
@@ -64,7 +77,27 @@ export function useGenerator(
       try {
         const seed = settings.seed ?? randomSeed();
         const params = toParams(settings, seed);
-        const body = buildGenerateRequest({ prompt, negative, characters, params, mode: settings.mode });
+        const preparedReferences: PreciseReferenceInput[] = [];
+        if (references && references.length > 0) {
+          for (const ref of references) {
+            if (!ref.enabled) continue;
+            const imageBase64 = await prepareReferenceImageBase64(ref.blob);
+            if (ctrl.signal.aborted) return;
+            preparedReferences.push({
+              imageBase64,
+              type: ref.type,
+              strength: ref.strength,
+            });
+          }
+        }
+        const body = buildGenerateRequest({
+          prompt,
+          negative,
+          characters,
+          params,
+          mode: settings.mode,
+          references: preparedReferences.length > 0 ? preparedReferences : undefined,
+        });
         const results = await requestImages(token, body, ctrl.signal);
         if (ctrl.signal.aborted) return;
         const negativePrompt = typeof body.parameters.negative_prompt === 'string' ? body.parameters.negative_prompt : negative;
@@ -86,7 +119,9 @@ export function useGenerator(
         );
         onSuccessRef.current?.();
       } catch (e) {
-        if (!ctrl.signal.aborted) setError(describeError(e));
+        if (!ctrl.signal.aborted) {
+          setError(e instanceof ReferenceImageError ? e.message : describeError(e));
+        }
       } finally {
         controller.current = null;
         setGenerating(false);

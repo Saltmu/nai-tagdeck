@@ -29,20 +29,40 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   min-height: 40px;
-  padding: 0.4rem 1rem;
+  min-width: 0;
+  padding: 0.4rem 0.8rem;
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .dock-tab[aria-selected='true'] {
   color: var(--accent);
   background: var(--accent-soft);
+}
+
+.dock-tab-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* 320〜375px 幅で「プロンプト / 生成（スピナー付） / 参照画像」の 3 タブが折り返し・溢れしないよう余白を詰める */
+@media (max-width: 420px) {
+  .dock-tab {
+    gap: 0.25rem;
+    padding: 0.4rem 0.5rem;
+    font-size: var(--text-sm);
+  }
 }
 
 .dock-toggle svg {

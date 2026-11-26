@@ -1,26 +1,50 @@
 import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { ChevronUpIcon } from './icons';
 
-type DockTab = 'prompt' | 'generate';
+export type DockTab = 'prompt' | 'generate' | 'reference';
+
+export interface DockTabSignal {
+  tab: DockTab;
+  seq: number;
+}
 
 interface Props {
   /** 値が変わるたびにドックを閉じる（画像エリアのクリック用）。 */
   collapseSignal: number;
+  /** seq が変わるたびに指定タブへ切り替えてドックを開く（ギャラリー等の導線用）。 */
+  openTabSignal?: DockTabSignal;
   generating: boolean;
+  /** 精密参照が ON（有効かつ画像あり）のとき true。 */
+  referenceActive?: boolean;
   error: string | null;
   onDismissError: () => void;
   promptPanel: ReactNode;
   generatePanel: ReactNode;
+  referencePanel?: ReactNode;
 }
 
 /**
- * 画像の下に浮かべる「プロンプト / 生成」のドック。
+ * 画像の下に浮かべる「プロンプト / 生成 / 参照画像」のドック。
  * 閉じた状態ではタブのバーだけを見せ、画像を広く使う。スマホでは下からせり上がるシートになり、PC では画像一覧の下に固定される。
  */
-export function GenerateDock({ collapseSignal, generating, error, onDismissError, promptPanel, generatePanel }: Props) {
+export function GenerateDock({
+  collapseSignal,
+  openTabSignal,
+  generating,
+  referenceActive = false,
+  error,
+  onDismissError,
+  promptPanel,
+  generatePanel,
+  referencePanel,
+}: Props) {
   const id = useId();
   const dockRef = useRef<HTMLElement>(null);
-  const tabRefs = useRef<Record<DockTab, HTMLButtonElement | null>>({ prompt: null, generate: null });
+  const tabRefs = useRef<Record<DockTab, HTMLButtonElement | null>>({
+    prompt: null,
+    generate: null,
+    reference: null,
+  });
   const [tab, setTab] = useState<DockTab>('prompt');
   const [open, setOpen] = useState(false);
 
@@ -49,6 +73,12 @@ export function GenerateDock({ collapseSignal, generating, error, onDismissError
     setSeenSignal(collapseSignal);
     setOpen(false);
   }
+  const [seenOpenSeq, setSeenOpenSeq] = useState(openTabSignal?.seq ?? 0);
+  if (openTabSignal && seenOpenSeq !== openTabSignal.seq) {
+    setSeenOpenSeq(openTabSignal.seq);
+    setTab(openTabSignal.tab);
+    setOpen(true);
+  }
   const dragStart = useRef<number | null>(null);
 
   // バーの空いた所のタップ・上スワイプで開き、下スワイプで閉じる
@@ -76,6 +106,7 @@ export function GenerateDock({ collapseSignal, generating, error, onDismissError
   const tabs: Array<{ key: DockTab; label: string }> = [
     { key: 'prompt', label: 'プロンプト' },
     { key: 'generate', label: '生成' },
+    { key: 'reference', label: '参照画像' },
   ];
 
   const onTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -94,7 +125,7 @@ export function GenerateDock({ collapseSignal, generating, error, onDismissError
   };
 
   return (
-    <section ref={dockRef} className={`dock${open ? ' is-open' : ''}`} aria-label="プロンプトと生成設定">
+    <section ref={dockRef} className={`dock${open ? ' is-open' : ''}`} aria-label="プロンプト・生成設定・参照画像">
       {/* 閉じていてもエラーは見えるようにする */}
       {error && (
         <div className="gen-error" role="alert">
@@ -126,6 +157,12 @@ export function GenerateDock({ collapseSignal, generating, error, onDismissError
                   <span className="visually-hidden">（生成中）</span>
                 </>
               )}
+              {t.key === 'reference' && referenceActive && (
+                <>
+                  <span className="dock-tab-dot" aria-hidden="true" />
+                  <span className="visually-hidden">（精密参照 ON）</span>
+                </>
+              )}
             </button>
           ))}
         </div>
@@ -150,7 +187,7 @@ export function GenerateDock({ collapseSignal, generating, error, onDismissError
                 aria-labelledby={`${id}-tab-${t.key}`}
                 hidden={tab !== t.key}
               >
-                {t.key === 'prompt' ? promptPanel : generatePanel}
+                {t.key === 'prompt' ? promptPanel : t.key === 'generate' ? generatePanel : referencePanel}
               </div>
             ))}
           </div>

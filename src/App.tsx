@@ -4,8 +4,9 @@ import { Editor } from './components/Editor';
 import { GeneratePanel } from './components/GeneratePanel';
 import { PromptPreview } from './components/PromptPreview';
 import { Gallery } from './components/Gallery';
-import { GenerateDock } from './components/GenerateDock';
+import { GenerateDock, type DockTabSignal } from './components/GenerateDock';
 import { GenerateBar } from './components/GenerateBar';
+import { ReferencePanel } from './components/ReferencePanel';
 import { SeedLock } from './components/SeedLock';
 import { LatestPreview } from './components/LatestPreview';
 import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
@@ -17,8 +18,9 @@ import { Toast, type ToastHandle } from './components/Toast';
 import { useToken } from './hooks/useToken';
 import { useAnlas } from './hooks/useAnlas';
 import { useTagUndo, type UndoExtrasSync } from './hooks/useTagUndo';
-import { useImages } from './hooks/useImages';
+import { useImages, type GeneratedImage } from './hooks/useImages';
 import { useGenerator } from './hooks/useGenerator';
+import { useReferenceImage } from './hooks/useReferenceImage';
 import { usePresets } from './hooks/usePresets';
 import { useBackupTransfer } from './hooks/useBackupTransfer';
 import { useGenerationControls } from './hooks/useGenerationControls';
@@ -112,13 +114,15 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     [show],
   );
   const imageStore = useImages({ onEvict });
+  const referenceImage = useReferenceImage();
   const generator = useGenerator(imageStore.add, () => anlas.refresh());
   const [tab, setTab] = useState<Tab>('editor');
   useWindowScrollMemory(tab);
   // 広い画面では、画像エリアをクリックしたらドックを閉じる（バーは初期表示と同じ形で残る）
   const [dockCollapse, setDockCollapse] = useState(0);
+  const [dockOpenTab, setDockOpenTab] = useState<DockTabSignal>({ tab: 'prompt', seq: 0 });
   const hideDockOnImageClick = (e: MouseEvent<HTMLDivElement>) => {
-    if ((e.target as Element).closest('.dock, .generate-bar')) return;
+    if ((e.target as Element).closest('.dock, .generate-bar, .viewer, .thumb-menu-wrap')) return;
     if (window.matchMedia?.('(min-width: 1100px)').matches) setDockCollapse((n) => n + 1);
   };
   const settingsRef = useRef(settings);
@@ -232,6 +236,18 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     commitAll: tabSync.commitAll,
   });
   const openSettings = useCallback(() => setTab('settings'), []);
+  const openReferenceTab = useCallback(() => {
+    if (window.matchMedia?.('(max-width: 1099px)').matches) setTab('generate');
+    setDockOpenTab((prev) => ({ tab: 'reference', seq: prev.seq + 1 }));
+  }, []);
+  const handleUseAsReference = useCallback(
+    async (image: GeneratedImage) => {
+      const ok = await referenceImage.setFromBlob(image.blob, `生成画像（シード ${image.seed}）`);
+      openReferenceTab();
+      show(ok ? '参照画像に設定しました' : '参照画像に設定できませんでした');
+    },
+    [referenceImage.setFromBlob, openReferenceTab, show],
+  );
   const { blocker, startGenerate } = useGenerationControls({
     generator,
     token: token.token,
@@ -240,6 +256,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     negativePrompt,
     settings,
     generation,
+    activeReferences: referenceImage.activeItems,
     show,
     onOpenSettings: openSettings,
     shortcutsDisabled: tabSync.busy,
@@ -382,11 +399,14 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onTogglePin={imageStore.togglePinned}
               onPickPng={promptImport.pickPng}
               onReadPng={promptImport.openPromptImport}
+              onUseAsReference={handleUseAsReference}
             />
-            {/* プロンプトと生成設定は下部のドックにまとめ、画像を広く見せる */}
+            {/* プロンプト・生成設定・参照画像は下部のドックにまとめ、画像を広く見せる */}
             <GenerateDock
               collapseSignal={dockCollapse}
+              openTabSignal={dockOpenTab}
               generating={generator.generating}
+              referenceActive={referenceImage.activeItems.length > 0}
               error={generator.error}
               onDismissError={generator.dismissError}
               promptPanel={
@@ -409,6 +429,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
                   onOpenSettings={openSettings}
                 />
               }
+              referencePanel={<ReferencePanel reference={referenceImage} />}
             />
             {/* 生成ボタンとサイズは、編集タブでも常に下部に置くバーへ移した */}
             <GenerateBar
@@ -419,6 +440,10 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               blocker={blocker}
               onGenerate={startGenerate}
               anlas={anlas}
+              referenceCount={referenceImage.activeItems.length}
+              activeReference={referenceImage.activeItems[0] ?? null}
+              onDisableReference={referenceImage.disableAll}
+              onOpenReferenceTab={openReferenceTab}
             />
           </div>
         </div>
