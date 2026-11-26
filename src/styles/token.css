@@ -9,6 +9,7 @@
 
 .token-status code {
   padding: 0.1rem 0.4rem;
+  /* インライン code の構造固有角丸 */
   border-radius: 4px;
   background: var(--surface-2);
 }
@@ -30,7 +31,7 @@
 .radio-group legend {
   margin-bottom: 0.35rem;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-caption);
 }
 
 .radio {
@@ -56,7 +57,7 @@
   margin: 0.75rem 0 0;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .anlas-details > div {

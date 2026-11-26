@@ -20,6 +20,9 @@
   --toast-bg: #1c2029;
   --toast-text: #ffffff;
   --backdrop: rgb(0 0 0 / 0.5);
+  /* テーマ非連動。ビューアなど強い暗転が要る背景幕と、候補表示中に周りを覆うグレー */
+  --backdrop-strong: rgb(0 0 0 / 0.75);
+  --suggest-dim: rgb(128 128 128 / 0.3);
   /* 生成画像の上に載るボタン。下地の明暗に左右されないよう、カラースキームでは変えない */
   --scrim-bg: rgb(0 0 0 / 0.45);
   --scrim-text: #ffffff;
@@ -37,6 +40,7 @@
   --radius-pill: 999px;
   --radius: var(--radius-lg);
   --text-xs: 0.75rem;
+  --text-caption: 0.8rem;
   --text-sm: 0.85rem;
   --text-base: 1rem;
   --text-lg: 1.1rem;

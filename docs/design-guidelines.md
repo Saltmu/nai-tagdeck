@@ -21,7 +21,7 @@ UI の追加・改修時に見た目・操作感・ダークモード対応・�
 | アクセント | `--accent`, `--accent-hover`, `--accent-text`, `--accent-soft` | 主操作、選択中タブ・アクティブ背景 |
 | 状態 | `--danger`, `--weighted` | 危険操作の文字／枠・エラー、重み付きタグ強調 |
 | 危険操作（塗りつぶし） | `--danger-fill`, `--danger-fill-hover`, `--danger-fill-soft`, `--danger-fill-text` | 白文字を載せる赤背景の危険ボタン（テーマ非連動） |
-| 通知・背景幕 | `--toast-bg`, `--toast-text`, `--backdrop` | 下部トースト、モーダル背景（`::backdrop` は古いブラウザ互換のためフォールバック併記可） |
+| 通知・背景幕 | `--toast-bg`, `--toast-text`, `--backdrop`, `--backdrop-strong`, `--suggest-dim` | 下部トースト、モーダル背景（`::backdrop` は古いブラウザ互換のためフォールバック併記可）、ビューアなど強い暗転が要る背景幕、候補表示中に周りを覆うグレー（後ろ 2 つはテーマ非連動） |
 | 画像上オーバーレイ | `--overlay-*`, `--scrim-bg`, `--scrim-text` | 生成画像・ビューア上の操作ボタン（テーマ非連動） |
 
 ### 角丸
@@ -35,6 +35,12 @@ UI の追加・改修時に見た目・操作感・ダークモード対応・�
 | `--radius-lg`（`--radius`） | `10px` | カード、ダイアログ、パネル枠 |
 | `--radius-pill` | `999px` | トースト、件数バッジ、ピル型ラベル |
 
+例外として、構造固有の角丸はトークン化せず直書きしてよい（該当箇所に理由コメントを明記する）。
+
+- `2px`: ドラッグハンドル（`dock.css` の `.dock-bar::before`）、インラインハイライト（`editor.css` の `.tag-name mark`）
+- `4px`: 極小座標ラベル（`characters.css` の `.center-marker-label`）、インライン `code`（`token.css` の `.token-status code`）
+- `16px 16px 0 0`: ボトムシートの上角（`dock.css` のモバイル時 `.dock`）
+
 ### 文字サイズ
 
 - 基準は `body { font-size: 15px; line-height: 1.5; }`（[base.css](../src/styles/base.css)）。
@@ -43,9 +49,12 @@ UI の追加・改修時に見た目・操作感・ダークモード対応・�
 | トークン | 値 | 主な用途 |
 | --- | --- | --- |
 | `--text-xs` | `0.75rem` | 件数バッジ、極小ラベル・補足 |
-| `--text-sm` | `0.85rem` | 小ボタン、フォームラベル・エラー、補足テキスト（`0.78rem` / `0.8rem` 等の細かい新刻みを増やさない） |
+| `--text-caption` | `0.8rem` | フォームラベル、比較 UI の見出し・注記などの高密度な補助テキスト |
+| `--text-sm` | `0.85rem` | 小ボタン、副次的な見出し・補足テキスト |
 | `--text-base` | `1rem` | カード見出し、標準テキスト |
 | `--text-lg` | `1.1rem` | ダイアログ見出し |
+
+例外として、単独ページの `h1` はページ固有サイズを直書きしてよい（該当箇所に理由コメントを明記する）。例：チュートリアルの `.tutorial-header-brand h1` は `1.25rem`。
 
 ### 影・重なり順・固定領域オフセット
 

@@ -65,7 +65,7 @@ textarea {
 
 .theme-option-hint {
   color: var(--muted);
-  font-size: 0.9em;
+  font-size: var(--text-sm);
 }
 
 .tutorial-entry {

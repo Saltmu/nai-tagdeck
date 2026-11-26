@@ -53,7 +53,7 @@
   gap: 0.25rem;
   padding: 2px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--surface-2);
 }
 
@@ -62,7 +62,7 @@
   min-height: 40px;
   padding: 0.4rem 0.75rem;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
   font-weight: 600;
@@ -92,7 +92,7 @@
 
 .size-group-title {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-caption);
   font-weight: 600;
 }
 
@@ -142,7 +142,8 @@
 .fader-row output {
   min-width: 2.5rem;
   color: var(--text);
-  font-size: 0.95rem;
+  /* 親の .field が 0.8rem のため、継承ではなく本文相当のトークンで明示する */
+  font-size: var(--text-base);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -206,7 +207,7 @@
 .btn-large {
   flex: 1;
   min-height: 48px;
-  font-size: 1.05rem;
+  font-size: var(--text-lg);
 }
 
 .gen-blocker {

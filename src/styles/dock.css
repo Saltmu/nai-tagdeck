@@ -100,6 +100,7 @@
     z-index: var(--z-dock);
     padding-bottom: env(safe-area-inset-bottom);
     border-bottom: 0;
+    /* ボトムシート上角の構造固有角丸 */
     border-radius: 16px 16px 0 0;
   }
 
@@ -112,6 +113,7 @@
     width: 36px;
     height: 4px;
     margin-left: -18px;
+    /* ドラッグハンドルの構造固有角丸 */
     border-radius: 2px;
     background: var(--border);
   }
