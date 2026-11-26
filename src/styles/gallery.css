@@ -10,8 +10,8 @@
 }
 
 /* 最新の1枚は全幅で大きく。縦長でも画面からはみ出さないよう幅を縦横比で抑える */
-.thumbs > .thumb:first-child,
-.thumbs > .thumb-frame:first-child {
+.thumbs:not(.is-uniform) > .thumb:first-child,
+.thumbs:not(.is-uniform) > .thumb-frame:first-child {
   grid-column: 1 / -1;
   justify-self: center;
   width: min(100%, calc((100dvh - 15rem) * var(--ar, 1)));
@@ -322,4 +322,94 @@
     transform: rotate(360deg);
   }
 }
+
+.gallery-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+.gallery-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.gallery-filter-btn,
+.gallery-compare-toggle {
+  gap: 0.3rem;
+}
+
+.gallery-filter-btn.is-active,
+.gallery-compare-toggle.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.gallery-filter-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.gallery-compare-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.6rem;
+  margin-top: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  font-size: 0.82rem;
+}
+
+.gallery-compare-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.gallery-empty-text {
+  margin: 0 0 0.5rem;
+}
+
+.thumb-btn.is-selectable {
+  cursor: pointer;
+}
+
+.thumb.is-selected {
+  box-shadow: inset 0 0 0 3px var(--accent);
+}
+
+.thumb-compare-badge {
+  position: absolute;
+  left: 0.4rem;
+  bottom: 0.4rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.65rem;
+  height: 1.65rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+
+.thumb-compare-badge.is-b {
+  background: var(--weighted);
+}
+
 

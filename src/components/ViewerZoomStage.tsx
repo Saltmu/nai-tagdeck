@@ -6,15 +6,43 @@ interface View {
   x: number;
   y: number;
 }
+
+export interface NormalizedZoomView {
+  s: number;
+  nx: number;
+  ny: number;
+}
+
 const MIN_SCALE = 1;
 const MAX_SCALE = 8;
 const FIT: View = { s: 1, x: 0, y: 0 };
+export const FIT_NORMALIZED_VIEW: NormalizedZoomView = { s: 1, nx: 0, ny: 0 };
 
 const clampView = (v: View, w: number, h: number): View => {
   const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.s));
   const mx = ((s - 1) * w) / 2;
   const my = ((s - 1) * h) / 2;
   return { s, x: Math.min(mx, Math.max(-mx, v.x)), y: Math.min(my, Math.max(-my, v.y)) };
+};
+
+const toNormalized = (v: View, w: number, h: number): NormalizedZoomView => {
+  const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.s));
+  const mx = ((s - 1) * w) / 2;
+  const my = ((s - 1) * h) / 2;
+  const nx = mx > 0 ? Math.min(1, Math.max(-1, v.x / mx)) : 0;
+  const ny = my > 0 ? Math.min(1, Math.max(-1, v.y / my)) : 0;
+  return { s, nx, ny };
+};
+
+const fromNormalized = (nv: NormalizedZoomView, w: number, h: number): View => {
+  const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, nv.s));
+  const mx = ((s - 1) * w) / 2;
+  const my = ((s - 1) * h) / 2;
+  return {
+    s,
+    x: Math.min(mx, Math.max(-mx, nv.nx * mx)),
+    y: Math.min(my, Math.max(-my, nv.ny * my)),
+  };
 };
 
 // 固定サイズの枠の中で画像をピンチ・ホイール・ダブルタップで拡大縮小し、ドラッグで動かす
@@ -28,21 +56,59 @@ interface StageProps {
   hasNext: boolean;
   onPrev: () => void;
   onNext: () => void;
-  onClose: () => void;
+  onClose?: () => void;
+  showClose?: boolean;
+  syncView?: NormalizedZoomView;
+  onSyncViewChange?: (view: NormalizedZoomView) => void;
+  onSingleTap?: () => void;
 }
 
-export function ViewerZoomStage({ src, alt, hasPrev, hasNext, onPrev, onNext, onClose }: StageProps) {
+export function ViewerZoomStage({
+  src,
+  alt,
+  hasPrev,
+  hasNext,
+  onPrev,
+  onNext,
+  onClose,
+  showClose = true,
+  syncView,
+  onSyncViewChange,
+  onSingleTap,
+}: StageProps) {
   const stage = useRef<HTMLDivElement>(null);
   const start = useRef({ x: 0, y: 0 });
   const multi = useRef(false);
-  const [view, setView] = useState<View>(FIT);
+  const [internalView, setInternalView] = useState<View>(FIT);
+  const isControlled = syncView !== undefined;
+  const view: View = isControlled
+    ? fromNormalized(syncView, stage.current?.clientWidth ?? 0, stage.current?.clientHeight ?? 0)
+    : internalView;
   const viewRef = useRef(view);
   viewRef.current = view;
+  const onSyncViewChangeRef = useRef(onSyncViewChange);
+  onSyncViewChangeRef.current = onSyncViewChange;
+  const isControlledRef = useRef(isControlled);
+  isControlledRef.current = isControlled;
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const lastTap = useRef(0);
   const moved = useRef(false);
 
-  useEffect(() => setView(FIT), [src]);
+  const applyView = (next: View) => {
+    const el = stage.current;
+    const w = el?.clientWidth ?? 0;
+    const h = el?.clientHeight ?? 0;
+    if (isControlledRef.current) {
+      onSyncViewChangeRef.current?.(toNormalized(next, w, h));
+    } else {
+      setInternalView(next);
+      onSyncViewChangeRef.current?.(toNormalized(next, w, h));
+    }
+  };
+
+  useEffect(() => {
+    if (!isControlledRef.current) setInternalView(FIT);
+  }, [src]);
 
   // cx, cy: 枠の中心を原点にした拡大の基準点
   const zoomAt = (ns: number, cx: number, cy: number) => {
@@ -51,7 +117,7 @@ export function ViewerZoomStage({ src, alt, hasPrev, hasNext, onPrev, onNext, on
     const v = viewRef.current;
     const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, ns));
     const k = s / v.s;
-    setView(clampView({ s, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k }, el.clientWidth, el.clientHeight));
+    applyView(clampView({ s, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k }, el.clientWidth, el.clientHeight));
   };
 
   const center = (clientX: number, clientY: number) => {
@@ -99,7 +165,7 @@ export function ViewerZoomStage({ src, alt, hasPrev, hasNext, onPrev, onNext, on
       const dy = next.y - prev.y;
       if (dx || dy) moved.current = true;
       const v = viewRef.current;
-      setView(clampView({ ...v, x: v.x + dx, y: v.y + dy }, el.clientWidth, el.clientHeight));
+      applyView(clampView({ ...v, x: v.x + dx, y: v.y + dy }, el.clientWidth, el.clientHeight));
     } else if (pointers.current.size === 2) {
       moved.current = true;
       const other = [...pointers.current.entries()].find(([id]) => id !== e.pointerId)![1];
@@ -129,7 +195,7 @@ export function ViewerZoomStage({ src, alt, hasPrev, hasNext, onPrev, onNext, on
     }
     if (e.type !== 'pointerup') return;
     // 等倍表示で左右の端をタップ = 前後の画像へ
-    if (!zoomed) {
+    if (!zoomed && (hasPrev || hasNext)) {
       const r = e.currentTarget.getBoundingClientRect();
       const rel = (e.clientX - r.left) / r.width;
       if (rel < EDGE_ZONE) {
@@ -147,12 +213,15 @@ export function ViewerZoomStage({ src, alt, hasPrev, hasNext, onPrev, onNext, on
     const now = Date.now();
     if (now - lastTap.current < 300) {
       lastTap.current = 0;
-      if (viewRef.current.s > 1.01) setView(FIT);
+      if (viewRef.current.s > 1.01) applyView(FIT);
       else {
         const c = center(e.clientX, e.clientY);
         zoomAt(2.5, c.x, c.y);
       }
-    } else lastTap.current = now;
+    } else {
+      lastTap.current = now;
+      if (!zoomed) onSingleTap?.();
+    }
   };
 
   return (
@@ -171,23 +240,25 @@ export function ViewerZoomStage({ src, alt, hasPrev, hasNext, onPrev, onNext, on
         draggable={false}
         style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})` }}
       />
-      <button
-        type="button"
-        className="viewer-close"
-        aria-label="閉じる"
-        title="閉じる"
-        onPointerDown={(e) => e.stopPropagation()}
-        onPointerUp={(e) => e.stopPropagation()}
-        onClick={onClose}
-      >
-        <CloseIcon />
-      </button>
+      {showClose && onClose && (
+        <button
+          type="button"
+          className="viewer-close"
+          aria-label="閉じる"
+          title="閉じる"
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+          onClick={onClose}
+        >
+          <CloseIcon />
+        </button>
+      )}
       {view.s > 1.01 && (
         <button
           type="button"
           className="btn viewer-zoom-reset"
           onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => setView(FIT)}
+          onClick={() => applyView(FIT)}
         >
           {Math.round(view.s * 100)}% 元に戻す
         </button>

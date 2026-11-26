@@ -10,6 +10,9 @@ import { useDialogs } from './Dialogs';
 import type { PromptSource } from './PromptImportDialog';
 
 const ImageViewer = lazy(() => import('./ImageViewer').then((m) => ({ default: m.ImageViewer })));
+const ImageCompareDialog = lazy(() => import('./ImageCompareDialog').then((m) => ({ default: m.ImageCompareDialog })));
+
+export type GalleryFilter = 'all' | 'pinned' | 'undownloaded';
 
 interface Props {
   images: GeneratedImage[];
@@ -53,6 +56,10 @@ export function Gallery({
   const dialogs = useDialogs();
   const id = useId();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<GalleryFilter>('all');
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [comparePair, setComparePair] = useState<[string, string] | null>(null);
   const [zipError, setZipError] = useState('');
   const [zipping, setZipping] = useState(false);
   const zippingRef = useRef(false);
@@ -65,9 +72,41 @@ export function Gallery({
       zipAlive.current = false;
     };
   }, []);
-  const openIndex = images.findIndex((img) => img.id === openId);
+
+  useEffect(() => {
+    const idSet = new Set(images.map((img) => img.id));
+    setSelectedIds((prev) => {
+      const next = prev.filter((sid) => idSet.has(sid));
+      return next.length === prev.length ? prev : next;
+    });
+    setComparePair((prev) => {
+      if (!prev) return null;
+      return idSet.has(prev[0]) && idSet.has(prev[1]) ? prev : null;
+    });
+    if (images.length < 2) {
+      setCompareMode(false);
+    }
+  }, [images]);
+
   const stats = summarizeImageHistory(images);
   const { pinnedCount, isAtLimit, usedMb, maxMb } = stats;
+  const undownloadedCount = images.filter((img) => !img.downloaded).length;
+
+  const visibleImages =
+    filter === 'pinned'
+      ? images.filter((img) => img.pinned)
+      : filter === 'undownloaded'
+        ? images.filter((img) => !img.downloaded)
+        : images;
+
+  const showPending = generating && filter !== 'pinned';
+  const isUniform = filter !== 'all' || compareMode;
+
+  const openImage = openId ? images.find((img) => img.id === openId) ?? null : null;
+  const visibleOpenIndex = openImage ? visibleImages.findIndex((img) => img.id === openImage.id) : -1;
+
+  const compareImageA = comparePair ? images.find((img) => img.id === comparePair[0]) ?? null : null;
+  const compareImageB = comparePair ? images.find((img) => img.id === comparePair[1]) ?? null : null;
 
   const downloadImage = (image: GeneratedImage) => {
     downloadUrl(imageFileName(image), image.url);
@@ -104,7 +143,35 @@ export function Gallery({
   };
   const openImport = (blob: Blob, name: string, fallbackImage?: GeneratedImage) => {
     setOpenId(null);
+    setComparePair(null);
+    setSelectedIds([]);
+    setCompareMode(false);
     onReadPng({ blob, name, fallbackImage });
+  };
+
+  const toggleCompareMode = () => {
+    setCompareMode((prev) => {
+      if (prev) setSelectedIds([]);
+      return !prev;
+    });
+  };
+
+  const toggleSelectForCompare = (imageId: string) => {
+    setSelectedIds((prev) => {
+      if (prev.includes(imageId)) return prev.filter((sid) => sid !== imageId);
+      if (prev.length >= 2) return prev;
+      const next = [...prev, imageId];
+      if (next.length === 2) {
+        setComparePair([next[0]!, next[1]!]);
+      }
+      return next;
+    });
+  };
+
+  const closeCompare = () => {
+    setComparePair(null);
+    setSelectedIds([]);
+    setCompareMode(false);
   };
 
   return (
@@ -157,6 +224,87 @@ export function Gallery({
 
       <GalleryMeter stats={stats} />
 
+      {images.length > 0 && (
+        <div className="gallery-toolbar">
+          <div className="gallery-filter-bar" role="group" aria-label="表示フィルタ">
+            <button
+              type="button"
+              className={`btn btn-small gallery-filter-btn${filter === 'all' ? ' is-active' : ''}`}
+              aria-pressed={filter === 'all'}
+              onClick={() => setFilter('all')}
+            >
+              <span>すべて</span>
+              <span className="gallery-filter-count">{images.length}</span>
+            </button>
+            <button
+              type="button"
+              className={`btn btn-small gallery-filter-btn${filter === 'pinned' ? ' is-active' : ''}`}
+              aria-pressed={filter === 'pinned'}
+              onClick={() => setFilter('pinned')}
+            >
+              <span>ピン留め</span>
+              <span className="gallery-filter-count">{pinnedCount}</span>
+            </button>
+            <button
+              type="button"
+              className={`btn btn-small gallery-filter-btn${filter === 'undownloaded' ? ' is-active' : ''}`}
+              aria-pressed={filter === 'undownloaded'}
+              onClick={() => setFilter('undownloaded')}
+            >
+              <span>未DL</span>
+              <span className="gallery-filter-count">{undownloadedCount}</span>
+            </button>
+          </div>
+          <button
+            type="button"
+            className={`btn btn-small gallery-compare-toggle${compareMode ? ' is-active' : ''}`}
+            disabled={images.length < 2}
+            aria-pressed={compareMode}
+            onClick={toggleCompareMode}
+          >
+            比較
+          </button>
+        </div>
+      )}
+
+      {compareMode && (
+        <div className="gallery-compare-bar" role="status" aria-live="polite">
+          <span>比較する画像を 2 枚選んでください（{selectedIds.length}/2 枚選択中）</span>
+          <div className="gallery-compare-bar-actions">
+            <button
+              type="button"
+              className="btn btn-small"
+              disabled={selectedIds.length !== 2}
+              onClick={() => {
+                if (selectedIds.length === 2) {
+                  setComparePair([selectedIds[0]!, selectedIds[1]!]);
+                }
+              }}
+            >
+              比較を開く
+            </button>
+            <button
+              type="button"
+              className="btn btn-small"
+              disabled={selectedIds.length === 0}
+              onClick={() => setSelectedIds([])}
+            >
+              選択を解除
+            </button>
+            <button
+              type="button"
+              className="btn btn-small"
+              onClick={() => {
+                setCompareMode(false);
+                setSelectedIds([]);
+              }}
+            >
+              終了
+            </button>
+          </div>
+        </div>
+      )}
+
       {zipError && <p className="error-banner" role="alert">{zipError}</p>}
       {evictedCount > 0 && (
         <div className="notice" role="status">
@@ -173,69 +321,125 @@ export function Gallery({
         <div className="gallery-empty" role="status">
           生成した画像はここに表示されます
         </div>
+      ) : visibleImages.length === 0 && !showPending ? (
+        <div className="gallery-empty" role="status">
+          <p className="gallery-empty-text">
+            {filter === 'pinned' ? 'ピン留めした画像はありません' : '未 DL の画像はありません'}
+          </p>
+          <button type="button" className="btn btn-small" onClick={() => setFilter('all')}>
+            すべて表示
+          </button>
+        </div>
       ) : (
-        <ul className="thumbs">
-          {generating && (
+        <ul className={`thumbs${isUniform ? ' is-uniform' : ''}`}>
+          {showPending && (
             <li className="thumb is-pending" style={thumbStyle(pendingSize.width, pendingSize.height)}>
               <span className="spinner" aria-hidden="true" />
               <span className="visually-hidden">生成中</span>
             </li>
           )}
-          {images.map((img, i) => (
-            <li key={img.id} className="thumb-frame" style={ratioVar(img.width, img.height)}>
-              <div className={`thumb${img.pinned ? ' is-pinned' : ''}`}>
-                <button type="button" className="thumb-btn" onClick={() => setOpenId(img.id)}>
-                  <img src={i === 0 ? img.url : (img.thumbUrl ?? img.url)} alt={`生成画像 ${images.length - i}（シード ${img.seed}）`} loading="lazy" />
-                </button>
-              </div>
-              <div className="thumb-actions">
-                <button
-                  type="button"
-                  className={`btn thumb-pin${img.pinned ? ' is-pinned' : ''}`}
-                  aria-pressed={img.pinned}
-                  aria-label={`生成画像 ${images.length - i}をピン留め`}
-                  title={img.pinned ? 'ピン留めを外す' : 'ピン留め（上限超過時に後から削除・ZIP保存対象）'}
-                  onClick={() => onTogglePin(img.id)}
-                >
-                  <PinIcon filled={img.pinned} />
-                </button>
-                <button
-                  type="button"
-                  className={`btn thumb-download${img.downloaded ? ' is-downloaded' : ''}`}
-                  aria-label={`生成画像 ${images.length - i}のPNGを${img.downloaded ? '再ダウンロード（DL操作済み）' : 'ダウンロード'}`}
-                  title={img.downloaded ? 'PNGを再ダウンロード（DL操作済み）' : 'PNGをダウンロード'}
-                  onClick={() => downloadImage(img)}
-                >
-                  <DownloadIcon />
-                </button>
-              </div>
-            </li>
-          ))}
+          {visibleImages.map((img, i) => {
+            const globalIndex = images.findIndex((item) => item.id === img.id);
+            const displayNumber = globalIndex >= 0 ? images.length - globalIndex : visibleImages.length - i;
+            const selectedIndex = selectedIds.indexOf(img.id);
+            const compareBadge = selectedIndex === 0 ? 'A' : selectedIndex === 1 ? 'B' : null;
+            return (
+              <li key={img.id} className="thumb-frame" style={ratioVar(img.width, img.height)}>
+                <div className={`thumb${img.pinned ? ' is-pinned' : ''}${compareBadge ? ' is-selected' : ''}`}>
+                  <button
+                    type="button"
+                    className={`thumb-btn${compareMode ? ' is-selectable' : ''}`}
+                    aria-pressed={compareMode ? compareBadge !== null : undefined}
+                    aria-label={
+                      compareMode
+                        ? compareBadge
+                          ? `生成画像 ${displayNumber}（比較対象 ${compareBadge} に選択中）`
+                          : `生成画像 ${displayNumber} を比較対象に選択`
+                        : undefined
+                    }
+                    onClick={() => {
+                      if (compareMode) toggleSelectForCompare(img.id);
+                      else setOpenId(img.id);
+                    }}
+                  >
+                    <img
+                      src={!isUniform && i === 0 ? img.url : (img.thumbUrl ?? img.url)}
+                      alt={`生成画像 ${displayNumber}（シード ${img.seed}）`}
+                      loading="lazy"
+                    />
+                  </button>
+                  {compareBadge && (
+                    <span className={`thumb-compare-badge is-${compareBadge.toLowerCase()}`} aria-hidden="true">
+                      {compareBadge}
+                    </span>
+                  )}
+                </div>
+                <div className="thumb-actions">
+                  <button
+                    type="button"
+                    className={`btn thumb-pin${img.pinned ? ' is-pinned' : ''}`}
+                    aria-pressed={img.pinned}
+                    aria-label={`生成画像 ${displayNumber}をピン留め`}
+                    title={img.pinned ? 'ピン留めを外す' : 'ピン留め（上限超過時に後から削除・ZIP保存対象）'}
+                    onClick={() => onTogglePin(img.id)}
+                  >
+                    <PinIcon filled={img.pinned} />
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn thumb-download${img.downloaded ? ' is-downloaded' : ''}`}
+                    aria-label={`生成画像 ${displayNumber}のPNGを${img.downloaded ? '再ダウンロード（DL操作済み）' : 'ダウンロード'}`}
+                    title={img.downloaded ? 'PNGを再ダウンロード（DL操作済み）' : 'PNGをダウンロード'}
+                    onClick={() => downloadImage(img)}
+                  >
+                    <DownloadIcon />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
 
-      {openIndex >= 0 && (
+      {openImage && (
         <ChunkErrorBoundary>
           <Suspense fallback={null}>
             <ImageViewer
-              image={images[openIndex]!}
-              hasPrev={openIndex > 0}
-              hasNext={openIndex < images.length - 1}
-              onPrev={() => setOpenId(images[openIndex - 1]?.id ?? null)}
-              onNext={() => setOpenId(images[openIndex + 1]?.id ?? null)}
+              image={openImage}
+              hasPrev={visibleOpenIndex > 0}
+              hasNext={visibleOpenIndex >= 0 && visibleOpenIndex < visibleImages.length - 1}
+              onPrev={() => setOpenId(visibleImages[visibleOpenIndex - 1]?.id ?? null)}
+              onNext={() => setOpenId(visibleImages[visibleOpenIndex + 1]?.id ?? null)}
               onClose={() => setOpenId(null)}
               onRemove={() => {
-                const next = images[openIndex + 1] ?? images[openIndex - 1];
-                onRemove(images[openIndex]!.id);
+                const next =
+                  visibleOpenIndex >= 0
+                    ? visibleImages[visibleOpenIndex + 1] ?? visibleImages[visibleOpenIndex - 1]
+                    : visibleImages[0];
+                onRemove(openImage.id);
                 setOpenId(next?.id ?? null);
               }}
               onUseSeed={onUseSeed}
-              onDownload={() => downloadImage(images[openIndex]!)}
-              onTogglePin={() => onTogglePin(images[openIndex]!.id)}
-              onImportPrompt={onPickPng ? () => {
-                const image = images[openIndex]!;
-                openImport(image.blob, imageFileName(image), image);
-              } : undefined}
+              onDownload={() => downloadImage(openImage)}
+              onTogglePin={() => onTogglePin(openImage.id)}
+              onImportPrompt={onPickPng ? () => openImport(openImage.blob, imageFileName(openImage), openImage) : undefined}
+            />
+          </Suspense>
+        </ChunkErrorBoundary>
+      )}
+
+      {compareImageA && compareImageB && (
+        <ChunkErrorBoundary>
+          <Suspense fallback={null}>
+            <ImageCompareDialog
+              imageA={compareImageA}
+              imageB={compareImageB}
+              onSwap={() => setComparePair((prev) => (prev ? [prev[1], prev[0]] : null))}
+              onClose={closeCompare}
+              onTogglePin={onTogglePin}
+              onDownload={downloadImage}
+              onUseSeed={onUseSeed}
+              onImportPrompt={onPickPng ? (img) => openImport(img.blob, imageFileName(img), img) : undefined}
             />
           </Suspense>
         </ChunkErrorBoundary>
