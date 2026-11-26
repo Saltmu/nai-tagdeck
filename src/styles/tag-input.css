@@ -14,7 +14,7 @@
   position: relative;
   z-index: var(--z-suggesting);
   /* 候補を出している間、このカテゴリ以外を薄いグレーで覆って強調する */
-  box-shadow: 0 0 0 100vmax rgba(128, 128, 128, 0.3);
+  box-shadow: 0 0 0 100vmax var(--suggest-dim);
 }
 
 /* 候補表示中は、そのカテゴリ以外のボタン等にホバー・フォーカス風の反応を起こさせない */
@@ -64,7 +64,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   gap: 0.5rem;
   padding: 4px 4px 4px 0.7rem;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-caption);
   border-bottom: 1px solid var(--border);
 }
 

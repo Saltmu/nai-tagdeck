@@ -63,7 +63,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-caption);
   font-weight: 500;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -83,7 +83,7 @@
 
 .count {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-caption);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -140,6 +140,7 @@
 .tag-name mark {
   background: var(--accent-soft);
   color: inherit;
+  /* インラインハイライトの構造固有角丸 */
   border-radius: 2px;
 }
 
@@ -291,12 +292,12 @@
   flex-basis: 100%;
   margin: 0;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-caption);
 }
 
 .tag-alias {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: var(--text-caption);
   line-height: 1.2;
   overflow-wrap: anywhere;
 }

@@ -39,7 +39,7 @@
 
 .accordion summary {
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
@@ -48,7 +48,7 @@
   display: block;
   margin-top: 0.15rem;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-caption);
   font-weight: 400;
 }
 
