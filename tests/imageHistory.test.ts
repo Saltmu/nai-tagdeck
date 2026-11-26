@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyImageRetention, createThumbnailUrl } from '../src/lib/imageHistory';
+import { applyImageRetention, createThumbnailUrl, summarizeImageHistory } from '../src/lib/imageHistory';
 
 function makeItem(id: string, bytes: number, downloaded = false, pinned = false) {
   return {
@@ -169,5 +169,66 @@ describe('createThumbnailUrl', () => {
     expect(url).toBe('blob:thumb-1');
     expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 341, 512);
     expect(close).toHaveBeenCalledOnce();
+  });
+});
+
+describe('summarizeImageHistory', () => {
+  it('returns zeroed stats for empty history', () => {
+    expect(summarizeImageHistory([], { maxCount: 30, maxBytes: 80 * 1024 * 1024 })).toEqual({
+      count: 0,
+      totalBytes: 0,
+      pinnedCount: 0,
+      downloadedCount: 0,
+      pinnedWidth: 0,
+      unsavedWidth: 0,
+      savedWidth: 0,
+      isAtLimit: false,
+      usedMb: '0',
+      maxMb: 80,
+    });
+  });
+
+  it('uses count ratio when count ratio exceeds byte ratio', () => {
+    const mib = 1024 * 1024;
+    const items = [
+      makeItem('p', 512 * 1024, true, true),
+      makeItem('u', 512 * 1024, false, false),
+      makeItem('s', 512 * 1024, true, false),
+    ];
+    const stats = summarizeImageHistory(items, { maxCount: 10, maxBytes: 100 * mib });
+    expect(stats).toEqual({
+      count: 3,
+      totalBytes: 1.5 * mib,
+      pinnedCount: 1,
+      downloadedCount: 2,
+      pinnedWidth: 10,
+      unsavedWidth: 10,
+      savedWidth: 10,
+      isAtLimit: false,
+      usedMb: '1.5',
+      maxMb: 100,
+    });
+  });
+
+  it('uses byte ratio when byte ratio exceeds count ratio and flags limit', () => {
+    const mib = 1024 * 1024;
+    const items = [
+      makeItem('p', 6 * mib, false, true),
+      makeItem('u', 4 * mib, false, false),
+      makeItem('s', 2 * mib, true, false),
+    ];
+    const stats = summarizeImageHistory(items, { maxCount: 30, maxBytes: 12 * mib });
+    expect(stats).toEqual({
+      count: 3,
+      totalBytes: 12 * mib,
+      pinnedCount: 1,
+      downloadedCount: 1,
+      pinnedWidth: 50,
+      unsavedWidth: (4 / 12) * 100,
+      savedWidth: (2 / 12) * 100,
+      isAtLimit: true,
+      usedMb: '12',
+      maxMb: 12,
+    });
   });
 });
