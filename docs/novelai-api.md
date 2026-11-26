@@ -116,3 +116,84 @@ Chrome の nai-tagdeck 本番オリジンから、`buildGenerateRequest()` 相�
 公式 UI の画像と再送した 4 枚を Chrome でデコードして比較した。いずれも公式画像と RGBA の SHA-256 が異なり、変更なしの再送 2 枚同士でもハッシュが異なった。16×16 区画の RGB 平均をチャンネルごとに整数へ丸めて比べると、4 枚とも公式画像との差は平均 0.00781、最大 1（0〜255）。再送した 4 枚同士では、丸めた区画平均はすべて一致した。この入力において、両ヒントの省略による画素差を再生成による差から識別できなかった。
 
 比較したのはこのシードと設定の組み合わせ。`use_new_shared_trial` の用途の特定と無料トライアルでの追加検証は #86 の対象外とする。生成リクエストは現行どおりとする。
+
+## 精密参照とインペイントの仕様調査（2026-11-26、#172・部分記録）
+
+#130（精密参照）と #131（インペイント）の実装に先立つ調査。2026-11-26 時点で、OpenAPI 照合（Phase A）と公式 Web UI の UI レベル実測まで完了した。リクエストボディの採取（Phase B の DevTools Network 観測）は、実測に使ったスマホブラウザで DevTools が開けなかったため未取得で、PC ブラウザで別途計測する。このセクションは部分記録であり、未取得項目は末尾に明記する。#130・#131 の実装は未取得項目の確定後に着手する。
+
+### OpenAPI で確定した仕様（2026-11-26 照合）
+
+`https://image.novelai.net/docs/doc.json`（Swagger 2.0）で確認した。
+
+**精密参照のフィールド**（`image.RequestParameters`）:
+
+| フィールド | 型 | OpenAPI の description |
+| --- | --- | --- |
+| `director_reference_images` | `string[]` | `For CR: 1024x1536 or 1536x1024 or 1472x1472 with black padding to fit` |
+| `director_reference_descriptions` | `image.V4ConditionInput[]` | ``For CR: set `caption` with a `base_caption` of `"character"` or `"character&style"` `` |
+| `director_reference_strength_values` | `number[]` | `API external name. 0-1` |
+| `director_reference_secondary_strength_values` | `number[]` | `For CR: Maps to Fidelity slider (0-1)` |
+| `director_reference_information_extracted` | `number[]` | `For CR: 0-1` |
+
+- `director_reference_images` の description が、参照画像のキャンバス寸法として 1024×1536 / 1536×1024 / 1472×1472 への黒パディングを明記している。送信形式は文字列（base64 想定）。
+- `V4ConditionInput` は `{ caption: { base_caption: string, char_captions[] }, legacy_uc, use_coords, use_order }` で、通常の `v4_prompt` と同じ形。`base_caption` の例示は `"character"` と `"character&style"` の 2 つだけで、`"style"` 単独や衣装に相当する文字列は OpenAPI に現れない。
+- `normalize_reference_strength_multiple` は **OpenAPI のどこにも定義されていない**（全文検索 0 件）。`use_new_shared_trial`、`autoSmea`、`characterPrompts` と同じ「公式 UI のみが送る、OpenAPI 未定義フィールド」のカテゴリである。このツールは現行実装で `normalize_reference_strength_multiple: true` を送っている（「その他の値」参照）が、OpenAPI 未定義である点は従来未注記だったため、ここに明記する。
+- `model` / `action` は `string` 型のみで **enum が存在しない**。`nai-diffusion-5-full-inpainting` というモデル名も、アクション値 `"infill"` も、doc.json 全文に 1 件も現れない（モデル名の言及は別箇所の説明文中の例 `nai-diffusion-3` のみ）。#131 が前提とする文字列は OpenAPI では裏付けが取れず、実測での確定が必須である。
+- `inpaintImg2ImgStrength` は **OpenAPI に存在しない**（0 件）。トップレベルには `strength`（`number`）、`noise`（`number`）、`extra_noise_seed`（`integer`）、`add_original_image`（`boolean`）がある。別候補として `img2img` プロパティ（description は `used by inpaint`）があり、中身は `image.Img2ImgParams` = `{ strength, noise, extra_noise_seed, color_correct }`。公式 UI がトップレベル系統と `img2img` オブジェクト系統のどちらを使うかは実測対象。
+- ベース画像・マスクのフィールドは `parameters.image` / `parameters.mask`（いずれも無説明の `string`）で確定。raw base64 かどうかやマスクの仕様は OpenAPI からは分からない。
+- `image.RequestParameters` は全 54 プロパティがすべて任意で、**default は一切定義されていない**。既定値は OpenAPI からは読み取れず、全項目が実測対象である。
+
+### UI レベル実測（2026-11-26、公式 Web UI・Opus）
+
+計測環境: 公式 Web UI（`https://novelai.net/image`）、スマホブラウザ、Opus Tier。モデルは NovelAI Diffusion V5 Full（`nai-diffusion-5-full` 相当）に設定変更。1024×1024、同時生成 1 枚、プロンプトガイダンス 7、生成モード「節約」、Quality Tags「標準」。設定パネルにステップ数の欄は表示されず、ステップ値は UI で確認できなかった。DevTools（Network）が開けないため、`POST /ai/generate-image` のリクエストボディは未取得。
+
+#### 精密参照
+
+- 利用にはキーストア用パスワードによるロック解除が必要（「パスワードを入力すると使えるようになります。」）。初回入力は `Error unlocking keystore: Incorrect password.` で失敗した。ユーザーが「パスワードを忘れた場合」からキーストアパスワードをリセットし、再入力して解除した。
+- 参照タイプの選択肢は 4 つで、既定は「キャラクター&絵柄」: 「キャラクター&絵柄」「キャラクター」「絵柄」「衣装」。
+- 「衣装も参照する」チェックボックスは、「キャラクター&絵柄」と「衣装」でチェックあり、「キャラクター」と「絵柄」でチェックなしだった。
+- 強さコントロール: 数値欄の既定値 1、スライダー表示 100。矢印キー 1 回の刻みは数値 0.05（スライダー表示 1）。実測した数値とスライダー表示の対応は次のとおり。
+
+| 数値欄 | スライダー表示 |
+| ---: | ---: |
+| 0 | 0 |
+| 0.5 | 50 |
+| 1 | 100 |
+| 1.25 | 106 |
+| 2 | 125 |
+| 5 | 200 |
+| 10 | 200（頭打ち） |
+
+- 数値欄は 0〜10 の入力を受け付けた。最小値 0 は確認したが、上限は未確認である。#172 の前提（強さスライダーの上限 5.0）とは異なり、5 はスライダー表示が上限 200 に達する点であって、数値欄の上限ではなかった。また OpenAPI の `director_reference_strength_values` は範囲 "0-1" と書かれているが、UI の数値（既定 1、10 まで入力可）との換算はリクエストボディ未取得のため未確認である。
+- 精密参照設定中は「通常」モードで生成される旨の注意が表示される: 「精密参照は『通常』モードでのみ利用できます。精密参照画像が設定されている間は『通常』モードで生成されます。削除すると『節約』モードに戻ります。」
+- 参照スロットは複数持てる。各参照には有効化・無効化の切り替え（サムネイル下の ×／✓）があり、無効化した参照は料金に含まれない（参照 1 枚を無効化すると料金表示が 5 Anlas から 0 Anlas になった）。
+- 料金は有効な参照 1 枚あたり 5 Anlas で、全タイプ共通。2 枚同時は 10 Anlas。
+
+#### インペインティング
+
+- i2i 欄からベース画像をアップロードするとマスク描画エディターが開く。ペンツールが既定で、ペンサイズは 20（数値欄・スライダーとも 20）。ブラシ形状は実線円・ソフト円・四角・消しゴム。レイヤー数は 1。「保存して閉じる」で確定する。
+- 強度: 既定値 0.7。範囲は数値欄で 0〜1 を確認した（0 でスライダー表示 0.01、1 で 0.99 という表示ずれあり）。矢印キーの刻みは 0.01。
+- ノイズ: 既定値 0。数値欄で 1 の入力を受け付けた（範囲は 0〜1 とみられる）。
+- 無料枠（1024×1024、1 枚）では 0 Anlas だった。
+
+#### Anlas 残高の推移（実測）
+
+生成前の残高 18,594 から、計 6 回の生成で 30 Anlas を消費した。参照 1 枚あたり +5 Anlas は #172 の想定と一致し、インペイントの無料枠内 0 Anlas も想定どおりだった。
+
+| 生成 | 内容 | 残高 | 差分 |
+| --- | --- | ---: | ---: |
+| 開始 | — | 18,594 | — |
+| 1 | 精密参照「キャラクター」 | 18,589 | −5 |
+| 2 | 精密参照「絵柄」 | 18,584 | −5 |
+| 3 | 精密参照「衣装」 | 18,579 | −5 |
+| 4 | 精密参照「キャラクター&絵柄」 | 18,574 | −5 |
+| 5 | 精密参照 2 枚同時（両方「キャラクター&絵柄」、強さ 1） | 18,564 | −10 |
+| 6 | インペインティング（強度 0.7、ノイズ 0） | 18,564 | 0（無料枠） |
+
+### 未取得（PC ブラウザで別途計測）
+
+以下はリクエストボディの採取が必要で、今回の UI レベル実測では確定できていない。PC ブラウザの DevTools で `POST /ai/generate-image` の `request` パート（JSON）を採取して確定させる。
+
+- 精密参照のリクエストボディ全体。特に `director_reference_descriptions` の種別ごとの `base_caption` 実文字列、`director_reference_secondary_strength_values` の送信有無と値（OpenAPI の description は今も "Maps to Fidelity slider" で、V5 で Fidelity が廃止されたという前提と食い違う）、`director_reference_information_extracted` の値、`normalize_reference_strength_multiple` の値と影響、`director_reference_strength_values` の実値と UI 数値との換算、送信される参照画像のピクセル寸法・形式（黒パディング済みか、PNG か WebP か）。
+- インペイントのリクエストボディ全体。特に `model`・`action` の実文字列、`parameters.image` / `parameters.mask` の格納形式（data URL 接頭辞なしの raw base64 か、デコード後の画像形式）、マスクのピクセル寸法（ベース画像と同解像度か 1/8 解像度か、8×8 ブロック丸めの有無、白 `#FFFFFF`／黒 `#000000` の 2 値か）、強さの格納場所（トップレベル `strength` か `img2img` オブジェクトか）、`noise` / `extra_noise_seed` の有無と値、`add_original_image` の既定値と ON/OFF 時の差分、ケモノモード（`fur dataset, ` 先頭付与）・キャラクタープロンプト・シード固定との組み合わせ。
+- 生成ステップ数（今回の UI 設定パネルに表示されなかった）。
