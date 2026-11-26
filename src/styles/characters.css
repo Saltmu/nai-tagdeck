@@ -334,7 +334,7 @@
 }
 
 .center-marker-active {
-  z-index: 2;
+  z-index: 2; /* 座標ステージ内での重なり順（選択中マーカーを他キャラより手前に出す。--z-* とは別） */
 }
 
 .center-marker-active .center-marker-dot {
@@ -350,7 +350,7 @@
 }
 
 .center-marker-peer {
-  z-index: 1;
+  z-index: 1; /* 座標ステージ内での重なり順（選択中マーカーを他キャラより手前に出す。--z-* とは別） */
   opacity: 0.88;
 }
 

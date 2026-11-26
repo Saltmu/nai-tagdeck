@@ -77,7 +77,7 @@
   font-size: var(--text-sm);
 }
 
-/* 縦積みのとき、プロンプトを開いても画像が潰れないよう下段をスクロールに収める */
+/* ビューアでステージ＋サイドパネルを横並びにできる最小幅（900px）未満の縦積み時、プロンプトを開いても画像が潰れないよう下段をスクロールに収める */
 @media (max-width: 899px) {
   .viewer-side {
     flex: 0 1 auto;
@@ -175,6 +175,7 @@
   flex: 1;
 }
 
+/* ビューアでステージ＋サイドパネル（320px）を横並びにできる最小幅 */
 @media (min-width: 900px) {
   .viewer-body {
     flex-direction: row;
@@ -497,12 +498,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 2 枚の比較画像を横並びで保てない幅では縦積みに切り替える */
 @media (max-width: 639px) {
   .compare-stages.is-side-by-side {
     grid-template-columns: 1fr;
   }
 }
 
+/* 比較モーダルでステージ＋差分パネル（380px）を横並びにできる最小幅 */
 @media (min-width: 900px) {
   .compare-main {
     flex-direction: row;

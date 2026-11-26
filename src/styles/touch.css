@@ -59,4 +59,9 @@
   .center-preset-cell {
     min-height: 40px;
   }
+
+  .mode-btn,
+  .size-option {
+    min-height: 44px;
+  }
 }

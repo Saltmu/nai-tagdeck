@@ -48,7 +48,8 @@
   color: var(--accent);
 }
 
-@media (max-width: 399px) {
+/* 極小画面で .preset-select を視覚的に隠し検索欄の幅を確保 */
+@media (max-width: 389px) {
   .preset-select {
     position: absolute;
     width: 1px;
