@@ -32,6 +32,7 @@
   box-shadow: var(--shadow);
 }
 
+/* 極小画面で生成フッターのボタン群が溢れないようサイズボタン幅を詰める */
 @media (max-width: 389px) {
   .size-btn {
     width: 28px;
