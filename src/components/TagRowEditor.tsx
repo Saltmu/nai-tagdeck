@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId } from 'react';
 import type { PromptCategoryKey, TargetId, WorkTag } from '../types';
 import { splitInteraction } from '../lib/interaction';
 import type { MoveTargetGroup } from './TagRow';
@@ -11,16 +11,32 @@ function moveOptionKey(target: TargetId, category: PromptCategoryKey): string {
 interface Props {
   tag: WorkTag;
   aliasText: string;
+  draft: string;
+  pendingMove: string;
+  error: string | null;
   moveTargets?: readonly MoveTargetGroup[];
+  onDraftChange: (value: string) => void;
+  onPendingMoveChange: (value: string) => void;
+  onErrorChange: (error: string | null) => void;
   onEdit: (id: string, tag: string) => string | null;
   onMoveTag?: (id: string, toTarget: TargetId, toCategory: PromptCategoryKey) => void;
   onCancel: () => void;
 }
 
-export function TagRowEditor({ tag, aliasText, moveTargets, onEdit, onMoveTag, onCancel }: Props) {
-  const [draft, setDraft] = useState(tag.tag);
-  const [pendingMove, setPendingMove] = useState('');
-  const [error, setError] = useState<string | null>(null);
+export function TagRowEditor({
+  tag,
+  aliasText,
+  draft,
+  pendingMove,
+  error,
+  moveTargets,
+  onDraftChange,
+  onPendingMoveChange,
+  onErrorChange,
+  onEdit,
+  onMoveTag,
+  onCancel,
+}: Props) {
   const errorId = useId();
 
   const visibleMoveTargets = moveTargets
@@ -37,7 +53,7 @@ export function TagRowEditor({ tag, aliasText, moveTargets, onEdit, onMoveTag, o
 
   const commit = () => {
     const result = onEdit(tag.id, draft);
-    setError(result);
+    onErrorChange(result);
     if (!result) onCancel();
   };
 
@@ -58,7 +74,7 @@ export function TagRowEditor({ tag, aliasText, moveTargets, onEdit, onMoveTag, o
         autoComplete="off"
         autoCapitalize="off"
         spellCheck={false}
-        onChange={(e) => { setDraft(e.target.value); setError(null); }}
+        onChange={(e) => { onDraftChange(e.target.value); onErrorChange(null); }}
         onKeyDown={(e) => {
           if (e.nativeEvent.isComposing || e.keyCode === 229) return;
           if (e.key === 'Enter') { e.preventDefault(); commit(); }
@@ -80,7 +96,7 @@ export function TagRowEditor({ tag, aliasText, moveTargets, onEdit, onMoveTag, o
               className="tag-edit-move"
               aria-label={`${tag.tag} の移動先カテゴリ`}
               value={selectedMove ? pendingMove : ''}
-              onChange={(e) => setPendingMove(e.target.value)}
+              onChange={(e) => onPendingMoveChange(e.target.value)}
             >
               <option value="" disabled>カテゴリ移動</option>
               {visibleMoveTargets.length === 1

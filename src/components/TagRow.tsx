@@ -97,6 +97,9 @@ export const TagRow = memo(function TagRow({
   onDrag,
 }: Props) {
   const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(tag.tag);
+  const [pendingMove, setPendingMove] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const { dragging, startDrag } = useWindowPointerDrag({
     enabled: sorting,
     onMove: (clientY) => onDrag?.(tag.id, clientY),
@@ -113,7 +116,13 @@ export const TagRow = memo(function TagRow({
         <TagRowEditor
           tag={tag}
           aliasText={aliasText}
+          draft={draft}
+          pendingMove={pendingMove}
+          error={error}
           moveTargets={moveTargets}
+          onDraftChange={setDraft}
+          onPendingMoveChange={setPendingMove}
+          onErrorChange={setError}
           onEdit={onEdit}
           onMoveTag={onMoveTag}
           onCancel={() => setEditing(false)}
@@ -161,7 +170,7 @@ export const TagRow = memo(function TagRow({
             className="icon-btn"
             aria-label={`${tag.tag} を編集`}
             title="このタグを編集"
-            onClick={() => setEditing(true)}
+            onClick={() => { setDraft(tag.tag); setPendingMove(''); setError(null); setEditing(true); }}
           >
             <EditIcon />
           </button>
