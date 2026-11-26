@@ -37,7 +37,7 @@ select {
   padding: 0.4rem 0.6rem;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   min-width: 0;
 }
 

@@ -71,7 +71,7 @@
 
 .app-dialog-title {
   margin: 0 0 0.5rem;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
 }
 
 /* 説明付きの選択肢。ラベルの下に説明を添えたボタンを縦に並べる */
@@ -117,7 +117,7 @@
 
 .app-dialog-choice-desc {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -172,7 +172,7 @@
 
 .preset-save-summary {
   margin: 0 0 0.9rem;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .app-dialog-actions {
@@ -217,7 +217,7 @@
 .backup-import-mode-desc {
   display: block;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .backup-import-danger {

@@ -6,9 +6,9 @@
   max-height: 9rem;
   overflow: auto;
   background: var(--surface-2);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-family: ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -158,7 +158,7 @@
 
 .tag-list-heading h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-base);
 }
 
 .tag-list-actions {
@@ -175,7 +175,7 @@
 
 .tag-filter-count {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -326,7 +326,7 @@
 .tag-edit-error {
   flex-basis: 100%;
   color: var(--danger);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .tag-row.is-off .tag-name {

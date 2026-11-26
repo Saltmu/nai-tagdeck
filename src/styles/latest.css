@@ -22,14 +22,14 @@
   border: 0;
   background: none;
   color: var(--text);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 
 .latest-open img {
   display: block;
   width: 72px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   object-fit: cover;
 }
 

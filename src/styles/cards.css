@@ -21,7 +21,7 @@
 
 .card-title {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-base);
 }
 
 .accordion-list {
@@ -32,8 +32,8 @@
 }
 
 .accordion {
-  border: 1px solid var(--border, rgba(128, 128, 128, 0.3));
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: 0.5rem 0.75rem;
 }
 
@@ -67,7 +67,7 @@
 .howto-steps {
   margin: 0;
   padding-left: 1.25rem;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--muted);
   line-height: 1.6;
 }
@@ -77,6 +77,6 @@
   align-items: center;
   gap: 0.5rem;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 

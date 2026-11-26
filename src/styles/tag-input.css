@@ -38,7 +38,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-pop);
 }
 
@@ -89,7 +89,7 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
   align-items: baseline;
   gap: 0.15rem 0.6rem;
   padding: 0.55rem 0.6rem;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -103,16 +103,16 @@ body:has(.category.is-suggesting) :is(button, a, input, select, textarea, label,
 
 .suggestion-alias {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .chip {
   display: inline-block;
   padding: 0.05rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-2);
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 
