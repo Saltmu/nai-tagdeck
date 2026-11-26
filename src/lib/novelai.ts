@@ -290,12 +290,12 @@ function isZip(bytes: Uint8Array): boolean {
   return bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
 }
 
-function base64ToBytes(b64: string): Uint8Array {
+function base64ToBytes(b64: string, errorMessage = '応答の画像データを読み取れませんでした'): Uint8Array {
   let bin: string;
   try {
     bin = atob(b64.replace(/^data:[^,]*,/, ''));
   } catch {
-    throw new NovelAIError(0, '応答の画像データを読み取れませんでした');
+    throw new NovelAIError(0, errorMessage);
   }
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
@@ -502,8 +502,35 @@ function createRequestSignal(
   };
 }
 
+function attachMultipartReferenceImages(form: FormData, body: GenerateRequest): GenerateRequest {
+  const rawRefs = body.parameters?.director_reference_images;
+  if (!Array.isArray(rawRefs) || rawRefs.length === 0) return body;
+
+  const partNames: string[] = [];
+  for (let i = 0; i < rawRefs.length; i++) {
+    const value = rawRefs[i];
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new NovelAIError(0, '参照画像の送信データが不正です');
+    }
+    const bytes = base64ToBytes(value, '参照画像の送信データを読み取れませんでした');
+    const mime = sniffImageType(bytes) ?? 'image/png';
+    const partName = `director_ref_${i}`;
+    form.append(partName, new Blob([bytes as BlobPart], { type: mime }), 'blob');
+    partNames.push(partName);
+  }
+
+  return {
+    ...body,
+    parameters: {
+      ...body.parameters,
+      director_reference_images: partNames,
+    },
+  };
+}
+
 /**
  * 公式 Web UI と同じく multipart/form-data の `request` パートに JSON を入れて送る。
+ * 精密参照の画像データは `director_ref_N` パートとして添付し、JSON 側にはパート名を入れる。
  * トークンは Authorization ヘッダーにだけ載せ、URL には入れない。
  */
 export async function requestImages(
@@ -517,7 +544,8 @@ export async function requestImages(
 
   const correlationId = createCorrelationId();
   const form = new FormData();
-  form.append('request', new Blob([JSON.stringify(body)], { type: 'application/json' }), 'blob');
+  const payload = attachMultipartReferenceImages(form, body);
+  form.append('request', new Blob([JSON.stringify(payload)], { type: 'application/json' }), 'blob');
 
   const { signal: requestSignal, cleanup } = createRequestSignal(signal, timeoutMs);
   try {
