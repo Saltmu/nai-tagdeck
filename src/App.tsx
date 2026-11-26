@@ -1,4 +1,5 @@
-import { lazy, Suspense, type MouseEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, type MouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppErrorBanners } from './components/AppErrorBanners';
 import { Editor } from './components/Editor';
 import { GeneratePanel } from './components/GeneratePanel';
 import { PromptPreview } from './components/PromptPreview';
@@ -9,6 +10,8 @@ import { SeedLock } from './components/SeedLock';
 import { LatestPreview } from './components/LatestPreview';
 import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { useDictionary } from './hooks/useDictionary';
+import { useHeaderHeight } from './hooks/useHeaderHeight';
+import { useWindowScrollMemory } from './hooks/useWindowScrollMemory';
 import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWorkspace';
 import { Toast, type ToastHandle } from './components/Toast';
 import { useToken } from './hooks/useToken';
@@ -111,22 +114,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const imageStore = useImages({ onEvict });
   const generator = useGenerator(imageStore.add, () => anlas.refreshAfterGeneration());
   const [tab, setTab] = useState<Tab>('editor');
-  // 画面ごとのスクロール位置を覚え、切り替え時に戻す。生成画像の確認とタグ編集を
-  // 行き来しても、毎回スワイプし直す必要がないようにする。未訪問の画面は先頭から開く。
-  const scrollPositionsRef = useRef<Partial<Record<Tab, number>>>({});
-  const prevTabRef = useRef<Tab>(tab);
-  useEffect(() => {
-    const onScroll = () => {
-      scrollPositionsRef.current[tab] = window.scrollY;
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, [tab]);
-  useLayoutEffect(() => {
-    if (prevTabRef.current === tab) return;
-    prevTabRef.current = tab;
-    window.scrollTo(0, scrollPositionsRef.current[tab] ?? 0);
-  }, [tab]);
+  useWindowScrollMemory(tab);
   // 広い画面では、画像エリアをクリックしたらドックを閉じる（バーは初期表示と同じ形で残る）
   const [dockCollapse, setDockCollapse] = useState(0);
   const hideDockOnImageClick = (e: MouseEvent<HTMLDivElement>) => {
@@ -289,22 +277,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   }, [updateGeneration, show]);
 
   const headerRef = useRef<HTMLElement>(null);
-  // 固定ヘッダーの高さに合わせて .app の上余白を揃える（Android Firefox での sticky ちらつき回避のため fixed 化）
-  useLayoutEffect(() => {
-    const el = headerRef.current;
-    if (!el) return;
-    const publish = () => {
-      const height = el.getBoundingClientRect().height;
-      if (height > 0) document.documentElement.style.setProperty('--header-height', `${height}px`);
-    };
-    publish();
-    const observer = new ResizeObserver(publish);
-    observer.observe(el, { box: 'border-box' });
-    return () => {
-      observer.disconnect();
-      document.documentElement.style.removeProperty('--header-height');
-    };
-  }, []);
+  useHeaderHeight(headerRef);
 
   const showWorkbench = tab === 'editor' || tab === 'generate';
 
@@ -357,40 +330,19 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         onPrefer={tabSync.preferLocal}
       />
 
-      {tabSync.loadError && (
-        <p className="error-banner" role="alert">
-          {tabSync.loadError}。再読み込みして再試行してください。
-        </p>
-      )}
-
-      {tabSync.migrationError && (
-        <div className="error-banner" role="alert">
-          <span>{tabSync.migrationError}</span>{' '}
-          <button
-            type="button"
-            className="btn btn-small"
-            onClick={tabSync.retryMigration}
-            disabled={tabSync.busy || tabSync.bridge.locked}
-          >
-            移行を再試行
-          </button>
-        </div>
-      )}
-
-      {dictionary.error && (
-        <p className="error-banner" role="alert">
-          {dictionary.error}
-        </p>
-      )}
-
-      {[
-        ...(tabSync.migrationError ? [] : [persistence]),
-        settingsPersistence,
-        generationPersistence,
-        ...presets.persistence,
-      ].filter((state) => state.error).map((state) => (
-        <p className="error-banner" role="alert" key={state.error}>{state.error}。再読み込みして再試行してください。</p>
-      ))}
+      <AppErrorBanners
+        loadError={tabSync.loadError}
+        migrationError={tabSync.migrationError}
+        retryDisabled={tabSync.busy || tabSync.bridge.locked}
+        onRetryMigration={tabSync.retryMigration}
+        dictionaryError={dictionary.error}
+        persistenceErrors={[
+          ...(tabSync.migrationError ? [] : [{ id: 'workspace', error: persistence.error }]),
+          { id: 'settings', error: settingsPersistence.error },
+          { id: 'generation', error: generationPersistence.error },
+          ...presets.persistence.map((state, index) => ({ id: `preset-${index}`, error: state.error })),
+        ]}
+      />
       <main className="app-main" inert={tabSync.busy || undefined}>
         {/* 編集と生成は、広い画面では左右に並べ、狭い画面ではタブで切り替える（どちらも表示したまま CSS で隠す） */}
         <div className="workbench" data-tab={tab} hidden={!showWorkbench}>

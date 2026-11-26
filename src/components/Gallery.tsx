@@ -2,9 +2,10 @@ import { lazy, Suspense, type CSSProperties, useEffect, useId, useRef, useState 
 import type { GeneratedImage } from '../hooks/useImages';
 import { downloadBlob, downloadUrl, timeStamp } from '../lib/browser';
 import { imageFileName } from '../lib/imageFileName';
-import { MAX_IMAGE_HISTORY_BYTES, MAX_IMAGE_HISTORY_COUNT } from '../lib/imageHistory';
+import { MAX_IMAGE_HISTORY_COUNT, summarizeImageHistory } from '../lib/imageHistory';
 import { ChunkErrorBoundary } from './ChunkErrorBoundary';
-import { DownloadIcon, PinIcon, TempIcon } from './icons';
+import { GalleryMeter } from './GalleryMeter';
+import { DownloadIcon, PinIcon } from './icons';
 import { useDialogs } from './Dialogs';
 import type { PromptSource } from './PromptImportDialog';
 
@@ -65,27 +66,8 @@ export function Gallery({
     };
   }, []);
   const openIndex = images.findIndex((img) => img.id === openId);
-  const pinnedCount = images.filter((img) => img.pinned).length;
-  const downloadedCount = images.filter((img) => img.downloaded).length;
-  const unpinnedUndownloadedCount = images.filter((img) => !img.pinned && !img.downloaded).length;
-  const unpinnedDownloadedCount = images.filter((img) => !img.pinned && img.downloaded).length;
-  const totalBytes = images.reduce((sum, img) => sum + img.blob.size, 0);
-  const countRatio = images.length / MAX_IMAGE_HISTORY_COUNT;
-  const byteRatio = totalBytes / MAX_IMAGE_HISTORY_BYTES;
-  const useByteScale = byteRatio > countRatio;
-  const pinnedBytes = images.reduce((sum, img) => sum + (img.pinned ? img.blob.size : 0), 0);
-  const unpinnedUndownloadedBytes = images.reduce((sum, img) => sum + (!img.pinned && !img.downloaded ? img.blob.size : 0), 0);
-  const unpinnedDownloadedBytes = images.reduce((sum, img) => sum + (!img.pinned && img.downloaded ? img.blob.size : 0), 0);
-  const meterScale = useByteScale
-    ? Math.max(MAX_IMAGE_HISTORY_BYTES, totalBytes)
-    : Math.max(MAX_IMAGE_HISTORY_COUNT, images.length);
-  const pinnedWidth = ((useByteScale ? pinnedBytes : pinnedCount) / meterScale) * 100;
-  const unsavedWidth = ((useByteScale ? unpinnedUndownloadedBytes : unpinnedUndownloadedCount) / meterScale) * 100;
-  const savedWidth = ((useByteScale ? unpinnedDownloadedBytes : unpinnedDownloadedCount) / meterScale) * 100;
-  const isAtLimit = images.length >= MAX_IMAGE_HISTORY_COUNT || totalBytes >= MAX_IMAGE_HISTORY_BYTES;
-  const mib = 1024 * 1024;
-  const usedMb = totalBytes === 0 ? '0' : (totalBytes / mib < 10 ? (totalBytes / mib).toFixed(1) : String(Math.round(totalBytes / mib)));
-  const maxMb = Math.round(MAX_IMAGE_HISTORY_BYTES / mib);
+  const stats = summarizeImageHistory(images);
+  const { pinnedCount, isAtLimit, usedMb, maxMb } = stats;
 
   const downloadImage = (image: GeneratedImage) => {
     downloadUrl(imageFileName(image), image.url);
@@ -173,54 +155,7 @@ export function Gallery({
         </p>
       )}
 
-      <div
-        className="gallery-meter"
-        role="group"
-        aria-label={`タブを閉じると消去 ${images.length}/${MAX_IMAGE_HISTORY_COUNT}枚・${usedMb}/${maxMb}MB（ピン留め ${pinnedCount}枚、DL操作済み ${downloadedCount}枚）`}
-      >
-        <div className="gallery-meter-bar" aria-hidden="true">
-          {pinnedWidth > 0 && (
-            <span
-              className="gallery-meter-seg is-pinned"
-              style={{ width: `${pinnedWidth}%` }}
-            />
-          )}
-          {unsavedWidth > 0 && (
-            <span
-              className="gallery-meter-seg is-unsaved"
-              style={{ width: `${unsavedWidth}%` }}
-            />
-          )}
-          {savedWidth > 0 && (
-            <span
-              className="gallery-meter-seg is-saved"
-              style={{ width: `${savedWidth}%` }}
-            />
-          )}
-        </div>
-        <div className="gallery-meter-meta">
-          <span className="gallery-chip is-ephemeral">
-            <TempIcon />
-            <span>タブを閉じると消去</span>
-          </span>
-          <span className="gallery-chip is-pinned">
-            <PinIcon filled />
-            <span>ピン留め {pinnedCount}</span>
-          </span>
-          <span className="gallery-chip is-saved">
-            <DownloadIcon />
-            <span>DL操作済 {downloadedCount}</span>
-          </span>
-          <details className="gallery-meter-help">
-            <summary aria-label="履歴上限と削除ルールの詳細">?</summary>
-            <ul className="gallery-meter-rules">
-              <li>画像はタブのメモリにのみ保持され、閉じると消去されます。</li>
-              <li>上限（{MAX_IMAGE_HISTORY_COUNT}枚・{maxMb}MB）を超えると、新しく生成した画像を残し、既存の画像から「ピン留め以外 → DL操作済 → 古い順」で削除されます（既存の画像がすべてピン留めのときは、ピン留め画像から同じ順で削除）。</li>
-              <li>DL操作済はダウンロード開始時に付きます（保存をキャンセルした場合も対象）。保存完了はブラウザで確認してください。</li>
-            </ul>
-          </details>
-        </div>
-      </div>
+      <GalleryMeter stats={stats} />
 
       {zipError && <p className="error-banner" role="alert">{zipError}</p>}
       {evictedCount > 0 && (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent } from 'react';
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import {
@@ -8,24 +8,23 @@ import {
   NEGATIVE,
   type WorkspaceAction,
 } from '../lib/workspace';
-import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS, categoryLabel } from '../lib/categories';
+import { CHARACTER_CATEGORY_KEYS, PROMPT_CATEGORY_KEYS } from '../lib/categories';
 import { saveCategoriesOpen } from '../lib/categoryOpen';
 import { buildPrompt } from '../lib/prompt';
 import { buildTagAliasMap, isTagFilterActive, visibleWorkTags, type TagFilter } from '../lib/tagSearch';
 import { classifyEditorTag, createTagVectorIndex } from '../lib/tagClassification';
 import { normalize } from '../lib/tagText';
-import { findDuplicate } from '../lib/io';
-import { newId } from '../lib/id';
 import { pairedInteraction } from '../lib/interaction';
 import { DEFAULT_GENERATION, type GenerationSettings } from '../lib/generation';
 import { CategorySection } from './CategorySection';
 import { NegativePane } from './NegativePane';
 import { CharacterCard } from './CharacterCard';
 import type { PeerCharacterCenter } from './CharacterCenterPicker';
-import { HistoryControls } from './HistoryControls';
+import { EditorTabs } from './EditorTabs';
+import type { HistoryControls } from './HistoryControls';
 import { PresetBar } from './PresetBar';
 import { TagFilterBar } from './TagFilterBar';
-import { RegisterTagDialog, type RegisterTagDraft } from './RegisterTagDialog';
+import { RegisterTagDialog } from './RegisterTagDialog';
 import { TagInput } from './TagInput';
 import type { PromptSource } from './PromptImportDialog';
 import { useDialogs } from './Dialogs';
@@ -36,6 +35,7 @@ import { useEditorSelection } from '../hooks/useEditorSelection';
 import { usePngDrop } from '../hooks/usePngDrop';
 import { useScrollMemory } from '../hooks/useScrollMemory';
 import { useStickyEditorTabs } from '../hooks/useStickyEditorTabs';
+import { useTagRegistration } from '../hooks/useTagRegistration';
 import { useUnclassifiedSuggestions } from '../hooks/useUnclassifiedSuggestions';
 
 /** ベースの品質でよく使うタグ（公式の Quality Tags と定番）。ボタンで付け外しする。 */
@@ -95,58 +95,11 @@ export function Editor({
     suggestions: baseSuggestions,
   } = useUnclassifiedSuggestions(workspace.base.unclassified, vectorIndex, PROMPT_CATEGORY_KEYS);
 
-  const { save } = dictionary;
-  const [registering, setRegistering] = useState<{ tag: WorkTag; category: CategoryKey } | null>(null);
-  const registerReturn = useRef<{ row: HTMLElement | null; section: HTMLElement | null } | null>(null);
-  const register = useCallback((tag: WorkTag, category: CategoryKey) => {
-    const active = document.activeElement;
-    const row = active instanceof Element ? active.closest('li.tag-row') : null;
-    const section = active instanceof Element ? active.closest('section.category') : null;
-    registerReturn.current = {
-      row: row instanceof HTMLElement ? row : null,
-      section: section instanceof HTMLElement ? section : null,
-    };
-    setRegistering({ tag, category });
-  }, []);
-  const closeRegistration = useCallback((saved: boolean) => {
-    if (!saved) registerReturn.current = null;
-    setRegistering(null);
-  }, []);
-  useEffect(() => {
-    if (registering || !registerReturn.current) return;
-    const { row, section } = registerReturn.current;
-    registerReturn.current = null;
-    const edit = row?.isConnected ? row.querySelector<HTMLElement>('button[aria-label$=" を編集"]') : null;
-    const add = section?.querySelector<HTMLInputElement>('input[aria-label$="にタグを追加"]');
-    (edit ?? add)?.focus();
-  }, [registering]);
-  const saveRegistration = useCallback(
-    async (draft: RegisterTagDraft): Promise<string | null> => {
-      const entry = {
-        id: newId(),
-        tag: draft.tag,
-        category: draft.category,
-        alias: draft.alias,
-        default_weight: draft.default_weight,
-        sort_order: 0,
-        updated_at: '',
-      };
-      const dup = findDuplicate(dictionary.entries, entry);
-      if (dup) return `「${dup.tag}」は ${categoryLabel(dup.category)} に登録済みです`;
-      try {
-        await save(entry);
-      } catch (e) {
-        return `保存できませんでした: ${String(e)}`;
-      }
-      notify(
-        draft.alias
-          ? `「${draft.tag}」（${draft.alias}）を辞書に登録しました`
-          : `「${draft.tag}」を辞書に登録しました`,
-      );
-      return null;
-    },
-    [dictionary.entries, notify, save],
-  );
+  const { registering, register, closeRegistration, saveRegistration } = useTagRegistration({
+    entries: dictionary.entries,
+    save: dictionary.save,
+    notify,
+  });
 
   const { characters } = workspace;
   const dialogs = useDialogs();
@@ -271,22 +224,7 @@ export function Editor({
 
   const id = useId();
   const { tabRefs, dispatchForCard } = useCharacterTabFocus(characters, selected, dispatch);
-  const tabKeys = useMemo(() => [BASE, NEGATIVE, ...characters.map((c) => c.id)], [characters]);
   const panelId = `${id}-panel`;
-  const onTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const index = tabKeys.indexOf(paneTarget);
-    if (index < 0) return;
-    let nextIndex: number | null = null;
-    if (e.key === 'ArrowRight') nextIndex = (index + 1) % tabKeys.length;
-    else if (e.key === 'ArrowLeft') nextIndex = (index - 1 + tabKeys.length) % tabKeys.length;
-    else if (e.key === 'Home') nextIndex = 0;
-    else if (e.key === 'End') nextIndex = tabKeys.length - 1;
-    if (nextIndex === null) return;
-    e.preventDefault();
-    const nextKey = tabKeys[nextIndex]!;
-    select(nextKey);
-    tabRefs.current.get(nextKey)?.focus();
-  };
 
   const { dragging, dropProps } = usePngDrop({
     enabled: !!onPickPng && !!onReadPng && !registering,
@@ -308,86 +246,22 @@ export function Editor({
         onPickPng={onPickPng}
       />
 
-      <div
-        ref={tabsRef}
-        className={`editor-tabs${tabsStuck ? ' is-stuck' : ''}`}
-        data-occludes={tabsStuck ? '' : undefined}
-      >
-        <div className="editor-tablist" role="tablist" aria-label="編集対象" onKeyDown={onTabKeyDown}>
-          <button
-            ref={(el) => { tabRefs.current.set(BASE, el); }}
-            type="button"
-            role="tab"
-            id={`${id}-tab-${BASE}`}
-            tabIndex={paneTarget === BASE ? 0 : -1}
-            aria-selected={!active && !negativeSelected}
-            aria-controls={paneTarget === BASE ? panelId : undefined}
-            className="editor-tab"
-            onClick={() => select(BASE)}
-          >
-            ベース
-          </button>
-          <button
-            ref={(el) => { tabRefs.current.set(NEGATIVE, el); }}
-            type="button"
-            role="tab"
-            id={`${id}-tab-${NEGATIVE}`}
-            tabIndex={paneTarget === NEGATIVE ? 0 : -1}
-            aria-selected={negativeSelected}
-            aria-controls={paneTarget === NEGATIVE ? panelId : undefined}
-            className="editor-tab editor-tab-negative"
-            onClick={() => select(NEGATIVE)}
-          >
-            ネガティブ
-          </button>
-          {characters.map((c, i) => {
-            const name = c.name.trim() || `キャラ${i + 1}`;
-            const locked = !c.enabled && enabledCount >= MAX_ENABLED_CHARACTERS;
-            const isSelected = c.id === active?.id;
-            return (
-              <div key={c.id} className="editor-tab-wrap" role="presentation">
-                <input
-                  type="checkbox"
-                  className="editor-tab-check"
-                  checked={c.enabled}
-                  disabled={locked}
-                  aria-label={`${name} を生成に含める`}
-                  title={
-                    locked
-                      ? `生成対象は最大${MAX_ENABLED_CHARACTERS}人です。他のキャラクターのチェックを外してください`
-                      : 'OFF にすると出力・生成から外します'
-                  }
-                  onChange={() => dispatch({ type: 'toggleCharacter', id: c.id })}
-                />
-                <button
-                  ref={(el) => { tabRefs.current.set(c.id, el); }}
-                  type="button"
-                  role="tab"
-                  id={`${id}-tab-${c.id}`}
-                  tabIndex={isSelected ? 0 : -1}
-                  aria-selected={isSelected}
-                  aria-controls={isSelected ? panelId : undefined}
-                  className={`editor-tab editor-tab-character${c.enabled ? '' : ' is-off'}`}
-                  onClick={() => select(c.id)}
-                >
-                  {name}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-        <button
-          type="button"
-          className="editor-tab editor-tab-add"
-          aria-label="キャラクターを追加"
-          title="キャラクターを追加"
-          disabled={characters.length >= MAX_CHARACTERS}
-          onClick={() => dispatch({ type: 'addCharacter' })}
-        >
-          ＋
-        </button>
-        {history && <HistoryControls {...history} />}
-      </div>
+      <EditorTabs
+        idPrefix={id}
+        panelId={panelId}
+        paneTarget={paneTarget}
+        activeCharacterId={active?.id}
+        negativeSelected={negativeSelected}
+        characters={characters}
+        enabledCount={enabledCount}
+        tabsRef={tabsRef}
+        tabsStuck={tabsStuck}
+        tabRefs={tabRefs}
+        onSelect={select}
+        onToggleCharacter={(characterId) => dispatch({ type: 'toggleCharacter', id: characterId })}
+        onAddCharacter={() => dispatch({ type: 'addCharacter' })}
+        history={history}
+      />
 
       <div id={panelId} role="tabpanel" aria-labelledby={`${id}-tab-${paneTarget}`}>
         {!negativeSelected && (

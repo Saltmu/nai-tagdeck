@@ -25,6 +25,82 @@ export interface RetentionResult<T extends RetainableImage> {
   evictedUndownloadedCount: number;
 }
 
+export interface ImageHistoryStats {
+  count: number;
+  totalBytes: number;
+  pinnedCount: number;
+  downloadedCount: number;
+  pinnedWidth: number;
+  unsavedWidth: number;
+  savedWidth: number;
+  isAtLimit: boolean;
+  usedMb: string;
+  maxMb: number;
+}
+
+/**
+ * 履歴画像の枚数・総バイト数・ピン留め/DL操作済の件数とメーター幅を 1 パスで集計する。
+ */
+export function summarizeImageHistory(
+  images: readonly RetainableImage[],
+  limits: ImageHistoryLimits = DEFAULT_IMAGE_HISTORY_LIMITS,
+): ImageHistoryStats {
+  let totalBytes = 0;
+  let pinnedCount = 0;
+  let downloadedCount = 0;
+  let unpinnedUndownloadedCount = 0;
+  let unpinnedDownloadedCount = 0;
+  let pinnedBytes = 0;
+  let unpinnedUndownloadedBytes = 0;
+  let unpinnedDownloadedBytes = 0;
+
+  for (const img of images) {
+    const size = img.blob.size;
+    totalBytes += size;
+    if (img.downloaded) downloadedCount += 1;
+    if (img.pinned) {
+      pinnedCount += 1;
+      pinnedBytes += size;
+    } else if (img.downloaded) {
+      unpinnedDownloadedCount += 1;
+      unpinnedDownloadedBytes += size;
+    } else {
+      unpinnedUndownloadedCount += 1;
+      unpinnedUndownloadedBytes += size;
+    }
+  }
+
+  const count = images.length;
+  const countRatio = count / limits.maxCount;
+  const byteRatio = totalBytes / limits.maxBytes;
+  const useByteScale = byteRatio > countRatio;
+  const meterScale = useByteScale
+    ? Math.max(limits.maxBytes, totalBytes)
+    : Math.max(limits.maxCount, count);
+  const pinnedWidth = ((useByteScale ? pinnedBytes : pinnedCount) / meterScale) * 100;
+  const unsavedWidth = ((useByteScale ? unpinnedUndownloadedBytes : unpinnedUndownloadedCount) / meterScale) * 100;
+  const savedWidth = ((useByteScale ? unpinnedDownloadedBytes : unpinnedDownloadedCount) / meterScale) * 100;
+  const isAtLimit = count >= limits.maxCount || totalBytes >= limits.maxBytes;
+  const mib = 1024 * 1024;
+  const usedMb = totalBytes === 0
+    ? '0'
+    : (totalBytes / mib < 10 ? (totalBytes / mib).toFixed(1) : String(Math.round(totalBytes / mib)));
+  const maxMb = Math.round(limits.maxBytes / mib);
+
+  return {
+    count,
+    totalBytes,
+    pinnedCount,
+    downloadedCount,
+    pinnedWidth,
+    unsavedWidth,
+    savedWidth,
+    isAtLimit,
+    usedMb,
+    maxMb,
+  };
+}
+
 /**
  * 新しい画像を先頭に含む配列に対し、枚数・総バイト数の上限に収まるよう破棄する。
  * 同じ段では古い画像を先に捨てる。
