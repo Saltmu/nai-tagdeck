@@ -11,10 +11,18 @@
   --accent-text: #ffffff;
   --accent-soft: #e9e8ff;
   --danger: #c0262d;
+  /* 白文字を載せる塗りつぶし危険操作用（ダーク時の --danger では白文字のコントラストが不足するため分離） */
+  --danger-fill: #c0262d;
+  --danger-fill-hover: #a51f25;
+  --danger-fill-soft: rgb(192 38 45 / 0.35);
+  --danger-fill-text: #ffffff;
   --weighted: #b45309;
   --toast-bg: #1c2029;
   --toast-text: #ffffff;
+  --backdrop: rgb(0 0 0 / 0.5);
   /* 生成画像の上に載るボタン。下地の明暗に左右されないよう、カラースキームでは変えない */
+  --scrim-bg: rgb(0 0 0 / 0.45);
+  --scrim-text: #ffffff;
   --overlay-text: #1c2029;
   --overlay-bg: #ffffff;
   --overlay-bg-hover: #eef0f4;
@@ -23,7 +31,15 @@
   --overlay-done-bg: #b8bec8;
   --overlay-done-bg-hover: #a8b0bc;
   --overlay-done-border: #a8b0bc;
-  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+  --radius: var(--radius-lg);
+  --text-xs: 0.75rem;
+  --text-sm: 0.85rem;
+  --text-base: 1rem;
+  --text-lg: 1.1rem;
   --shadow: 0 1px 2px rgb(15 20 30 / 0.06), 0 1px 1px rgb(15 20 30 / 0.04);
   --shadow-pop: 0 8px 24px rgb(15 20 30 / 0.14);
   color-scheme: light;

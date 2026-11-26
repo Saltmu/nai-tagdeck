@@ -491,9 +491,9 @@
   height: 36px;
   padding: 0 0.8rem;
   border: 0;
-  border-radius: 8px;
-  background: rgb(192 38 45 / 0.35);
-  color: #fff;
+  border-radius: var(--radius-md);
+  background: var(--danger-fill-soft);
+  color: var(--danger-fill-text);
   font: inherit;
   font-weight: 600;
   cursor: not-allowed;
@@ -503,7 +503,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: #c0262d;
+  background: var(--danger-fill);
   transform-origin: left;
   animation: remove-arm var(--arm-ms, 1000ms) linear both;
 }
@@ -517,7 +517,7 @@
 }
 
 .viewer-remove-confirm.is-ready:hover::before {
-  background: #a51f25;
+  background: var(--danger-fill-hover);
 }
 
 @keyframes remove-arm {
