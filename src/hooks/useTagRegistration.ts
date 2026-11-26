@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RegisterTagDraft } from '../components/RegisterTagDialog';
-import { categoryLabel } from '../lib/categories';
 import { newId } from '../lib/id';
-import { findDuplicate } from '../lib/io';
+import { duplicateEntryMessage, findDuplicate } from '../lib/io';
 import type { CategoryKey, DictEntry, WorkTag } from '../types';
 import type { Dictionary } from './useDictionary';
 
@@ -56,7 +55,7 @@ export function useTagRegistration({ entries, save, notify }: Options) {
         updated_at: '',
       };
       const dup = findDuplicate(entries, entry);
-      if (dup) return `「${dup.tag}」は ${categoryLabel(dup.category)} に登録済みです`;
+      if (dup) return duplicateEntryMessage(dup);
       try {
         await save(entry);
       } catch (e) {

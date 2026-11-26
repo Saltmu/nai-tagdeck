@@ -3,6 +3,7 @@ import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import {
   BASE,
+  displayedCharacterName,
   MAX_CHARACTERS,
   MAX_ENABLED_CHARACTERS,
   NEGATIVE,
@@ -115,7 +116,7 @@ export function Editor({
       if (!pair) return;
       const key = normalize(pair);
       const others = charactersRef.current
-        .map((c, i) => ({ c, name: c.name.trim() || `キャラ${i + 1}` }))
+        .map((c, i) => ({ c, name: displayedCharacterName(c, i) }))
         .filter(({ c }) => c.id !== fromId && !c.tags.pose.some((t) => normalize(t.tag) === key))
         // 生成対象のキャラを先に並べる
         .sort((a, b) => Number(b.c.enabled) - Number(a.c.enabled));
@@ -150,7 +151,7 @@ export function Editor({
     const activeCharacters = characters
       .map((c, i) => ({
         c,
-        name: c.name.trim() || `キャラ${i + 1}`,
+        name: displayedCharacterName(c, i),
         hasPrompt: buildPrompt(c.tags, syntax, CHARACTER_CATEGORY_KEYS).length > 0,
       }))
       .filter(({ c, hasPrompt }) => c.enabled && hasPrompt);
@@ -207,7 +208,7 @@ export function Editor({
   };
   const aliasMap = useMemo(() => buildTagAliasMap(dictionary.entries), [dictionary.entries]);
   const characterTargets = useMemo(
-    () => characters.map((c, i) => ({ id: c.id, label: `${i + 1}. ${c.name.trim() || `キャラ${i + 1}`}` })),
+    () => characters.map((c, i) => ({ id: c.id, label: `${i + 1}. ${displayedCharacterName(c, i)}` })),
     [characters],
   );
   const paneTagLists: WorkTag[][] = negativeSelected
@@ -267,7 +268,7 @@ export function Editor({
         {!negativeSelected && (
           <TagInput
             key={`add-${paneTarget}`}
-            label={active ? active.name.trim() || `キャラ${activeIndex + 1}` : 'ベース'}
+            label={active ? displayedCharacterName(active, activeIndex) : 'ベース'}
             placeholder="タグを追加（英語・日本語名・よみ）"
             entries={addTagEntries}
             onAdd={addPromptTag}

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GenerationMode } from '../lib/novelai';
 import { newId } from '../lib/id';
+import {
+  applyImageRetention,
+  createThumbnailUrl,
+  DEFAULT_IMAGE_HISTORY_LIMITS,
+  type ImageHistoryLimits,
+} from '../lib/imageHistory';
 
 /** 生成時に送ったキャラクター。座標は use_coords で送ったときだけ持つ。 */
 export interface GeneratedCharacterDetail {
@@ -19,12 +25,6 @@ export interface GeneratedImageParams {
   cfgRescale: number;
   dynamicThresholding: boolean;
 }
-import {
-  applyImageRetention,
-  createThumbnailUrl,
-  DEFAULT_IMAGE_HISTORY_LIMITS,
-  type ImageHistoryLimits,
-} from '../lib/imageHistory';
 
 /** 生成画像はメモリ（Blob URL）にだけ置き、タブを閉じたら消える。 */
 export interface GeneratedImage {

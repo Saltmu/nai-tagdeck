@@ -1,6 +1,6 @@
 import { useMemo, type ComponentProps, type KeyboardEvent, type MutableRefObject, type RefObject } from 'react';
 import type { Character, TargetId } from '../types';
-import { BASE, MAX_CHARACTERS, MAX_ENABLED_CHARACTERS, NEGATIVE } from '../lib/workspace';
+import { BASE, displayedCharacterName, MAX_CHARACTERS, MAX_ENABLED_CHARACTERS, NEGATIVE } from '../lib/workspace';
 import { HistoryControls } from './HistoryControls';
 
 interface Props {
@@ -87,7 +87,7 @@ export function EditorTabs({
           ネガティブ
         </button>
         {characters.map((c, i) => {
-          const name = c.name.trim() || `キャラ${i + 1}`;
+          const name = displayedCharacterName(c, i);
           const locked = !c.enabled && enabledCount >= MAX_ENABLED_CHARACTERS;
           const isSelected = c.id === activeCharacterId;
           return (

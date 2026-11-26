@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent
 import type { CategoryKey, DictEntry } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import { CATEGORIES, categoryLabel, isCategoryKey } from '../lib/categories';
-import { findDuplicate, findDuplicateGroups, parseImportFile, toCSV, toJSON, UTF8_BOM, type ImportMode, type ImportResult } from '../lib/io';
+import { duplicateEntryMessage, findDuplicate, findDuplicateGroups, parseImportFile, toCSV, toJSON, UTF8_BOM, type ImportMode, type ImportResult } from '../lib/io';
 import { formatWeight, isNeutralWeight } from '../lib/prompt';
 import { filterEntries } from '../lib/suggest';
 import { normalize } from '../lib/tagText';
@@ -149,7 +149,7 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
 
   const handleSave = async (entry: DictEntry): Promise<string | null> => {
     const dup = findDuplicate(entries, entry);
-    if (dup) return `「${dup.tag}」は ${categoryLabel(dup.category)} に登録済みです`;
+    if (dup) return duplicateEntryMessage(dup);
     setSavingEdit(true);
     try {
       await save(entry);
@@ -186,7 +186,7 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
     if (incoming.length === 0) return 'タグを入力してください';
     for (const item of incoming) {
       const dup = findDuplicate(entries, item);
-      if (dup) return `「${dup.tag}」は ${categoryLabel(dup.category)} に登録済みです`;
+      if (dup) return duplicateEntryMessage(dup);
     }
     try {
       await saveMany(incoming);

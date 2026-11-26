@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import type { PromptCategoryKey, TargetId, WorkTag } from '../types';
+import { isImeComposing } from '../lib/browser';
 import { splitInteraction } from '../lib/interaction';
 import type { MoveTargetGroup } from './TagRow';
 import { CheckIcon, CloseIcon } from './icons';
@@ -76,7 +77,7 @@ export function TagRowEditor({
         spellCheck={false}
         onChange={(e) => { onDraftChange(e.target.value); onErrorChange(null); }}
         onKeyDown={(e) => {
-          if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+          if (isImeComposing(e)) return;
           if (e.key === 'Enter') { e.preventDefault(); commit(); }
           if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
         }}

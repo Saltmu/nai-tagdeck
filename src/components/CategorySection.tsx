@@ -158,7 +158,7 @@ export const CategorySection = memo(function CategorySection({
     [dispatch, target, category],
   );
   const handleRemove = useCallback(
-    (id: string) => dispatch({ type: 'remove', target, category, id, undo: true }),
+    (id: string) => dispatch({ type: 'remove', target, category, id }),
     [dispatch, target, category],
   );
   const handleRegister = useCallback(
@@ -168,7 +168,8 @@ export const CategorySection = memo(function CategorySection({
     [onRegister, category],
   );
   const handleMoveCategory = useCallback(
-    (id: string, to: PromptCategoryKey) => dispatch({ type: 'moveFromUnclassified', target, id, to }),
+    (id: string, to: PromptCategoryKey) =>
+      dispatch({ type: 'moveTag', fromTarget: target, fromCategory: 'unclassified', id, toTarget: target, toCategory: to }),
     [dispatch, target],
   );
   const handleMoveTag = useCallback(

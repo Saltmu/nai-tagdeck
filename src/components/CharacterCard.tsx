@@ -1,7 +1,7 @@
 import type { Dispatch } from 'react';
 import type { Character, CategoryKey, DictEntry, WeightSyntax, WorkTag } from '../types';
 import type { TagFilter } from '../lib/tagSearch';
-import type { WorkspaceAction } from '../lib/workspace';
+import { displayedCharacterName, type WorkspaceAction } from '../lib/workspace';
 import { CHARACTER_CATEGORY_KEYS } from '../lib/categories';
 import { MAX_CHARACTERS, MAX_ENABLED_CHARACTERS } from '../lib/characterLimits';
 import { buildPrompt } from '../lib/prompt';
@@ -63,7 +63,7 @@ export function CharacterCard({
   aliasMap,
 }: Props) {
   const { id, enabled, tags } = character;
-  const name = character.name.trim() || `キャラ${index + 1}`;
+  const name = displayedCharacterName(character, index);
   const prompt = buildPrompt(tags, syntax, CHARACTER_CATEGORY_KEYS);
   const tagCount = CHARACTER_CATEGORY_KEYS.reduce((n, k) => n + tags[k].length, 0);
 

@@ -6,6 +6,7 @@ import { suggest } from '../lib/suggest';
 import { normalize } from '../lib/tagText';
 import { useSuggestionPopup } from '../hooks/useSuggestionPopup';
 import { INTERACTIONS, splitInteraction, withInteraction, type Interaction } from '../lib/interaction';
+import { isImeComposing } from '../lib/browser';
 
 export interface TagInputDraft {
   text: string;
@@ -185,7 +186,7 @@ export function TagInput({ category, label, placeholder, entries, onAdd, onAddMa
           onBlur={() => setOpen(false)}
           onKeyDown={(e) => {
             // IME 変換確定の Enter は無視する
-            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+            if (isImeComposing(e)) return;
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
               if (!expanded) {
                 setOpen(true);
