@@ -39,6 +39,7 @@ export function normalizeReferenceStrength(value: number): number {
   return Math.round(steps * PRECISE_REFERENCE_STRENGTH_STEP * 100) / 100;
 }
 
+export const MAX_PRECISE_REFERENCES = 6;
 export const MAX_REFERENCE_IMAGE_BYTES = 20 * 1024 * 1024;
 export const MAX_REFERENCE_IMAGE_DIMENSION = 8192;
 export const MAX_REFERENCE_IMAGE_PIXELS = 33_554_432;

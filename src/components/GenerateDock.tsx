@@ -17,6 +17,8 @@ interface Props {
   generating: boolean;
   /** 精密参照が ON（有効かつ画像あり）のとき true。 */
   referenceActive?: boolean;
+  /** 有効な精密参照の枚数。 */
+  referenceCount?: number;
   error: string | null;
   onDismissError: () => void;
   promptPanel: ReactNode;
@@ -33,6 +35,7 @@ export function GenerateDock({
   openTabSignal,
   generating,
   referenceActive = false,
+  referenceCount,
   error,
   onDismissError,
   promptPanel,
@@ -53,6 +56,7 @@ export function GenerateDock({
   const mountedRef = useRef(true);
   const latestErrorRef = useRef(error);
   latestErrorRef.current = error;
+  const activeReferenceCount = referenceCount ?? (referenceActive ? 1 : 0);
 
   useEffect(() => {
     setErrorCopied(false);
@@ -203,10 +207,10 @@ export function GenerateDock({
                   <span className="visually-hidden">（生成中）</span>
                 </>
               )}
-              {t.key === 'reference' && referenceActive && (
+              {t.key === 'reference' && activeReferenceCount > 0 && (
                 <>
-                  <span className="dock-tab-dot" aria-hidden="true" />
-                  <span className="visually-hidden">（精密参照 ON）</span>
+                  <span className="dock-tab-badge" aria-hidden="true">{activeReferenceCount}</span>
+                  <span className="visually-hidden">（精密参照 {activeReferenceCount}枚 ON）</span>
                 </>
               )}
             </button>
