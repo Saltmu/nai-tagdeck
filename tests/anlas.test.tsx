@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AnlasDetails, AnlasLine } from '../src/components/AnlasBalance';
 import { useAnlas, type AnlasState } from '../src/hooks/useAnlas';
+import { estimateAnlasCost, formatAnlasEstimate, type AnlasEstimate } from '../src/lib/anlasEstimate';
 import { readAllAppData } from '../src/lib/db';
 import { fetchSubscription, type Subscription } from '../src/lib/novelai';
 
@@ -29,14 +30,88 @@ function fakeState(overrides: Partial<AnlasState>): AnlasState {
   return {
     status: 'ready',
     subscription: opusSubscription,
-    lastConsumed: null,
     error: null,
     loading: false,
     refresh: () => {},
-    refreshAfterGeneration: () => {},
     ...overrides,
   };
 }
+
+describe('anlasEstimate', () => {
+  it('subscription が null のとき unknown を返し、参照なしは「—」、参照 1 枚は「+5〜」になる', () => {
+    const none = estimateAnlasCost({ subscription: null, baseIsFree: true, referenceCount: 0 });
+    expect(none).toEqual({ kind: 'unknown', minAdditional: 0 });
+    expect(formatAnlasEstimate(none)).toBe('—');
+
+    const one = estimateAnlasCost({ subscription: null, baseIsFree: true, referenceCount: 1 });
+    expect(one).toEqual({ kind: 'unknown', minAdditional: 5 });
+    expect(formatAnlasEstimate(one)).toBe('+5〜');
+  });
+
+  it('Opus 枠内かつ baseIsFree が true のとき exact を返す（isNegative: false および usage: null）', () => {
+    const subs: Subscription[] = [
+      opusSubscription,
+      { ...opusSubscription, usage: null },
+    ];
+    for (const subscription of subs) {
+      expect(formatAnlasEstimate(estimateAnlasCost({ subscription, baseIsFree: true, referenceCount: 0 }))).toBe('0');
+      expect(formatAnlasEstimate(estimateAnlasCost({ subscription, baseIsFree: true, referenceCount: 1 }))).toBe('5');
+      expect(formatAnlasEstimate(estimateAnlasCost({ subscription, baseIsFree: true, referenceCount: 2 }))).toBe('10');
+    }
+  });
+
+  it('Opus 枠超過（isNegative: true）のとき paid を返し、参照なしは「有料」、参照 1 枚は「+5〜」になる', () => {
+    const overLimit: Subscription = {
+      ...opusSubscription,
+      usage: { percent: 100, isNegative: true, timeUntilNextPercent: null },
+    };
+    const none = estimateAnlasCost({ subscription: overLimit, baseIsFree: true, referenceCount: 0 });
+    expect(none).toEqual({ kind: 'paid', minAdditional: 0 });
+    expect(formatAnlasEstimate(none)).toBe('有料');
+
+    const one = estimateAnlasCost({ subscription: overLimit, baseIsFree: true, referenceCount: 1 });
+    expect(one).toEqual({ kind: 'paid', minAdditional: 5 });
+    expect(formatAnlasEstimate(one)).toBe('+5〜');
+  });
+
+  it('Opus でも baseIsFree が false のとき paid を返す', () => {
+    const none = estimateAnlasCost({ subscription: opusSubscription, baseIsFree: false, referenceCount: 0 });
+    expect(none).toEqual({ kind: 'paid', minAdditional: 0 });
+    expect(formatAnlasEstimate(none)).toBe('有料');
+
+    const one = estimateAnlasCost({ subscription: opusSubscription, baseIsFree: false, referenceCount: 1 });
+    expect(one).toEqual({ kind: 'paid', minAdditional: 5 });
+    expect(formatAnlasEstimate(one)).toBe('+5〜');
+  });
+
+  it('非 Opus（tier: 0 / 1 / 2）のとき paid を返す', () => {
+    for (const tier of [0, 1, 2]) {
+      const subscription: Subscription = { ...opusSubscription, tier, usage: null };
+      const none = estimateAnlasCost({ subscription, baseIsFree: true, referenceCount: 0 });
+      expect(none).toEqual({ kind: 'paid', minAdditional: 0 });
+      expect(formatAnlasEstimate(none)).toBe('有料');
+
+      const one = estimateAnlasCost({ subscription, baseIsFree: true, referenceCount: 1 });
+      expect(one).toEqual({ kind: 'paid', minAdditional: 5 });
+      expect(formatAnlasEstimate(one)).toBe('+5〜');
+    }
+  });
+
+  it('未指定・負数・小数の referenceCount は安全に 0 以上へ切り捨てる', () => {
+    expect(estimateAnlasCost({ subscription: opusSubscription, baseIsFree: true })).toEqual({
+      kind: 'exact',
+      amount: 0,
+    });
+    expect(estimateAnlasCost({ subscription: opusSubscription, baseIsFree: true, referenceCount: -3 })).toEqual({
+      kind: 'exact',
+      amount: 0,
+    });
+    expect(estimateAnlasCost({ subscription: opusSubscription, baseIsFree: true, referenceCount: 1.9 })).toEqual({
+      kind: 'exact',
+      amount: 5,
+    });
+  });
+});
 
 describe('AnlasLine', () => {
   let container: HTMLDivElement;
@@ -53,35 +128,50 @@ describe('AnlasLine', () => {
     container.remove();
   });
 
-  const renderLine = async (state: AnlasState) => {
-    await act(async () => root.render(<AnlasLine anlas={state} />));
+  const renderLine = async (state: AnlasState, estimate: AnlasEstimate = { kind: 'unknown', minAdditional: 0 }) => {
+    await act(async () => root.render(<AnlasLine anlas={state} estimate={estimate} />));
     return container.querySelector('.anlas-line')!;
   };
 
   it('未設定のときは「消費 — / 残高 未設定」と出す', async () => {
-    const line = await renderLine(fakeState({ status: 'unset', subscription: null }));
+    const line = await renderLine(
+      fakeState({ status: 'unset', subscription: null }),
+      { kind: 'unknown', minAdditional: 0 },
+    );
     expect(line.textContent).toContain('消費 — / 残高 未設定');
     expect(line.querySelector('[aria-label="残高を更新"]')).toBeNull();
   });
 
   it('読み込み中は残高を「読み込み中…」と出す', async () => {
-    const line = await renderLine(fakeState({ status: 'loading', subscription: null, loading: true }));
+    const line = await renderLine(
+      fakeState({ status: 'loading', subscription: null, loading: true }),
+      { kind: 'unknown', minAdditional: 0 },
+    );
     expect(line.textContent).toContain('消費 — / 残高 読み込み中…');
   });
 
-  it('残高が分かれば「消費 — / 残高 18,000」と出す', async () => {
-    const line = await renderLine(fakeState({}));
-    expect(line.textContent).toContain('消費 — / 残高 18,000');
+  it('Opus 無料枠なら「消費 0 / 残高 18,000」と出す', async () => {
+    const line = await renderLine(fakeState({}), { kind: 'exact', amount: 0 });
+    expect(line.textContent).toContain('消費 0 / 残高 18,000');
   });
 
-  it('直前の生成で消費が分かれば左側に消費を出す（精密参照 1 枚なら 5 / 18000 の形）', async () => {
-    const line = await renderLine(fakeState({ lastConsumed: 5 }));
+  it('精密参照 1 枚なら「消費 5 / 残高 18,000」と出す', async () => {
+    const line = await renderLine(fakeState({}), { kind: 'exact', amount: 5 });
     expect(line.textContent).toContain('消費 5 / 残高 18,000');
   });
 
-  it('取得失敗のときは「取得できませんでした」と理由を出し、生成を止めない文言は出さない', async () => {
+  it('非 Opus の有料見積もりなら「消費 有料 / 残高 18,000」と出す', async () => {
+    const line = await renderLine(
+      fakeState({ subscription: { ...opusSubscription, tier: 1, usage: null } }),
+      { kind: 'paid', minAdditional: 0 },
+    );
+    expect(line.textContent).toContain('消費 有料 / 残高 18,000');
+  });
+
+  it('取得失敗のときは「取得できませんでした」と理由を出し、更新ボタンも出す', async () => {
     const line = await renderLine(
       fakeState({ status: 'error', subscription: null, error: 'トークンが無効です' }),
+      { kind: 'unknown', minAdditional: 0 },
     );
     expect(line.textContent).toContain('消費 — / 残高 取得できませんでした');
     expect(line.textContent).toContain('トークンが無効です');
@@ -90,7 +180,7 @@ describe('AnlasLine', () => {
 
   it('手動の更新ボタンを押すと refresh が呼ばれる', async () => {
     const refresh = vi.fn();
-    const line = await renderLine(fakeState({ refresh }));
+    const line = await renderLine(fakeState({ refresh }), { kind: 'exact', amount: 0 });
     await act(async () => {
       (line.querySelector('[aria-label="残高を更新"]') as HTMLButtonElement).click();
     });
@@ -189,7 +279,6 @@ describe('useAnlas', () => {
     await renderHarness(null);
     expect(state.status).toBe('unset');
     expect(state.subscription).toBeNull();
-    expect(state.lastConsumed).toBeNull();
     expect(mockedFetch()).not.toHaveBeenCalled();
   });
 
@@ -200,7 +289,6 @@ describe('useAnlas', () => {
     expect(mockedFetch()).toHaveBeenCalledTimes(1);
     expect(mockedFetch()).toHaveBeenCalledWith('pst-secret', expect.anything());
     expect(state.subscription?.totalAnlas).toBe(18000);
-    expect(state.lastConsumed).toBeNull();
   });
 
   it('取得失敗のときは error になり、例外は外へ漏れない', async () => {
@@ -211,46 +299,7 @@ describe('useAnlas', () => {
     expect(state.subscription).toBeNull();
   });
 
-  it('生成後の取得で残高が減っていれば、その差が消費になる', async () => {
-    mockedFetch().mockResolvedValueOnce(opusSubscription);
-    await renderHarness('pst-secret');
-    await waitForStatus('ready');
-    expect(state.lastConsumed).toBeNull();
-
-    mockedFetch().mockResolvedValueOnce({ ...opusSubscription, totalAnlas: 17995 });
-    await act(async () => {
-      state.refreshAfterGeneration();
-    });
-    await waitForStatus('ready');
-    expect(state.lastConsumed).toBe(5);
-    expect(state.subscription?.totalAnlas).toBe(17995);
-  });
-
-  it('生成後の取得で残高が変わらなければ消費は 0 になる', async () => {
-    mockedFetch().mockResolvedValueOnce(opusSubscription);
-    await renderHarness('pst-secret');
-    await waitForStatus('ready');
-    mockedFetch().mockResolvedValueOnce(opusSubscription);
-    await act(async () => {
-      state.refreshAfterGeneration();
-    });
-    await waitForStatus('ready');
-    expect(state.lastConsumed).toBe(0);
-  });
-
-  it('生成後の取得で残高が増えていれば消費は「—」に戻る', async () => {
-    mockedFetch().mockResolvedValueOnce(opusSubscription);
-    await renderHarness('pst-secret');
-    await waitForStatus('ready');
-    mockedFetch().mockResolvedValueOnce({ ...opusSubscription, totalAnlas: 28000 });
-    await act(async () => {
-      state.refreshAfterGeneration();
-    });
-    await waitForStatus('ready');
-    expect(state.lastConsumed).toBeNull();
-  });
-
-  it('手動の更新では消費の計算をしない', async () => {
+  it('refresh() で最新残高に更新される', async () => {
     mockedFetch().mockResolvedValueOnce(opusSubscription);
     await renderHarness('pst-secret');
     await waitForStatus('ready');
@@ -259,42 +308,10 @@ describe('useAnlas', () => {
       state.refresh();
     });
     await waitForStatus('ready');
-    expect(state.lastConsumed).toBeNull();
     expect(state.subscription?.totalAnlas).toBe(17995);
   });
 
-  it('生成後の取得が失敗したら基準値と消費表示が無効化され、次の成功では複数回分の消費を表示しない', async () => {
-    mockedFetch().mockResolvedValueOnce(opusSubscription);
-    await renderHarness('pst-secret');
-    await waitForStatus('ready');
-
-    // 1 回目の生成で 5 消費し、表示が 5 になる
-    mockedFetch().mockResolvedValueOnce({ ...opusSubscription, totalAnlas: 17995 });
-    await act(async () => {
-      state.refreshAfterGeneration();
-    });
-    await waitForStatus('ready');
-    expect(state.lastConsumed).toBe(5);
-
-    // 2 回目の生成後の取得が失敗する（この生成の消費は分からない）
-    mockedFetch().mockRejectedValueOnce(new Error('boom'));
-    await act(async () => {
-      state.refreshAfterGeneration();
-    });
-    await waitForStatus('error');
-    expect(state.lastConsumed).toBeNull();
-
-    // 3 回目の生成後の取得が成功しても、基準値がないため消費は「—」のまま（10 とは表示しない）
-    mockedFetch().mockResolvedValueOnce({ ...opusSubscription, totalAnlas: 17990 });
-    await act(async () => {
-      state.refreshAfterGeneration();
-    });
-    await waitForStatus('ready');
-    expect(state.subscription?.totalAnlas).toBe(17990);
-    expect(state.lastConsumed).toBeNull();
-  });
-
-  it('トークンを別の値に置き換えたら、前のトークンの残高・消費は残らない', async () => {
+  it('トークンを別の値に置き換えたら、前のトークンの残高は残らない', async () => {
     mockedFetch().mockResolvedValueOnce(opusSubscription);
     await renderHarness('pst-first');
     await waitForStatus('ready');
@@ -307,7 +324,6 @@ describe('useAnlas', () => {
     });
     await waitForStatus('error');
     expect(state.subscription).toBeNull();
-    expect(state.lastConsumed).toBeNull();
   });
 
   it('トークンを消すと表示も消え、残高はどこにも保存されない', async () => {
@@ -319,7 +335,6 @@ describe('useAnlas', () => {
     });
     expect(state.status).toBe('unset');
     expect(state.subscription).toBeNull();
-    expect(state.lastConsumed).toBeNull();
     // IndexedDB・ストレージのどちらにも残高が残らない
     const saved = await readAllAppData();
     expect(JSON.stringify(saved)).not.toContain('18000');

@@ -162,11 +162,10 @@ it('starts generation from the editor tab', async () => {
   });
 });
 
-it('shows the Anlas balance above the generate button, and the consumed amount after a generation', async () => {
+it('shows the Anlas estimate and balance above the generate button, and refreshes balance after a generation', async () => {
   await vi.waitFor(() => {
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 — / 残高 18,000');
+    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 0 / 残高 18,000');
   });
-  // 生成後の取得では残高が 5 減る（精密参照 1 枚分）
   vi.mocked(fetchSubscription).mockResolvedValueOnce({
     tier: 3,
     fixedTrainingStepsLeft: 9995,
@@ -177,7 +176,8 @@ it('shows the Anlas balance above the generate button, and the consumed amount a
   });
   await click(generateButtons()[0]!);
   await vi.waitFor(() => {
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 5 / 残高 17,995');
+    expect(fetchSubscription).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 0 / 残高 17,995');
   });
 });
 

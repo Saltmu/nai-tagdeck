@@ -112,7 +112,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     [show],
   );
   const imageStore = useImages({ onEvict });
-  const generator = useGenerator(imageStore.add, () => anlas.refreshAfterGeneration());
+  const generator = useGenerator(imageStore.add, () => anlas.refresh());
   const [tab, setTab] = useState<Tab>('editor');
   useWindowScrollMemory(tab);
   // 広い画面では、画像エリアをクリックしたらドックを閉じる（バーは初期表示と同じ形で残る）

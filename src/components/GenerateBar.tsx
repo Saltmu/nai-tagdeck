@@ -2,7 +2,9 @@ import { useLayoutEffect, useRef } from 'react';
 import type { Generator } from '../hooks/useGenerator';
 import type { TokenState } from '../hooks/useToken';
 import type { AnlasState } from '../hooks/useAnlas';
+import { estimateAnlasCost, type AnlasEstimate } from '../lib/anlasEstimate';
 import { resolveSize, sizeChangePatch, type GenerationSettings, type SizeKey } from '../lib/generation';
+import { isFreeGeneration } from '../lib/novelai';
 import { AnlasLine } from './AnlasBalance';
 import { SizePicker } from './SizePicker';
 
@@ -16,6 +18,10 @@ interface Props {
   onGenerate: () => void;
   /** Anlas 残高の表示状態。渡さないときは残高の行を出さない。 */
   anlas?: AnlasState;
+  /** 事前見積もり。省略時は生成設定と購読情報から算出する。 */
+  estimate?: AnlasEstimate;
+  /** 有効な精密参照の枚数（#130 用。estimate 未指定時の見積もりに使う）。 */
+  referenceCount?: number;
 }
 
 /**
@@ -23,10 +29,27 @@ interface Props {
  * 編集タブでも生成タブでも表示する（生成ペインの子だが、狭い画面では画面下端に固定する）。
  * サイズは生成パネルのサイズ選択と同一の状態（generation.size）を操作し、表示も一致する。
  */
-export function GenerateBar({ generation, onGenerationChange, generator, token, blocker, onGenerate, anlas }: Props) {
+export function GenerateBar({
+  generation,
+  onGenerationChange,
+  generator,
+  token,
+  blocker,
+  onGenerate,
+  anlas,
+  estimate,
+  referenceCount,
+}: Props) {
   const barRef = useRef<HTMLElement>(null);
   const { generating } = generator;
   const customSize = resolveSize(generation);
+  const resolvedEstimate =
+    estimate ??
+    estimateAnlasCost({
+      subscription: anlas?.subscription ?? null,
+      baseIsFree: isFreeGeneration({ width: customSize.width, height: customSize.height, steps: generation.steps }),
+      referenceCount,
+    });
 
   // 狭い画面では下端に固定するため、実測の高さを --generate-bar-height として公開する。
   // ドックや通知の持ち上げに使う。作業画面でなければ高さは 0 になる。
@@ -58,7 +81,7 @@ export function GenerateBar({ generation, onGenerationChange, generator, token, 
 
   return (
     <section ref={barRef} className="generate-bar" aria-label="生成操作">
-      {anlas && <AnlasLine anlas={anlas} />}
+      {anlas && <AnlasLine anlas={anlas} estimate={resolvedEstimate} />}
       {blocker && token.token && <p className="hint gen-blocker">{blocker}</p>}
       <div className="gen-actions">
         <SizePicker size={generation.size} customSize={customSize} onSizeChange={handleSizeChange} />
