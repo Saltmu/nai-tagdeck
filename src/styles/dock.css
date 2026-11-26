@@ -33,7 +33,7 @@
   min-height: 40px;
   padding: 0.4rem 1rem;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
   font-weight: 600;

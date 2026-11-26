@@ -141,11 +141,11 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   cursor: pointer;
   user-select: none;
@@ -173,7 +173,7 @@
 .hint {
   margin: 0.5rem 0 0;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .character {
@@ -256,7 +256,7 @@
 .center-stage {
   position: relative;
   width: 100%;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: 1px solid var(--border);
   background: var(--surface-2);
   cursor: crosshair;
@@ -370,7 +370,7 @@
 
 .center-stage-caption {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -397,11 +397,11 @@
   min-height: 2rem;
   padding: 0.15rem 0.2rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--text);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   cursor: pointer;

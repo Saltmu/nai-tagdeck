@@ -74,7 +74,7 @@
 .viewer-copy-status {
   margin: 0;
   color: var(--danger);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 /* 縦積みのとき、プロンプトを開いても画像が潰れないよう下段をスクロールに収める */
@@ -91,12 +91,12 @@
   flex-wrap: wrap;
   gap: 0.25rem 1.25rem;
   margin: 0;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .viewer-meta dt {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
 }
 
 .viewer-meta dd {
@@ -106,7 +106,7 @@
 
 .viewer-prompt summary {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -276,7 +276,7 @@
   min-height: 0;
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface);
   overflow: hidden;
 }
@@ -327,10 +327,10 @@
   min-width: 1.35rem;
   height: 1.35rem;
   padding: 0 0.3rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   color: var(--accent-text);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
@@ -427,7 +427,7 @@
   align-items: center;
   gap: 0.3rem;
   padding: 0.15rem 0.45rem;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface-2);
   font-size: 0.78rem;
@@ -488,7 +488,7 @@
   align-items: center;
   gap: 0.3rem;
   margin: 0;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .compare-center-diff {

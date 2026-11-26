@@ -38,6 +38,6 @@
 .form-error {
   margin: 0;
   color: var(--danger);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
