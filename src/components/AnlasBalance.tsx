@@ -1,4 +1,5 @@
 import type { AnlasState } from '../hooks/useAnlas';
+import { formatAnlasEstimate, type AnlasEstimate } from '../lib/anlasEstimate';
 import { tierName } from '../lib/novelai';
 import { AnlasIcon, RefreshIcon } from './icons';
 
@@ -29,12 +30,11 @@ function formatDate(ms: number): string {
 
 /**
  * 生成ボタンの上に置く 1 行の表示。「消費 xxx / 残高 yyy」の形で、
- * 消費は直前の生成で使った Anlas（まだ分からなければ「—」）、
- * 残高は合計 Anlas（付与分＋購入分）。
+ * 消費は生成前の見積もり、残高は合計 Anlas（付与分＋購入分）。
  */
-export function AnlasLine({ anlas }: { anlas: AnlasState }) {
-  const { status, subscription, lastConsumed, error, loading } = anlas;
-  const consumedText = lastConsumed === null ? '—' : formatAnlas(lastConsumed);
+export function AnlasLine({ anlas, estimate }: { anlas: AnlasState; estimate: AnlasEstimate }) {
+  const { status, subscription, error, loading } = anlas;
+  const consumedText = formatAnlasEstimate(estimate);
   const balanceText =
     status === 'unset'
       ? '未設定'
