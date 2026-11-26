@@ -240,6 +240,51 @@ export function normalizeGeneration(raw: unknown): GenerationSettings {
   return base;
 }
 
+export interface GenerationDiff {
+  before: Partial<GenerationSettings>;
+  after: Partial<GenerationSettings>;
+}
+
+/**
+ * 現在の生成設定と部分パッチの差分を算出する。
+ * サイズがプリセット⇔カスタム間で変わる場合は customWidth / customHeight も比較対象に含める。
+ * 差分が 1 件もなければ undefined を返す。
+ */
+export function diffGenerationSettings(
+  current: GenerationSettings,
+  patch: Partial<GenerationSettings>,
+): GenerationDiff | undefined {
+  const keys = new Set(Object.keys(patch) as (keyof GenerationSettings)[]);
+  if (
+    patch.size !== undefined &&
+    patch.size !== current.size &&
+    (patch.size === 'custom' || current.size === 'custom')
+  ) {
+    keys.add('customWidth');
+    keys.add('customHeight');
+  }
+  const next = normalizeGeneration({ ...current, ...patch });
+  const before: Partial<GenerationSettings> = {};
+  const after: Partial<GenerationSettings> = {};
+  const assign = <K extends keyof GenerationSettings>(
+    dst: Partial<GenerationSettings>,
+    k: K,
+    v: GenerationSettings[K],
+  ) => {
+    dst[k] = v;
+  };
+  let changed = false;
+  for (const key of keys) {
+    const prevValue = current[key];
+    const nextValue = next[key];
+    if (Object.is(prevValue, nextValue)) continue;
+    assign(before, key, prevValue);
+    assign(after, key, nextValue);
+    changed = true;
+  }
+  return changed ? { before, after } : undefined;
+}
+
 export function sizeOf(key: SizeKey | SizeInput): { width: number; height: number } {
   if (typeof key === 'object') return resolveSize(key);
   if (key === 'custom') return { width: SIZE_PRESETS[0]!.width, height: SIZE_PRESETS[0]!.height };
