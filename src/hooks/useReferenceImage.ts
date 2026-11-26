@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { newId } from '../lib/id';
 import { DEFAULT_PRECISE_REFERENCE_STRENGTH, type PreciseReferenceType } from '../lib/novelai';
 import {
+  MAX_PRECISE_REFERENCES,
   normalizeReferenceStrength,
   ReferenceImageError,
   validateReferenceImageBlob,
@@ -13,8 +14,12 @@ export interface ReferenceImageStore {
   activeItems: readonly PreciseReferenceItem[];
   loading: boolean;
   error: string | null;
-  setFromFile: (file: File) => Promise<boolean>;
-  setFromBlob: (blob: Blob, name: string) => Promise<boolean>;
+  addFromFile: (file: File) => Promise<boolean>;
+  addFromFiles: (files: FileList | readonly File[]) => Promise<number>;
+  addFromBlob: (blob: Blob, name: string) => Promise<boolean>;
+  replaceFromFile: (id: string, file: File) => Promise<boolean>;
+  replaceFromBlob: (id: string, blob: Blob, name: string) => Promise<boolean>;
+  moveItem: (id: string, delta: -1 | 1) => void;
   setType: (id: string, type: PreciseReferenceType) => void;
   setStrength: (id: string, strength: number) => void;
   setEnabled: (id: string, enabled: boolean) => void;
@@ -36,60 +41,205 @@ export function useReferenceImage(): ReferenceImageStore {
   const [error, setError] = useState<string | null>(null);
   const itemsRef = useRef<PreciseReferenceItem[]>([]);
   const mountedRef = useRef(true);
-  const requestIdRef = useRef(0);
+  const clearEpochRef = useRef(0);
+  const replaceEpochRef = useRef<Map<string, number>>(new Map());
+  const inFlightCountRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      requestIdRef.current += 1;
+      clearEpochRef.current += 1;
+      replaceEpochRef.current.clear();
       revokeAll(itemsRef.current);
       itemsRef.current = [];
     };
   }, []);
 
-  const setFromBlob = useCallback(async (blob: Blob, name: string): Promise<boolean> => {
-    const requestId = ++requestIdRef.current;
+  const beginLoading = useCallback(() => {
+    inFlightCountRef.current += 1;
     setLoading(true);
+  }, []);
+
+  const endLoading = useCallback(() => {
+    inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
+    if (mountedRef.current) {
+      setLoading(inFlightCountRef.current > 0);
+    }
+  }, []);
+
+  const addFromBlob = useCallback(async (blob: Blob, name: string): Promise<boolean> => {
+    if (itemsRef.current.length >= MAX_PRECISE_REFERENCES) {
+      setError(`参照画像は最大 ${MAX_PRECISE_REFERENCES} 枚まで追加できます`);
+      return false;
+    }
+    const startClearEpoch = clearEpochRef.current;
+    beginLoading();
     setError(null);
     try {
       const independentBlob = await validateReferenceImageBlob(blob);
-      if (!mountedRef.current || requestId !== requestIdRef.current) return false;
+      if (!mountedRef.current || startClearEpoch !== clearEpochRef.current) return false;
+      if (itemsRef.current.length >= MAX_PRECISE_REFERENCES) {
+        setError(`参照画像は最大 ${MAX_PRECISE_REFERENCES} 枚まで追加できます`);
+        return false;
+      }
       const previewUrl = URL.createObjectURL(independentBlob);
-      const prev = itemsRef.current;
-      const previousFirst = prev[0];
       const nextItem: PreciseReferenceItem = {
         id: newId(),
         blob: independentBlob,
         previewUrl,
         name: name.trim() || '参照画像',
-        type: previousFirst?.type ?? 'character',
-        strength: previousFirst?.strength ?? DEFAULT_PRECISE_REFERENCE_STRENGTH,
+        type: 'character',
+        strength: DEFAULT_PRECISE_REFERENCE_STRENGTH,
         enabled: true,
       };
-      itemsRef.current = [nextItem];
-      setItems([nextItem]);
-      revokeAll(prev);
+      const next = [...itemsRef.current, nextItem];
+      itemsRef.current = next;
+      setItems(next);
       return true;
     } catch (err) {
-      if (!mountedRef.current || requestId !== requestIdRef.current) return false;
+      if (!mountedRef.current || startClearEpoch !== clearEpochRef.current) return false;
       const message =
-        err instanceof ReferenceImageError
-          ? err.message
-          : '参照画像を読み込めませんでした';
+        err instanceof ReferenceImageError ? err.message : '参照画像を読み込めませんでした';
       setError(message);
       return false;
     } finally {
-      if (mountedRef.current && requestId === requestIdRef.current) {
-        setLoading(false);
-      }
+      endLoading();
     }
-  }, []);
+  }, [beginLoading, endLoading]);
 
-  const setFromFile = useCallback(
-    (file: File): Promise<boolean> => setFromBlob(file, file.name || '参照画像'),
-    [setFromBlob],
+  const addFromFile = useCallback(
+    (file: File): Promise<boolean> => addFromBlob(file, file.name || '参照画像'),
+    [addFromBlob],
   );
+
+  const addFromFiles = useCallback(
+    async (files: FileList | readonly File[]): Promise<number> => {
+      const list = Array.from(files);
+      if (list.length === 0) return 0;
+      let added = 0;
+      let hitLimit = false;
+      let lastError: string | null = null;
+      const startClearEpoch = clearEpochRef.current;
+
+      for (const file of list) {
+        if (!mountedRef.current || startClearEpoch !== clearEpochRef.current) break;
+        if (itemsRef.current.length >= MAX_PRECISE_REFERENCES) {
+          hitLimit = true;
+          break;
+        }
+        beginLoading();
+        try {
+          const independentBlob = await validateReferenceImageBlob(file);
+          if (!mountedRef.current || startClearEpoch !== clearEpochRef.current) break;
+          if (itemsRef.current.length >= MAX_PRECISE_REFERENCES) {
+            hitLimit = true;
+            break;
+          }
+          const previewUrl = URL.createObjectURL(independentBlob);
+          const nextItem: PreciseReferenceItem = {
+            id: newId(),
+            blob: independentBlob,
+            previewUrl,
+            name: file.name || '参照画像',
+            type: 'character',
+            strength: DEFAULT_PRECISE_REFERENCE_STRENGTH,
+            enabled: true,
+          };
+          const next = [...itemsRef.current, nextItem];
+          itemsRef.current = next;
+          setItems(next);
+          added += 1;
+        } catch (err) {
+          if (!mountedRef.current || startClearEpoch !== clearEpochRef.current) break;
+          lastError =
+            err instanceof ReferenceImageError ? err.message : '参照画像を読み込めませんでした';
+        } finally {
+          endLoading();
+        }
+      }
+
+      if (mountedRef.current && startClearEpoch === clearEpochRef.current) {
+        if (lastError) {
+          setError(lastError);
+        } else if (hitLimit) {
+          setError(`参照画像は最大 ${MAX_PRECISE_REFERENCES} 枚までです（上限を超えた画像は追加されませんでした）`);
+        } else if (added > 0) {
+          setError(null);
+        }
+      }
+      return added;
+    },
+    [beginLoading, endLoading],
+  );
+
+  const replaceFromBlob = useCallback(async (id: string, blob: Blob, name: string): Promise<boolean> => {
+    if (!itemsRef.current.some((item) => item.id === id)) return false;
+    const startClearEpoch = clearEpochRef.current;
+    const replaceSeq = (replaceEpochRef.current.get(id) ?? 0) + 1;
+    replaceEpochRef.current.set(id, replaceSeq);
+    beginLoading();
+    setError(null);
+    try {
+      const independentBlob = await validateReferenceImageBlob(blob);
+      if (
+        !mountedRef.current ||
+        startClearEpoch !== clearEpochRef.current ||
+        replaceEpochRef.current.get(id) !== replaceSeq
+      ) {
+        return false;
+      }
+      const oldItem = itemsRef.current.find((item) => item.id === id);
+      if (!oldItem) return false;
+      const previewUrl = URL.createObjectURL(independentBlob);
+      const next = itemsRef.current.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              blob: independentBlob,
+              previewUrl,
+              name: name.trim() || '参照画像',
+              enabled: true,
+            }
+          : item,
+      );
+      itemsRef.current = next;
+      setItems(next);
+      URL.revokeObjectURL(oldItem.previewUrl);
+      return true;
+    } catch (err) {
+      if (
+        !mountedRef.current ||
+        startClearEpoch !== clearEpochRef.current ||
+        replaceEpochRef.current.get(id) !== replaceSeq
+      ) {
+        return false;
+      }
+      const message =
+        err instanceof ReferenceImageError ? err.message : '参照画像を読み込めませんでした';
+      setError(message);
+      return false;
+    } finally {
+      endLoading();
+    }
+  }, [beginLoading, endLoading]);
+
+  const replaceFromFile = useCallback(
+    (id: string, file: File): Promise<boolean> => replaceFromBlob(id, file, file.name || '参照画像'),
+    [replaceFromBlob],
+  );
+
+  const moveItem = useCallback((id: string, delta: -1 | 1) => {
+    const index = itemsRef.current.findIndex((item) => item.id === id);
+    if (index < 0) return;
+    const targetIndex = index + delta;
+    if (targetIndex < 0 || targetIndex >= itemsRef.current.length) return;
+    const next = [...itemsRef.current];
+    const [moved] = next.splice(index, 1);
+    next.splice(targetIndex, 0, moved!);
+    itemsRef.current = next;
+    setItems(next);
+  }, []);
 
   const setType = useCallback((id: string, type: PreciseReferenceType) => {
     const next = itemsRef.current.map((item) => (item.id === id ? { ...item, type } : item));
@@ -118,8 +268,7 @@ export function useReferenceImage(): ReferenceImageStore {
   }, []);
 
   const remove = useCallback((id: string) => {
-    requestIdRef.current += 1;
-    setLoading(false);
+    replaceEpochRef.current.delete(id);
     setError(null);
     const target = itemsRef.current.find((item) => item.id === id);
     if (!target) return;
@@ -130,8 +279,8 @@ export function useReferenceImage(): ReferenceImageStore {
   }, []);
 
   const clear = useCallback(() => {
-    requestIdRef.current += 1;
-    setLoading(false);
+    clearEpochRef.current += 1;
+    replaceEpochRef.current.clear();
     setError(null);
     const prev = itemsRef.current;
     if (prev.length === 0) return;
@@ -149,8 +298,12 @@ export function useReferenceImage(): ReferenceImageStore {
     activeItems,
     loading,
     error,
-    setFromFile,
-    setFromBlob,
+    addFromFile,
+    addFromFiles,
+    addFromBlob,
+    replaceFromFile,
+    replaceFromBlob,
+    moveItem,
     setType,
     setStrength,
     setEnabled,

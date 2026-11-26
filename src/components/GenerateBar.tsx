@@ -23,7 +23,9 @@ interface Props {
   estimate?: AnlasEstimate;
   /** 有効な精密参照の枚数（#130 用。estimate 未指定時の見積もりに使う）。 */
   referenceCount?: number;
-  /** 有効な精密参照の先頭アイテム（ON インジケーター表示用）。 */
+  /** 有効な精密参照一覧（ON インジケーター表示用）。 */
+  activeReferences?: readonly PreciseReferenceItem[];
+  /** 後方互換: 単一の有効な精密参照アイテム。 */
   activeReference?: PreciseReferenceItem | null;
   /** インジケーターから精密参照を一時 OFF にする。 */
   onDisableReference?: () => void;
@@ -46,6 +48,7 @@ export function GenerateBar({
   anlas,
   estimate,
   referenceCount,
+  activeReferences,
   activeReference,
   onDisableReference,
   onOpenReferenceTab,
@@ -53,7 +56,13 @@ export function GenerateBar({
   const barRef = useRef<HTMLElement>(null);
   const { generating } = generator;
   const customSize = resolveSize(generation);
-  const effectiveReferenceCount = referenceCount ?? (activeReference ? 1 : 0);
+  const activeList = activeReferences ?? (activeReference ? [activeReference] : []);
+  const effectiveReferenceCount = referenceCount ?? activeList.length;
+  const additionalAnlas = effectiveReferenceCount * PRECISE_REFERENCE_ANLAS;
+  const summaryText =
+    activeList.length === 1
+      ? `精密参照 ON（${referenceTypeLabel(activeList[0]!.type)} / +${additionalAnlas} Anlas）`
+      : `精密参照 ${activeList.length}枚 ON（+${additionalAnlas} Anlas）`;
   const resolvedEstimate =
     estimate ??
     estimateAnlasCost({
@@ -90,30 +99,34 @@ export function GenerateBar({
     onGenerationChange(sizeChangePatch(generation, next));
   };
 
+  const indicatorContent = (
+    <>
+      <span className="gen-ref-thumbs" aria-hidden="true">
+        {activeList.slice(0, 3).map((ref) => (
+          <img key={ref.id} src={ref.previewUrl} alt="" className="gen-ref-thumb" />
+        ))}
+        {activeList.length > 3 && <span className="gen-ref-more">+{activeList.length - 3}</span>}
+      </span>
+      <span className="gen-ref-text">{summaryText}</span>
+    </>
+  );
+
   return (
     <section ref={barRef} className="generate-bar" aria-label="生成操作">
       {anlas && <AnlasLine anlas={anlas} estimate={resolvedEstimate} />}
-      {activeReference && (
+      {activeList.length > 0 && (
         <div className="gen-ref-indicator" role="status">
           {onOpenReferenceTab ? (
             <button
               type="button"
               className="gen-ref-summary"
               onClick={onOpenReferenceTab}
-              aria-label={`精密参照 ON（${referenceTypeLabel(activeReference.type)} / +${PRECISE_REFERENCE_ANLAS} Anlas）。参照画像パネルを開く`}
+              aria-label={`${summaryText}。参照画像パネルを開く`}
             >
-              <img src={activeReference.previewUrl} alt="" className="gen-ref-thumb" />
-              <span className="gen-ref-text">
-                精密参照 ON（{referenceTypeLabel(activeReference.type)} / +{PRECISE_REFERENCE_ANLAS} Anlas）
-              </span>
+              {indicatorContent}
             </button>
           ) : (
-            <div className="gen-ref-summary">
-              <img src={activeReference.previewUrl} alt="" className="gen-ref-thumb" />
-              <span className="gen-ref-text">
-                精密参照 ON（{referenceTypeLabel(activeReference.type)} / +{PRECISE_REFERENCE_ANLAS} Anlas）
-              </span>
-            </div>
+            <div className="gen-ref-summary">{indicatorContent}</div>
           )}
           {onDisableReference && (
             <button

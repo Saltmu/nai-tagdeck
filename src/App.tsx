@@ -242,11 +242,11 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   }, []);
   const handleUseAsReference = useCallback(
     async (image: GeneratedImage) => {
-      const ok = await referenceImage.setFromBlob(image.blob, `生成画像（シード ${image.seed}）`);
+      const ok = await referenceImage.addFromBlob(image.blob, `生成画像（シード ${image.seed}）`);
       openReferenceTab();
-      show(ok ? '参照画像に設定しました' : '参照画像に設定できませんでした');
+      show(ok ? '参照画像に追加しました' : '参照画像を追加できませんでした');
     },
-    [referenceImage.setFromBlob, openReferenceTab, show],
+    [referenceImage.addFromBlob, openReferenceTab, show],
   );
   const { blocker, startGenerate } = useGenerationControls({
     generator,
@@ -407,6 +407,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               openTabSignal={dockOpenTab}
               generating={generator.generating}
               referenceActive={referenceImage.activeItems.length > 0}
+              referenceCount={referenceImage.activeItems.length}
               error={generator.error}
               onDismissError={generator.dismissError}
               promptPanel={
@@ -441,7 +442,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onGenerate={startGenerate}
               anlas={anlas}
               referenceCount={referenceImage.activeItems.length}
-              activeReference={referenceImage.activeItems[0] ?? null}
+              activeReferences={referenceImage.activeItems}
               onDisableReference={referenceImage.disableAll}
               onOpenReferenceTab={openReferenceTab}
             />

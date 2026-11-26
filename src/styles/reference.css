@@ -17,6 +17,13 @@
   gap: 0.4rem;
 }
 
+.reference-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .reference-title {
   margin: 0;
   font-size: var(--text-base);
@@ -40,6 +47,48 @@
 .reference-body {
   display: grid;
   gap: 0.75rem;
+}
+
+.reference-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.reference-card {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.reference-card.is-disabled {
+  opacity: 0.72;
+}
+
+.reference-slot-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  padding: 0 0.35rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.reference-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
 }
 
 .reference-preview-card {
