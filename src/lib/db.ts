@@ -1,4 +1,4 @@
-import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import { openDB, type DBSchema, type IDBPDatabase, type IDBPTransaction } from 'idb';
 import type { DictEntry } from '../types';
 import { LEGACY_DRESS_STATE_CATEGORY } from './categories';
 import type { TabSyncType } from './tabSync';
@@ -194,29 +194,40 @@ export async function listEntries(): Promise<DictEntry[]> {
   return mapStoredEntries(entries);
 }
 
-async function writeDictionary(
-  mutate: (store: { put: (value: DictEntry) => Promise<unknown>; delete: (key: string) => Promise<unknown>; clear: () => Promise<unknown> }) => Promise<void>,
-  fallback?: (db: MinimalDB) => Promise<void>,
-): Promise<void> {
+type WritableStore = 'dictionary' | 'kv';
+
+async function runGuardedWrite<T>(
+  stores: readonly WritableStore[],
+  options: {
+    expectedMeta?: SyncMeta | null;
+    fallback?: (db: MinimalDB) => Promise<T>;
+  },
+  mutate: (
+    tx: IDBPTransaction<TagDeckDB, (WritableStore | 'meta')[], 'readwrite'>,
+    nextMeta: SyncMeta,
+  ) => Promise<T>,
+): Promise<T> {
   return enqueueWrite(async () => {
     const db = await open();
     if (!hasTransaction(db)) {
-      await fallback?.(db);
-      return;
+      if (options.fallback) return options.fallback(db);
+      throw new Error('まとめて保存するにはトランザクションが必要です');
     }
-    const tx = db.transaction(['dictionary', 'meta'], 'readwrite');
+    const txStores: (WritableStore | 'meta')[] = [...stores, 'meta'];
+    const tx = db.transaction(txStores, 'readwrite');
     // リクエスト失敗時に tx.done が単独で未処理拒否になるのを防ぐ
     tx.done.catch(() => {});
     const metaStore = tx.objectStore('meta');
     const current = normalizeMeta(await metaStore.get(SYNC_META_KEY));
-    const reason = compareMeta(current, baseMeta);
+    const reason = compareMeta(current, options.expectedMeta ?? baseMeta);
     if (reason) {
       await tx.done;
       throw new StaleWriteError(reason);
     }
     const nextMeta: SyncMeta = { rev: current.rev + 1, epoch: current.epoch };
+    let result: T;
     try {
-      await mutate(tx.objectStore('dictionary'));
+      result = await mutate(tx, nextMeta);
       await metaStore.put(nextMeta, SYNC_META_KEY);
       await tx.done;
     } catch (error) {
@@ -224,7 +235,19 @@ async function writeDictionary(
       throw error;
     }
     advanceBaseMeta(nextMeta);
+    return result;
   });
+}
+
+async function writeDictionary(
+  mutate: (store: { put: (value: DictEntry) => Promise<unknown>; delete: (key: string) => Promise<unknown>; clear: () => Promise<unknown> }) => Promise<void>,
+  fallback?: (db: MinimalDB) => Promise<void>,
+): Promise<void> {
+  return runGuardedWrite(
+    ['dictionary'],
+    { fallback: async (db) => { await fallback?.(db); } },
+    async (tx) => { await mutate(tx.objectStore('dictionary')); },
+  );
 }
 
 export async function putEntry(entry: DictEntry): Promise<void> {
@@ -269,32 +292,11 @@ export async function getKV<T>(key: KVKey): Promise<T | undefined> {
 }
 
 export async function setKV(key: KVKey, value: unknown): Promise<void> {
-  return enqueueWrite(async () => {
-    const db = await open();
-    if (!hasTransaction(db)) {
-      await db.put('kv', value, key);
-      return;
-    }
-    const tx = db.transaction(['kv', 'meta'], 'readwrite');
-    tx.done.catch(() => {});
-    const metaStore = tx.objectStore('meta');
-    const current = normalizeMeta(await metaStore.get(SYNC_META_KEY));
-    const reason = compareMeta(current, baseMeta);
-    if (reason) {
-      await tx.done;
-      throw new StaleWriteError(reason);
-    }
-    const nextMeta: SyncMeta = { rev: current.rev + 1, epoch: current.epoch };
-    try {
-      await tx.objectStore('kv').put(value, key);
-      await metaStore.put(nextMeta, SYNC_META_KEY);
-      await tx.done;
-    } catch (error) {
-      try { tx.abort(); } catch { /* 既に終了 */ }
-      throw error;
-    }
-    advanceBaseMeta(nextMeta);
-  });
+  return runGuardedWrite(
+    ['kv'],
+    { fallback: async (db) => { await db.put('kv', value, key); } },
+    async (tx) => { await tx.objectStore('kv').put(value, key); },
+  );
 }
 
 /** 辞書・全 KV・同期メタを 1 つの readonly トランザクションで一括取得し、タブの基準リビジョンを更新する。 */
@@ -341,20 +343,10 @@ export async function replaceAllAppData(
   replacement: AppDataReplacement,
   expectedMeta?: SyncMeta,
 ): Promise<SyncMeta> {
-  return enqueueWrite(async () => {
-    const db = await open();
-    if (!hasTransaction(db)) throw new Error('まとめて保存するにはトランザクションが必要です');
-    const tx = db.transaction(['dictionary', 'kv', 'meta'], 'readwrite');
-    tx.done.catch(() => {});
-    const metaStore = tx.objectStore('meta');
-    const current = normalizeMeta(await metaStore.get(SYNC_META_KEY));
-    const reason = compareMeta(current, expectedMeta ?? baseMeta);
-    if (reason) {
-      await tx.done;
-      throw new StaleWriteError(reason);
-    }
-    const nextMeta: SyncMeta = { rev: current.rev + 1, epoch: current.epoch };
-    try {
+  return runGuardedWrite(
+    ['dictionary', 'kv'],
+    { expectedMeta },
+    async (tx, nextMeta) => {
       const dictStore = tx.objectStore('dictionary');
       const nextDictionary = typeof replacement.dictionary === 'function'
         ? replacement.dictionary(mapStoredEntries(await dictStore.getAll()))
@@ -367,15 +359,9 @@ export async function replaceAllAppData(
       }
       await dictStore.clear();
       await Promise.all(nextDictionary.map((entry) => dictStore.put(entry)));
-      await metaStore.put(nextMeta, SYNC_META_KEY);
-      await tx.done;
-    } catch (error) {
-      try { tx.abort(); } catch { /* 既に終了 */ }
-      throw error;
-    }
-    advanceBaseMeta(nextMeta);
-    return nextMeta;
-  });
+      return nextMeta;
+    },
+  );
 }
 
 /** 辞書と全保存設定を 1 つのトランザクションで削除し、世代（epoch）とリビジョン（rev）を進める。 */

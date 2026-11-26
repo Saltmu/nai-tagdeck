@@ -192,6 +192,49 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
     return { hadReset, remaining: next };
   }, []);
 
+  const applyLoadedSnapshot = useCallback((
+    result: MigratedSnapshot,
+    options: {
+      startNoticeSeq: number;
+      resetHistory: boolean;
+      incrementReloadCount: boolean;
+      forceResyncToken?: boolean;
+    },
+  ) => {
+    const epochChanged =
+      lastLoadedMetaRef.current !== null &&
+      result.data.meta.epoch !== lastLoadedMetaRef.current.epoch;
+    lastLoadedMetaRef.current = result.data.meta;
+    if (options.resetHistory) {
+      autosaveEpochRef.current += 1;
+      setAutosaveEpoch(autosaveEpochRef.current);
+      portsRef.current.onBeforeReloadApply();
+    }
+    const rev = ++snapshotRevRef.current;
+    setSnapshot({ revision: rev, data: result.data, migrationError: result.migrationError });
+    setLoadError(null);
+    migrationErrorRef.current = result.migrationError;
+    setMigrationError(result.migrationError);
+    if (options.incrementReloadCount) {
+      setReloadCount((n) => n + 1);
+    }
+    const { hadReset } = reconcileConflicts(result.data.meta, options.startNoticeSeq);
+    if (options.forceResyncToken || epochChanged || hadReset) {
+      portsRef.current.resyncToken();
+    }
+  }, [reconcileConflicts]);
+
+  const runExclusive = useCallback(async <T>(task: () => Promise<T>): Promise<T> => {
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      return await task();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, []);
+
   // 初回起動時に全ストア＋同期メタを 1 トランザクションで読み込む
   useEffect(() => {
     let active = true;
@@ -202,14 +245,11 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
         if (!isCurrent()) return;
         const result = await migrateLegacyWorkspaceInSnapshot(raw);
         if (!isCurrent()) return;
-        lastLoadedMetaRef.current = result.data.meta;
-        const rev = ++snapshotRevRef.current;
-        setSnapshot({ revision: rev, data: result.data, migrationError: result.migrationError });
-        setLoadError(null);
-        migrationErrorRef.current = result.migrationError;
-        setMigrationError(result.migrationError);
-        const { hadReset } = reconcileConflicts(result.data.meta, startNoticeSeq);
-        if (hadReset) portsRef.current.resyncToken();
+        applyLoadedSnapshot(result, {
+          startNoticeSeq,
+          resetHistory: false,
+          incrementReloadCount: false,
+        });
       })
       .catch((caught: unknown) => {
         if (!isCurrent()) return;
@@ -220,7 +260,7 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
         setLoadError(`保存データを読み込めません: ${String(caught)}`);
       });
     return () => { active = false; };
-  }, [noteConflict, reconcileConflicts, resetSignal]);
+  }, [applyLoadedSnapshot, noteConflict, resetSignal]);
 
   // 他タブからの更新・全削除通知および DB ブロック状態を購読する
   useEffect(() => subscribeTabSync((message) => {
@@ -246,30 +286,21 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
   const reloadLatest = useCallback(() => {
     const current = conflictRef.current;
     if (!current || busyRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
     setError(null);
     const startNoticeSeq = noticeSeqRef.current;
-    void (async () => {
+    void runExclusive(async () => {
       try {
         const raw = await loadAllSnapshot();
         if (resetSignal.aborted) return;
         const result = await migrateLegacyWorkspaceInSnapshot(raw);
         if (resetSignal.aborted) return;
         if (result.migrationError) throw new Error(result.migrationError);
-        const epochChanged = lastLoadedMetaRef.current !== null && result.data.meta.epoch !== lastLoadedMetaRef.current.epoch;
-        lastLoadedMetaRef.current = result.data.meta;
-        autosaveEpochRef.current += 1;
-        setAutosaveEpoch(autosaveEpochRef.current);
-        portsRef.current.onBeforeReloadApply();
-        const rev = ++snapshotRevRef.current;
-        setSnapshot({ revision: rev, data: result.data, migrationError: null });
-        setLoadError(null);
-        migrationErrorRef.current = null;
-        setMigrationError(null);
-        setReloadCount((n) => n + 1);
-        const { hadReset } = reconcileConflicts(result.data.meta, startNoticeSeq);
-        if (current === 'reset' || epochChanged || hadReset) portsRef.current.resyncToken();
+        applyLoadedSnapshot(result, {
+          startNoticeSeq,
+          resetHistory: true,
+          incrementReloadCount: true,
+          forceResyncToken: current === 'reset',
+        });
       } catch (caught) {
         if (isStaleWriteError(caught)) {
           noteConflict(caught.reason);
@@ -277,36 +308,24 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
         } else {
           setError(`最新のデータを読み込めません: ${String(caught)}`);
         }
-      } finally {
-        busyRef.current = false;
-        setBusy(false);
       }
-    })();
-  }, [noteConflict, reconcileConflicts, resetSignal]);
+    });
+  }, [applyLoadedSnapshot, noteConflict, resetSignal, runExclusive]);
 
   const retryMigration = useCallback(() => {
     if (!migrationErrorRef.current || busyRef.current || conflictRef.current !== null) return;
-    busyRef.current = true;
-    setBusy(true);
     const startNoticeSeq = noticeSeqRef.current;
-    void (async () => {
+    void runExclusive(async () => {
       try {
         const raw = await loadAllSnapshot();
         if (resetSignal.aborted) return;
         const result = await migrateLegacyWorkspaceInSnapshot(raw);
         if (resetSignal.aborted) return;
-        const epochChanged = lastLoadedMetaRef.current !== null && result.data.meta.epoch !== lastLoadedMetaRef.current.epoch;
-        lastLoadedMetaRef.current = result.data.meta;
-        autosaveEpochRef.current += 1;
-        setAutosaveEpoch(autosaveEpochRef.current);
-        portsRef.current.onBeforeReloadApply();
-        const rev = ++snapshotRevRef.current;
-        setSnapshot({ revision: rev, data: result.data, migrationError: result.migrationError });
-        setLoadError(null);
-        migrationErrorRef.current = result.migrationError;
-        setMigrationError(result.migrationError);
-        const { hadReset } = reconcileConflicts(result.data.meta, startNoticeSeq);
-        if (epochChanged || hadReset) portsRef.current.resyncToken();
+        applyLoadedSnapshot(result, {
+          startNoticeSeq,
+          resetHistory: true,
+          incrementReloadCount: false,
+        });
       } catch (caught) {
         if (isStaleWriteError(caught)) {
           noteConflict(caught.reason);
@@ -317,19 +336,14 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
           migrationErrorRef.current = message;
           setMigrationError(message);
         }
-      } finally {
-        busyRef.current = false;
-        setBusy(false);
       }
-    })();
-  }, [noteConflict, reconcileConflicts, resetSignal]);
+    });
+  }, [applyLoadedSnapshot, noteConflict, resetSignal, runExclusive]);
 
   const preferLocal = useCallback(() => {
     if (!conflictRef.current || busyRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
     setError(null);
-    void (async () => {
+    void runExclusive(async () => {
       try {
         if (!portsRef.current.isReadyToSave()) {
           setError('読み込みが終わっていないデータがあるため、保存を中止しました');
@@ -363,12 +377,9 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
         } else {
           setError(`このタブの内容を保存できません: ${String(caught)}`);
         }
-      } finally {
-        busyRef.current = false;
-        setBusy(false);
       }
-    })();
-  }, [noteConflict, reconcileConflicts, resetSignal]);
+    });
+  }, [noteConflict, reconcileConflicts, resetSignal, runExclusive]);
 
   const commitAll = useCallback(async (prepare: CommitAllPrepare): Promise<boolean> => {
     if (!('replaceAllAppData' in db) || typeof db.replaceAllAppData !== 'function') return false;
@@ -379,58 +390,56 @@ export function useTabSync(ports: TabSyncPorts): TabSyncController {
     if (busyRef.current) {
       throw new Error('別の保存処理を実行中です。完了してからやり直してください');
     }
-    busyRef.current = true;
-    setBusy(true);
-    // 復元完了前に保留中の自動保存タイマー・pagehide・visibilitychange が後続キューへ割り込むのを防ぐ
-    autosaveSuspendedRef.current = true;
-    autosaveEpochRef.current += 1;
-    try {
-      const replacement = typeof prepare === 'function' ? await prepare() : prepare;
-      resetSignal.throwIfAborted();
-      if (conflictRef.current !== null) {
-        throw new DOMException('別のタブでデータが更新されたため、このタブの保存を停止しています', 'AbortError');
-      }
-      let committedDictionary: DictEntry[] = [];
-      const nextMeta = await db.replaceAllAppData({
-        kv: replacement.kv,
-        dictionary: (current) => {
-          const resolved = typeof replacement.dictionary === 'function'
-            ? replacement.dictionary(current)
-            : replacement.dictionary;
-          committedDictionary = [...resolved];
-          return resolved;
-        },
-      });
-      resetSignal.throwIfAborted();
-      lastLoadedMetaRef.current = nextMeta;
+    return runExclusive(async () => {
+      // 復元完了前に保留中の自動保存タイマー・pagehide・visibilitychange が後続キューへ割り込むのを防ぐ
+      autosaveSuspendedRef.current = true;
       autosaveEpochRef.current += 1;
-      portsRef.current.onBeforeReloadApply();
-      const rev = ++snapshotRevRef.current;
-      // 各フックへスナップショットとして適用することで、正規化後の実参照がそのまま保存基準になり不要な再保存を防ぐ
-      setSnapshot({
-        revision: rev,
-        data: {
-          dictionary: committedDictionary,
-          kv: { ...replacement.kv },
-          meta: nextMeta,
-        },
-        migrationError: null,
-      });
-      setLoadError(null);
-      migrationErrorRef.current = null;
-      setMigrationError(null);
-      publishTabSync('updated', nextMeta);
-      return true;
-    } catch (caught) {
-      if (isStaleWriteError(caught)) noteConflict(caught.reason);
-      throw caught;
-    } finally {
-      autosaveSuspendedRef.current = false;
-      setAutosaveEpoch(autosaveEpochRef.current);
-      busyRef.current = false;
-      setBusy(false);
-    }
-  }, [noteConflict, resetSignal]);
+      try {
+        const replacement = typeof prepare === 'function' ? await prepare() : prepare;
+        resetSignal.throwIfAborted();
+        if (conflictRef.current !== null) {
+          throw new DOMException('別のタブでデータが更新されたため、このタブの保存を停止しています', 'AbortError');
+        }
+        let committedDictionary: DictEntry[] = [];
+        const nextMeta = await db.replaceAllAppData({
+          kv: replacement.kv,
+          dictionary: (current) => {
+            const resolved = typeof replacement.dictionary === 'function'
+              ? replacement.dictionary(current)
+              : replacement.dictionary;
+            committedDictionary = [...resolved];
+            return resolved;
+          },
+        });
+        resetSignal.throwIfAborted();
+        lastLoadedMetaRef.current = nextMeta;
+        autosaveEpochRef.current += 1;
+        portsRef.current.onBeforeReloadApply();
+        const rev = ++snapshotRevRef.current;
+        // 各フックへスナップショットとして適用することで、正規化後の実参照がそのまま保存基準になり不要な再保存を防ぐ
+        setSnapshot({
+          revision: rev,
+          data: {
+            dictionary: committedDictionary,
+            kv: { ...replacement.kv },
+            meta: nextMeta,
+          },
+          migrationError: null,
+        });
+        setLoadError(null);
+        migrationErrorRef.current = null;
+        setMigrationError(null);
+        publishTabSync('updated', nextMeta);
+        return true;
+      } catch (caught) {
+        if (isStaleWriteError(caught)) noteConflict(caught.reason);
+        throw caught;
+      } finally {
+        autosaveSuspendedRef.current = false;
+        setAutosaveEpoch(autosaveEpochRef.current);
+      }
+    });
+  }, [noteConflict, resetSignal, runExclusive]);
 
   const bridge = useMemo<SyncBridge>(() => ({
     locked: conflict !== null,

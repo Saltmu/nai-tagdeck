@@ -16,6 +16,7 @@ import {
   SIZE_PRESETS,
   adjustCustomHeight,
   adjustCustomWidth,
+  diffGenerationSettings,
   fitFreeSize,
   isValidFreeSize,
   modeLabel,
@@ -389,6 +390,40 @@ describe('generation settings', () => {
     expect(toParams({ ...DEFAULT_GENERATION, cfgRescale: 0.2, dynamicThresholding: true }, 7)).toMatchObject({
       cfgRescale: 0.2,
       dynamicThresholding: true,
+    });
+  });
+
+  it('diffGenerationSettings で差分計算とプリセット⇔カスタム往復を行える', () => {
+    expect(diffGenerationSettings(DEFAULT_GENERATION, {})).toBeUndefined();
+    expect(diffGenerationSettings(DEFAULT_GENERATION, { steps: DEFAULT_GENERATION.steps })).toBeUndefined();
+    expect(diffGenerationSettings(DEFAULT_GENERATION, { steps: 99 })).toBeUndefined();
+
+    expect(diffGenerationSettings(DEFAULT_GENERATION, { steps: 20, seed: 42, scale: 5.55 })).toEqual({
+      before: { steps: DEFAULT_GENERATION.steps, seed: null, scale: DEFAULT_GENERATION.scale },
+      after: { steps: 20, seed: 42, scale: 5.6 },
+    });
+
+    const toCustom = diffGenerationSettings(DEFAULT_GENERATION, {
+      size: 'custom',
+      customWidth: 896,
+      customHeight: 1152,
+    });
+    expect(toCustom).toEqual({
+      before: { size: 'portrait', customWidth: undefined, customHeight: undefined },
+      after: { size: 'custom', customWidth: 896, customHeight: 1152 },
+    });
+
+    const customCurrent = normalizeGeneration({ ...DEFAULT_GENERATION, ...toCustom!.after });
+    expect(diffGenerationSettings(customCurrent, { size: 'custom', customWidth: 896 })).toBeUndefined();
+    expect(diffGenerationSettings(customCurrent, { customWidth: 768 })).toEqual({
+      before: { customWidth: 896 },
+      after: { customWidth: 768 },
+    });
+
+    const toPreset = diffGenerationSettings(customCurrent, { size: 'portrait' });
+    expect(toPreset).toEqual({
+      before: { size: 'custom', customWidth: 896, customHeight: 1152 },
+      after: { size: 'portrait', customWidth: undefined, customHeight: undefined },
     });
   });
 });

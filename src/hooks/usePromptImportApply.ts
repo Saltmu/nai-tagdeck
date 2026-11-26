@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import { confirmUnsavedChanges, type UnsavedChoice } from '../components/confirmUnsaved';
 import { useDialogs } from '../components/Dialogs';
 import type { PromptSource } from '../components/PromptImportDialog';
-import { type GenerationSettings, normalizeGeneration } from '../lib/generation';
+import { diffGenerationSettings, type GenerationSettings, normalizeGeneration } from '../lib/generation';
 import { generationSaveForOverwrite, isEmptyWorkspace, overwritePreset, samePreset, sameWorkTags, type Preset } from '../lib/presets';
 import { importedBaseForMode, type PromptImport } from '../lib/promptImportShared';
 import { defaultNegativeTags, type WorkspaceAction } from '../lib/workspace';
@@ -40,20 +40,7 @@ function generationPatchFromImport(
   current: GenerationSettings,
   values: Partial<GenerationSettings>,
 ): Partial<GenerationSettings> {
-  const next = normalizeGeneration({ ...current, ...values });
-  const patch: Partial<GenerationSettings> = {};
-  for (const key of Object.keys(values) as (keyof GenerationSettings)[]) {
-    const value = next[key];
-    if (value !== undefined && !Object.is(value, current[key])) patch[key] = value as never;
-  }
-  // サイズが変わり、どちらかがカスタムなら寸法もパッチに含める。プリセットへ戻るときは
-  // 寸法を undefined にして、Undo でカスタムへ戻すときに元の寸法を復元できるようにする。
-  if (values.size !== undefined && values.size !== current.size &&
-      (values.size === 'custom' || current.size === 'custom')) {
-    if (!Object.is(next.customWidth, current.customWidth)) patch.customWidth = next.customWidth;
-    if (!Object.is(next.customHeight, current.customHeight)) patch.customHeight = next.customHeight;
-  }
-  return patch;
+  return diffGenerationSettings(current, values)?.after ?? {};
 }
 
 function negativeApplyState(

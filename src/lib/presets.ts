@@ -1,6 +1,7 @@
 import type { WorkTag, Workspace } from '../types';
 import { PROMPT_CATEGORY_KEYS } from './categories';
 import {
+  diffGenerationSettings,
   modeLabel,
   normalizeGeneration,
   samplerLabel,
@@ -285,23 +286,8 @@ export function presetLoadExtras(
 ): { characterNegativePrompt?: string; generation?: Partial<GenerationSettings> } | undefined {
   const extras: { characterNegativePrompt?: string; generation?: Partial<GenerationSettings> } = {};
   if (preset.generation) {
-    const generation: Partial<GenerationSettings> = {};
-    for (const key of Object.keys(preset.generation) as (keyof PresetGeneration)[]) {
-      const value = preset.generation[key];
-      if (!Object.is(value, current.generation[key])) generation[key] = value as never;
-    }
-    // サイズが変わり、どちらかがカスタムなら寸法も差分にする。プリセットへ戻るときは
-    // 寸法を undefined にして、Undo でカスタムへ戻すときに元の寸法を復元できるようにする。
-    if (preset.generation.size !== current.generation.size &&
-        (preset.generation.size === 'custom' || current.generation.size === 'custom')) {
-      if (!Object.is(preset.generation.customWidth, current.generation.customWidth)) {
-        generation.customWidth = preset.generation.customWidth;
-      }
-      if (!Object.is(preset.generation.customHeight, current.generation.customHeight)) {
-        generation.customHeight = preset.generation.customHeight;
-      }
-    }
-    if (Object.keys(generation).length > 0) extras.generation = generation;
+    const generation = diffGenerationSettings(current.generation, preset.generation)?.after;
+    if (generation) extras.generation = generation;
   }
   if (
     preset.characterNegativePrompt !== undefined &&
