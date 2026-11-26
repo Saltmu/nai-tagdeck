@@ -38,6 +38,56 @@
   color: var(--danger);
 }
 
+/* 精密参照 ON 中の誤課金防止インジケーター */
+.gen-ref-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.5rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  font-size: var(--text-sm);
+}
+
+.gen-ref-summary {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gen-ref-thumb {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.gen-ref-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.gen-ref-disable {
+  flex: none;
+}
+
 /* 狭い画面: 画面下端に固定し、編集タブでも生成タブでも見えるようにする。
    ドックはこのバーの上に置く（dock.css で bottom をバーの高さにする） */
 @media (max-width: 1099px) {

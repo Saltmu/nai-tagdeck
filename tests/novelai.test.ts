@@ -121,6 +121,89 @@ describe('buildGenerateRequest (V5)', () => {
       image_format: 'png',
     });
   });
+
+  it('references が未指定または空配列のときは既存リクエストと完全一致し、director_reference_* を含めない', () => {
+    const baseline = build('1girl, solo', 'lowres', [{ prompt: 'girl', negative: 'blurry' }]);
+    const withUndefined = buildGenerateRequest({
+      prompt: '1girl, solo',
+      negative: 'lowres',
+      characters: [{ prompt: 'girl', negative: 'blurry' }],
+      params,
+      references: undefined,
+    });
+    const withEmpty = buildGenerateRequest({
+      prompt: '1girl, solo',
+      negative: 'lowres',
+      characters: [{ prompt: 'girl', negative: 'blurry' }],
+      params,
+      references: [],
+    });
+    expect(withUndefined).toEqual(baseline);
+    expect(withEmpty).toEqual(baseline);
+    expect(JSON.stringify(withEmpty)).toBe(JSON.stringify(baseline));
+    expect(baseline.parameters).not.toHaveProperty('director_reference_images');
+    expect(baseline.parameters).not.toHaveProperty('director_reference_descriptions');
+    expect(baseline.parameters).not.toHaveProperty('director_reference_strength_values');
+    expect(baseline.parameters).not.toHaveProperty('director_reference_secondary_strength_values');
+    expect(baseline.parameters).not.toHaveProperty('director_reference_information_extracted');
+  });
+
+  it('references 指定時に docs/novelai-api.md どおりの director_reference_* 配列を出力する', () => {
+    const charReq = buildGenerateRequest({
+      prompt: '1girl, solo',
+      negative: 'lowres',
+      characters: [],
+      params,
+      references: [{ imageBase64: 'AAAABBBB', type: 'character', strength: 1 }],
+    });
+    expect(charReq.parameters).toMatchObject({
+      director_reference_images: ['AAAABBBB'],
+      director_reference_descriptions: [
+        { caption: { base_caption: 'character', char_captions: [] }, legacy_uc: false },
+      ],
+      director_reference_strength_values: [1],
+      director_reference_secondary_strength_values: [0],
+      director_reference_information_extracted: [1],
+      normalize_reference_strength_multiple: true,
+    });
+
+    const styleReq = buildGenerateRequest({
+      prompt: '1girl',
+      negative: '',
+      characters: [],
+      params,
+      references: [{ imageBase64: 'data:image/png;base64,STYLE64', type: 'style', strength: 5 }],
+    });
+    expect(styleReq.parameters.director_reference_images).toEqual(['STYLE64']);
+    expect(styleReq.parameters.director_reference_descriptions).toEqual([
+      { caption: { base_caption: 'style', char_captions: [] }, legacy_uc: false },
+    ]);
+    expect(styleReq.parameters.director_reference_strength_values).toEqual([5]);
+
+    const outfitReq = buildGenerateRequest({
+      prompt: '1girl',
+      negative: '',
+      characters: [],
+      params,
+      references: [{ imageBase64: 'OUTFIT64', type: 'outfit', strength: 2.25 }],
+    });
+    expect(outfitReq.parameters.director_reference_descriptions).toEqual([
+      { caption: { base_caption: 'costume', char_captions: [] }, legacy_uc: false },
+    ]);
+    expect(outfitReq.parameters.director_reference_strength_values).toEqual([2.25]);
+
+    const clampedReq = buildGenerateRequest({
+      prompt: '1girl',
+      negative: '',
+      characters: [],
+      params,
+      references: [
+        { imageBase64: 'MIN', type: 'character', strength: 0 },
+        { imageBase64: 'MAX', type: 'style', strength: 99 },
+      ],
+    });
+    expect(clampedReq.parameters.director_reference_strength_values).toEqual([0.1, 5]);
+  });
 });
 
 describe('isFreeGeneration', () => {

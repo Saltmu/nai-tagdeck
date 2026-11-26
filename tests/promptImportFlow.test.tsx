@@ -68,7 +68,7 @@ async function acceptImport(scope: ParentNode) {
 const preview = () => container.querySelector('output.preview-text')?.textContent;
 
 async function pick(file: File, waitForResult = true) {
-  const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  const input = container.querySelector<HTMLInputElement>('input[type="file"][accept="image/png,.png"]')!;
   Object.defineProperty(input, 'files', { configurable: true, value: [file] });
   await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
   await waitForMount('.prompt-import-dialog');
@@ -130,7 +130,7 @@ afterEach(async () => {
 });
 
 it('retains the workspace on cancel or error, then applies a drop and only the supported checked settings', async () => {
-  const picker = vi.spyOn(container.querySelector<HTMLInputElement>('input[type="file"]')!, 'click');
+  const picker = vi.spyOn(container.querySelector<HTMLInputElement>('input[type="file"][accept="image/png,.png"]')!, 'click');
   // 画像欄の「PNGから読み込む」は廃止されたため、プリセット操作メニューから共有ピッカーを開く
   await click(button('編集'));
   const menu = container.querySelector<HTMLDetailsElement>('.preset-bar details')!;
@@ -176,7 +176,7 @@ it('retains the workspace on cancel or error, then applies a drop and only the s
 
 it('opens the shared PNG picker from preset actions and imports into the workspace', async () => {
   await click(button('編集'));
-  const picker = vi.spyOn(container.querySelector<HTMLInputElement>('input[type="file"]')!, 'click');
+  const picker = vi.spyOn(container.querySelector<HTMLInputElement>('input[type="file"][accept="image/png,.png"]')!, 'click');
   const menu = container.querySelector<HTMLDetailsElement>('.preset-bar details')!;
   const trigger = menu.querySelector<HTMLElement>('summary')!;
   expect(menu.open).toBe(false);

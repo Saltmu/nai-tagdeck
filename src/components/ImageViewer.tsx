@@ -17,6 +17,7 @@ interface Props {
   onDownload: () => void;
   onTogglePin: () => void;
   onImportPrompt?: () => void;
+  onUseAsReference?: () => void;
 }
 
 const VIEWER_STATE = 'naiTagdeckViewer';
@@ -28,7 +29,7 @@ const COPY_MS = 1500;
 
 export { imageFileName } from '../lib/imageFileName';
 
-export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload, onTogglePin, onImportPrompt }: Props) {
+export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, onRemove, onUseSeed, onDownload, onTogglePin, onImportPrompt, onUseAsReference }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [seedApplied, setSeedApplied] = useState(false);
   // 削除は1回目で確認状態にし、2回目で実行する。連打で消えないよう、確認状態になってから
@@ -236,8 +237,15 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
               </>
             )}
           </dl>
-          {onImportPrompt && (
-            <button type="button" className="btn btn-small" onClick={onImportPrompt}>プロンプトを読み込む</button>
+          {(onImportPrompt || onUseAsReference) && (
+            <div className="viewer-actions">
+              {onImportPrompt && (
+                <button type="button" className="btn btn-small" onClick={onImportPrompt}>プロンプトを読み込む</button>
+              )}
+              {onUseAsReference && (
+                <button type="button" className="btn btn-small" onClick={onUseAsReference}>参照に使う</button>
+              )}
+            </div>
           )}
           <ViewerPromptDetails image={image} getCopyContainer={() => dialog.current} />
         </div>
