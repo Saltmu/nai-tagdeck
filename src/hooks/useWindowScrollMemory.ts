@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
+import { getMainScrollContainer, getScrollTop, setScrollTop } from '../lib/browser';
 
 /**
  * 画面（タブ）ごとのスクロール位置を覚え、切り替え時に戻す。
@@ -8,15 +9,20 @@ export function useWindowScrollMemory<K extends string>(activeKey: K): void {
   const scrollPositionsRef = useRef<Partial<Record<K, number>>>({});
   const prevKeyRef = useRef<K>(activeKey);
   useEffect(() => {
+    const main = document.querySelector<HTMLElement>('.app-main');
     const onScroll = () => {
-      scrollPositionsRef.current[activeKey] = window.scrollY;
+      scrollPositionsRef.current[activeKey] = getScrollTop(getMainScrollContainer());
     };
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    main?.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      main?.removeEventListener('scroll', onScroll);
+    };
   }, [activeKey]);
   useLayoutEffect(() => {
     if (prevKeyRef.current === activeKey) return;
     prevKeyRef.current = activeKey;
-    window.scrollTo(0, scrollPositionsRef.current[activeKey] ?? 0);
+    setScrollTop(getMainScrollContainer(), scrollPositionsRef.current[activeKey] ?? 0);
   }, [activeKey]);
 }

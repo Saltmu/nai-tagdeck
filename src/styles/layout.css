@@ -196,3 +196,38 @@
   }
 }
 
+/* 狭い画面: ページ全体ではなく .app-main 内だけをスクロールさせる（アプリシェル構成）。
+   モバイルブラウザでスクロールに伴うアドレスバーの伸縮が起きないようにし、
+   画面下端に固定した生成バー・ドックの位置を安定させる。 */
+@media (max-width: 1099px) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  #root {
+    height: 100%;
+  }
+
+  .app {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .app-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-top: 0.5rem;
+  }
+}
+

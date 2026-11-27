@@ -93,3 +93,42 @@ it('keeps the scroll position per view when switching views', async () => {
   await click(container.querySelector<HTMLButtonElement>('.tab-settings')!);
   expect(scrollTo).toHaveBeenCalledWith(0, 300);
 });
+
+it('keeps the scroll position per view when .app-main scrolls internally', async () => {
+  const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  await act(async () => {
+    root.render(
+      <DialogProvider>
+        <App onResetAll={() => {}} />
+      </DialogProvider>,
+    );
+  });
+  const main = container.querySelector<HTMLElement>('.app-main')!;
+  main.style.overflowY = 'auto';
+  scrollTo.mockClear();
+
+  const scrollMain = async (y: number) => {
+    main.scrollTop = y;
+    await act(async () => {
+      main.dispatchEvent(new Event('scroll'));
+    });
+  };
+
+  // 編集タブで 900 まで内部スクロールしてから設定へ。未訪問の設定は 0 から開く
+  await scrollMain(900);
+  await click(container.querySelector<HTMLButtonElement>('.tab-settings')!);
+  expect(main.scrollTop).toBe(0);
+  expect(scrollTo).not.toHaveBeenCalled();
+  await vi.waitFor(() => {
+    if (!container.querySelector('.settings')) throw new Error('waiting for settings');
+  }, { timeout: 5000 });
+
+  // 設定で 240 までスクロールしてから編集へ戻ると 900 に戻る
+  await scrollMain(240);
+  await click(container.querySelector<HTMLButtonElement>('.tab-editor')!);
+  expect(main.scrollTop).toBe(900);
+
+  // 再び設定へ戻ると 240 に戻る
+  await click(container.querySelector<HTMLButtonElement>('.tab-settings')!);
+  expect(main.scrollTop).toBe(240);
+});

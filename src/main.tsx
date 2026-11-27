@@ -2,8 +2,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { DialogProvider } from './components/Dialogs';
 import { ResettableApp } from './components/ResettableApp';
+import { installPinchZoomLock } from './lib/browser';
 import { startSwUpdates } from './lib/swUpdate';
 import './styles.css';
+
+// 画像ビューア・インペイント以外でブラウザ標準のピンチ拡大を抑止する
+installPinchZoomLock();
 
 // オフラインでも開けるように、本番ビルドだけ Service Worker を登録する。
 // 登録に失敗してもアプリはそのまま使える。新しい版は画面の案内から適用する。

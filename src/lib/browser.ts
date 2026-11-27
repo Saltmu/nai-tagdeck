@@ -96,3 +96,65 @@ export function isImeComposing(
 ): boolean {
   return Boolean(event.isComposing || event.nativeEvent?.isComposing || event.keyCode === 229);
 }
+
+const MAIN_SCROLL_SELECTOR = '.app-main';
+
+/**
+ * アプリのメインスクロール対象を返す。
+ * 狭い画面（アプリシェル構成）では `.app-main` が内部スクロールし、
+ * 広い画面では従来どおり `window` がスクロールする。
+ */
+export function getMainScrollContainer(): HTMLElement | Window {
+  const main = document.querySelector<HTMLElement>(MAIN_SCROLL_SELECTOR);
+  if (main) {
+    const overflowY = window.getComputedStyle(main).overflowY;
+    if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') {
+      return main;
+    }
+  }
+  return window;
+}
+
+export function isWindowTarget(target: HTMLElement | Window): target is Window {
+  return target === window;
+}
+
+export function getScrollTop(target: HTMLElement | Window): number {
+  return isWindowTarget(target) ? target.scrollY : target.scrollTop;
+}
+
+export function setScrollTop(target: HTMLElement | Window, top: number): void {
+  if (isWindowTarget(target)) {
+    target.scrollTo(0, top);
+  } else {
+    target.scrollTop = top;
+  }
+}
+
+/** 独自のピンチズームを実装している領域（Pointer Events で扱うため touchmove は止めない）。 */
+const PINCH_ALLOWED_SELECTOR = '.viewer-stage, .inpaint-stage';
+
+/**
+ * 画像表示画面以外でのブラウザ標準ピンチズームを抑止する。
+ * iOS Safari は viewport の user-scalable=no や touch-action だけでは 2 本指ピンチを
+ * 止めきれないため、gesturestart / gesturechange と 2 本指 touchmove を補助的に止める。
+ */
+export function installPinchZoomLock(doc: Document = document): () => void {
+  const onGesture = (e: Event) => {
+    if (e.cancelable) e.preventDefault();
+  };
+  const onTouchMove = (e: TouchEvent) => {
+    if (e.touches.length < 2) return;
+    if (e.target instanceof Element && e.target.closest(PINCH_ALLOWED_SELECTOR)) return;
+    if (e.cancelable) e.preventDefault();
+  };
+  const options: AddEventListenerOptions = { passive: false };
+  doc.addEventListener('gesturestart', onGesture, options);
+  doc.addEventListener('gesturechange', onGesture, options);
+  doc.addEventListener('touchmove', onTouchMove, options);
+  return () => {
+    doc.removeEventListener('gesturestart', onGesture, options);
+    doc.removeEventListener('gesturechange', onGesture, options);
+    doc.removeEventListener('touchmove', onTouchMove, options);
+  };
+}
