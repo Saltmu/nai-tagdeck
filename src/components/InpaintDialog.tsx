@@ -81,6 +81,13 @@ const TOOLS: ReadonlyArray<{ value: InpaintTool; label: string; renderIcon: () =
   { value: 'pan', label: '移動・ズーム', renderIcon: () => <MoveIcon /> },
 ];
 
+function strokeIntersectsImage(stroke: MaskStroke, imageW: number, imageH: number): boolean {
+  const r = stroke.radius;
+  return stroke.points.some(
+    (p) => p.x >= -r && p.x <= imageW + r && p.y >= -r && p.y <= imageH + r,
+  );
+}
+
 function clampView(
   view: ViewState,
   stageW: number,
@@ -438,7 +445,11 @@ export function InpaintDialog({
       const finished = draftStrokeRef.current;
       draftStrokeRef.current = null;
       setIsDrawing(false);
-      if (e.type === 'pointerup' && !pinchCanceledRef.current) {
+      if (
+        e.type === 'pointerup' &&
+        !pinchCanceledRef.current &&
+        strokeIntersectsImage(finished, sessionRef.current.width, sessionRef.current.height)
+      ) {
         onPushStroke(finished);
       } else {
         drawMaskPreview(null);

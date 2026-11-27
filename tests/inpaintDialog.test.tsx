@@ -555,5 +555,26 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
     // 3) 100% リセットボタンで中央に戻る
     await click(buttonByText('拡大率を 100% に戻す', dialog));
     expect(wrap.style.transform).toBe('translate(0px, 0px) scale(1)');
+
+    // 4) 画像外の余白をタップしてもマスク履歴（Undo）には記録されない
+    await click(buttonByText('ブラシ', dialog));
+    const canvas = dialog.querySelector<HTMLCanvasElement>('.inpaint-mask-canvas')!;
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      x: 100,
+      y: 100,
+      left: 100,
+      top: 100,
+      right: 356,
+      bottom: 356,
+      width: 256,
+      height: 256,
+      toJSON: () => ({}),
+    });
+    await act(async () => {
+      stage.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 1, clientX: 5, clientY: 5 }));
+      stage.dispatchEvent(makePointerEvent('pointerup', { pointerId: 1, clientX: 5, clientY: 5 }));
+    });
+    expect(buttonByText('元に戻す', dialog).disabled).toBe(true);
+    expect(buttonByText('確定', dialog).disabled).toBe(true);
   });
 });
