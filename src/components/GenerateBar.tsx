@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useId, useLayoutEffect, useRef } from 'react';
 import type { Generator } from '../hooks/useGenerator';
 import type { InpaintSession } from '../hooks/useInpaintSession';
 import type { TokenState } from '../hooks/useToken';
@@ -7,7 +7,7 @@ import { estimateAnlasCost, PRECISE_REFERENCE_ANLAS, type AnlasEstimate } from '
 import { resolveSize, sizeChangePatch, type GenerationSettings, type SizeKey } from '../lib/generation';
 import { isFreeGeneration } from '../lib/novelai';
 import { referenceTypeLabel, type PreciseReferenceItem } from '../lib/referenceImage';
-import { AnlasLine } from './AnlasBalance';
+import { AnlasCostBadge } from './AnlasBalance';
 import { NextIcon } from './icons';
 import { SizePicker } from './SizePicker';
 
@@ -65,7 +65,9 @@ export function GenerateBar({
   onDisableInpaint,
 }: Props) {
   const barRef = useRef<HTMLElement>(null);
+  const costBadgeId = useId();
   const { generating } = generator;
+  const showCostBadge = Boolean(anlas || estimate);
   const customSize = resolveSize(generation);
   const activeList = inpaintSession ? [] : (activeReferences ?? (activeReference ? [activeReference] : []));
   const effectiveReferenceCount = inpaintSession ? 0 : (referenceCount ?? activeList.length);
@@ -143,7 +145,6 @@ export function GenerateBar({
 
   return (
     <section ref={barRef} className="generate-bar" aria-label="生成操作">
-      {anlas && <AnlasLine anlas={anlas} estimate={resolvedEstimate} />}
       {activeList.length > 0 && (
         <div className="gen-ref-indicator" role="status">
           {onOpenReferenceTab ? (
@@ -205,15 +206,19 @@ export function GenerateBar({
             中止
           </button>
         )}
-        <button
-          type="button"
-          className="btn btn-primary btn-large"
-          disabled={generating || blocker !== null}
-          title={blocker ?? undefined}
-          onClick={onGenerate}
-        >
-          {generating ? '生成中…' : '生成する'}
-        </button>
+        <div className="gen-submit-wrap">
+          <button
+            type="button"
+            className="btn btn-primary btn-large"
+            disabled={generating || blocker !== null}
+            title={blocker ?? undefined}
+            aria-describedby={showCostBadge ? costBadgeId : undefined}
+            onClick={onGenerate}
+          >
+            {generating ? '生成中…' : '生成する'}
+          </button>
+          {showCostBadge && <AnlasCostBadge id={costBadgeId} estimate={resolvedEstimate} />}
+        </div>
       </div>
     </section>
   );

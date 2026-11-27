@@ -20,21 +20,20 @@
   display: none;
 }
 
-/* 狭い画面では、編集タブでも生成バーを残す。生成ペイン自体は箱を作らず、
-   画像一覧とドックだけ隠す（バーは画面下端に固定されているため残る）。
-   編集ペインの末尾が固定バーに隠れないよう、バーの高さ分だけ余白を取る。 */
+/* 狭い画面では、編集タブでもドックと生成バーを残す。生成ペイン自体は箱を作らず、
+   画像一覧だけ隠す（ドックとバーは画面下端に固定されているため残る）。
+   編集ペインの末尾が固定ドック＋バーに隠れないよう、両方の高さ分だけ余白を取る。 */
 @media (max-width: 1099px) {
   .workbench[data-tab='editor'] .pane-generate {
     display: contents;
   }
 
-  .workbench[data-tab='editor'] .pane-generate > .gallery,
-  .workbench[data-tab='editor'] .pane-generate > .dock {
+  .workbench[data-tab='editor'] .pane-generate > .gallery {
     display: none;
   }
 
   .pane-editor {
-    padding-bottom: calc(var(--generate-bar-height, 0px) + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--dock-bar-height, 3.75rem) + var(--generate-bar-height, 0px) + env(safe-area-inset-bottom));
   }
 }
 

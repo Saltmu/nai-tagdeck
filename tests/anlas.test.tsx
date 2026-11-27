@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AnlasDetails, AnlasLine } from '../src/components/AnlasBalance';
+import { AnlasBalance, AnlasCostBadge, AnlasDetails } from '../src/components/AnlasBalance';
 import { useAnlas, type AnlasState } from '../src/hooks/useAnlas';
 import { estimateAnlasCost, formatAnlasEstimate, type AnlasEstimate } from '../src/lib/anlasEstimate';
 import { readAllAppData } from '../src/lib/db';
@@ -113,7 +113,7 @@ describe('anlasEstimate', () => {
   });
 });
 
-describe('AnlasLine', () => {
+describe('AnlasBalance', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -128,63 +128,98 @@ describe('AnlasLine', () => {
     container.remove();
   });
 
-  const renderLine = async (state: AnlasState, estimate: AnlasEstimate = { kind: 'unknown', minAdditional: 0 }) => {
-    await act(async () => root.render(<AnlasLine anlas={state} estimate={estimate} />));
-    return container.querySelector('.anlas-line')!;
+  const renderBalance = async (state: AnlasState) => {
+    await act(async () => root.render(<AnlasBalance anlas={state} />));
+    return container.querySelector('.dock-anlas')!;
   };
 
-  it('未設定のときは「消費 — / 残高 未設定」と出す', async () => {
-    const line = await renderLine(
-      fakeState({ status: 'unset', subscription: null }),
-      { kind: 'unknown', minAdditional: 0 },
-    );
-    expect(line.textContent).toContain('消費 — / 残高 未設定');
-    expect(line.querySelector('[aria-label="残高を更新"]')).toBeNull();
+  it('未設定のときは「残高 未設定」と出し、更新ボタンを出さない', async () => {
+    const el = await renderBalance(fakeState({ status: 'unset', subscription: null }));
+    expect(el.textContent).toContain('残高 未設定');
+    expect(el.querySelector('[aria-label="残高を更新"]')).toBeNull();
   });
 
   it('読み込み中は残高を「読み込み中…」と出す', async () => {
-    const line = await renderLine(
-      fakeState({ status: 'loading', subscription: null, loading: true }),
-      { kind: 'unknown', minAdditional: 0 },
-    );
-    expect(line.textContent).toContain('消費 — / 残高 読み込み中…');
+    const el = await renderBalance(fakeState({ status: 'loading', subscription: null, loading: true }));
+    expect(el.textContent).toContain('残高 読み込み中…');
   });
 
-  it('Opus 無料枠なら「消費 0 / 残高 18,000」と出す', async () => {
-    const line = await renderLine(fakeState({}), { kind: 'exact', amount: 0 });
-    expect(line.textContent).toContain('消費 0 / 残高 18,000');
-  });
-
-  it('精密参照 1 枚なら「消費 5 / 残高 18,000」と出す', async () => {
-    const line = await renderLine(fakeState({}), { kind: 'exact', amount: 5 });
-    expect(line.textContent).toContain('消費 5 / 残高 18,000');
-  });
-
-  it('非 Opus の有料見積もりなら「消費 有料 / 残高 18,000」と出す', async () => {
-    const line = await renderLine(
-      fakeState({ subscription: { ...opusSubscription, tier: 1, usage: null } }),
-      { kind: 'paid', minAdditional: 0 },
-    );
-    expect(line.textContent).toContain('消費 有料 / 残高 18,000');
+  it('取得済みのときは「残高 18,000」と出す', async () => {
+    const el = await renderBalance(fakeState({}));
+    expect(el.textContent).toContain('残高 18,000');
   });
 
   it('取得失敗のときは「取得できませんでした」と理由を出し、更新ボタンも出す', async () => {
-    const line = await renderLine(
+    const el = await renderBalance(
       fakeState({ status: 'error', subscription: null, error: 'トークンが無効です' }),
-      { kind: 'unknown', minAdditional: 0 },
     );
-    expect(line.textContent).toContain('消費 — / 残高 取得できませんでした');
-    expect(line.textContent).toContain('トークンが無効です');
-    expect(line.querySelector('[aria-label="残高を更新"]')).not.toBeNull();
+    expect(el.classList.contains('is-error')).toBe(true);
+    expect(el.textContent).toContain('残高 取得できませんでした');
+    expect(el.textContent).toContain('トークンが無効です');
+    expect(el.querySelector('[aria-label="残高を更新"]')).not.toBeNull();
   });
 
   it('手動の更新ボタンを押すと refresh が呼ばれる', async () => {
     const refresh = vi.fn();
-    const line = await renderLine(fakeState({ refresh }), { kind: 'exact', amount: 0 });
+    const el = await renderBalance(fakeState({ refresh }));
     await act(async () => {
-      (line.querySelector('[aria-label="残高を更新"]') as HTMLButtonElement).click();
+      (el.querySelector('[aria-label="残高を更新"]') as HTMLButtonElement).click();
     });
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AnlasCostBadge', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
+  const renderBadge = async (estimate: AnlasEstimate) => {
+    await act(async () => root.render(<AnlasCostBadge estimate={estimate} />));
+    return container.querySelector('.gen-cost-badge')!;
+  };
+
+  it('Opus 無料枠なら「0」を出し、is-paid を付けない', async () => {
+    const badge = await renderBadge({ kind: 'exact', amount: 0 });
+    expect(badge.textContent?.trim()).toBe('0');
+    expect(badge.classList.contains('is-paid')).toBe(false);
+    expect(badge.getAttribute('aria-label')).toBe('消費見積 0 Anlas');
+  });
+
+  it('精密参照 1 枚なら「5」を出し、is-paid を付ける', async () => {
+    const badge = await renderBadge({ kind: 'exact', amount: 5 });
+    expect(badge.textContent?.trim()).toBe('5');
+    expect(badge.classList.contains('is-paid')).toBe(true);
+    expect(badge.getAttribute('aria-label')).toBe('消費見積 5 Anlas');
+  });
+
+  it('非 Opus の有料見積もりなら「有料」と「+5〜」を出し、is-paid を付ける', async () => {
+    const paid = await renderBadge({ kind: 'paid', minAdditional: 0 });
+    expect(paid.textContent?.trim()).toBe('有料');
+    expect(paid.classList.contains('is-paid')).toBe(true);
+    expect(paid.getAttribute('aria-label')).toBe('消費見積 有料');
+
+    const paidWithRef = await renderBadge({ kind: 'paid', minAdditional: 5 });
+    expect(paidWithRef.textContent?.trim()).toBe('+5〜');
+    expect(paidWithRef.classList.contains('is-paid')).toBe(true);
+    expect(paidWithRef.getAttribute('aria-label')).toBe('消費見積 +5〜');
+  });
+
+  it('購読不明のときは「—」を出す', async () => {
+    const badge = await renderBadge({ kind: 'unknown', minAdditional: 0 });
+    expect(badge.textContent?.trim()).toBe('—');
+    expect(badge.classList.contains('is-paid')).toBe(false);
+    expect(badge.getAttribute('aria-label')).toBe('消費見積 不明');
   });
 });
 

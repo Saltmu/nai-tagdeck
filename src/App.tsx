@@ -240,7 +240,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   });
   const openSettings = useCallback(() => setTab('settings'), []);
   const openReferenceTab = useCallback(() => {
-    if (window.matchMedia?.('(max-width: 1099px)').matches) setTab('generate');
+    setTab((current) => (current === 'editor' || current === 'generate' ? current : 'generate'));
     setDockOpenTab((prev) => ({ tab: 'reference', seq: prev.seq + 1 }));
   }, []);
   const handleUseAsReference = useCallback(
@@ -503,6 +503,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               generating={generator.generating}
               referenceActive={referenceImage.activeItems.length > 0}
               referenceCount={referenceImage.activeItems.length}
+              anlas={anlas}
               error={generator.error}
               onDismissError={generator.dismissError}
               promptPanel={

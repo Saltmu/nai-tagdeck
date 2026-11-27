@@ -162,10 +162,16 @@ it('starts generation from the editor tab', async () => {
   });
 });
 
-it('shows the Anlas estimate and balance above the generate button, and refreshes balance after a generation', async () => {
+it('shows the Anlas balance in the dock bar, overlays the cost badge on the generate button, and refreshes balance after a generation', async () => {
   await vi.waitFor(() => {
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 0 / 残高 18,000');
+    expect(container.querySelector('.dock-bar .dock-anlas')?.textContent).toContain('残高 18,000');
   });
+  const submitWrap = container.querySelector('.gen-submit-wrap');
+  const genBtn = generateButtons()[0]!;
+  const costBadge = submitWrap?.querySelector('.gen-cost-badge');
+  expect(costBadge?.textContent?.trim()).toBe('0');
+  expect(genBtn.getAttribute('aria-describedby')).toBe(costBadge?.id);
+
   vi.mocked(fetchSubscription).mockResolvedValueOnce({
     tier: 3,
     fixedTrainingStepsLeft: 9995,
@@ -174,28 +180,42 @@ it('shows the Anlas estimate and balance above the generate button, and refreshe
     expiresAt: null,
     usage: null,
   });
-  await click(generateButtons()[0]!);
+  await click(genBtn);
   await vi.waitFor(() => {
     expect(fetchSubscription).toHaveBeenCalledTimes(2);
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 0 / 残高 17,995');
+    expect(container.querySelector('.dock-bar .dock-anlas')?.textContent).toContain('残高 17,995');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('0');
   });
 });
 
-it('shows unknown estimate when subscription refresh fails after generation', async () => {
+it('shows unknown estimate badge when subscription refresh fails after generation', async () => {
   await vi.waitFor(() => {
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 0 / 残高 18,000');
+    expect(container.querySelector('.dock-bar .dock-anlas')?.textContent).toContain('残高 18,000');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('0');
   });
   vi.mocked(fetchSubscription).mockRejectedValueOnce(new Error('network error'));
   await click(generateButtons()[0]!);
   await vi.waitFor(() => {
     expect(fetchSubscription).toHaveBeenCalledTimes(2);
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 — / 残高 取得できませんでした');
+    expect(container.querySelector('.dock-bar .dock-anlas')?.textContent).toContain('残高 取得できませんでした');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('—');
   });
+});
+
+it('keeps the dock available on the editor tab and allows opening dock panels without leaving editor', async () => {
+  expect(container.querySelector('.workbench')?.getAttribute('data-tab')).toBe('editor');
+  const dock = container.querySelector('.dock');
+  expect(dock).not.toBeNull();
+  expect(dock?.classList.contains('is-open')).toBe(false);
+
+  await switchDockTab('プロンプト');
+  expect(dock?.classList.contains('is-open')).toBe(true);
+  expect(container.querySelector('.workbench')?.getAttribute('data-tab')).toBe('editor');
 });
 
 it('shows the plan and the granted/purchased breakdown in the token settings', async () => {
   await vi.waitFor(() => {
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('残高 18,000');
+    expect(container.querySelector('.dock-bar .dock-anlas')?.textContent).toContain('残高 18,000');
   });
   await switchTab('tab-settings');
   await vi.waitFor(() => {
