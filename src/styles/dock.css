@@ -1,6 +1,7 @@
 /* ---- dock: プロンプト / 生成 ---- */
 /* 画像を主役にし、プロンプトと生成設定は下に浮かせたタブ付きのドックへ入れる */
 .dock {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -20,15 +21,84 @@
   flex: none;
   touch-action: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.25rem;
   padding: 0.35rem 0.5rem;
 }
 
 .dock-tabs {
-  flex: 1;
+  order: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   gap: 0.25rem;
+}
+
+.dock-anlas {
+  order: 2;
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0 0.25rem;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.dock-anlas .anlas-icon {
+  flex: none;
+}
+
+.dock-anlas-text {
+  font-variant-numeric: tabular-nums;
+}
+
+.dock-anlas .anlas-refresh {
+  width: 30px;
+  height: 30px;
+}
+
+.dock-anlas.is-error {
+  order: 3;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  padding-top: 0.15rem;
+  border-top: 1px solid var(--border);
+}
+
+.dock-anlas.is-error .anlas-refresh {
+  margin-left: auto;
+}
+
+.anlas-error {
+  color: var(--danger);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.dock-toggle {
+  order: 3;
+}
+
+/* ドック幅が 440px 以下のとき、3 タブと残高が重ならないよう残高を 2 段目へ折り返す */
+@container (max-width: 440px) {
+  .dock-toggle {
+    order: 2;
+  }
+
+  .dock-anlas {
+    order: 3;
+    flex: 1 0 100%;
+    padding-top: 0.2rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .dock-anlas .anlas-refresh {
+    margin-left: auto;
+  }
 }
 
 .dock-tab {
@@ -137,7 +207,7 @@
    生成バーの上に置く（バーの高さは --generate-bar-height で実測する） */
 @media (max-width: 1099px) {
   .pane-generate {
-    padding-bottom: calc(3.75rem + var(--generate-bar-height, 0px) + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--dock-bar-height, 3.75rem) + var(--generate-bar-height, 0px) + env(safe-area-inset-bottom));
   }
 
   .dock {

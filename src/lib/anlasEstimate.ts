@@ -33,7 +33,7 @@ export function estimateAnlasCost(input: AnlasEstimateInput): AnlasEstimate {
   return { kind: 'paid', minAdditional: additional };
 }
 
-/** 見積もり結果を `AnlasLine` 左側の表示文字列へ整形する。 */
+/** 見積もり結果を `AnlasCostBadge` の表示文字列へ整形する。 */
 export function formatAnlasEstimate(estimate: AnlasEstimate): string {
   switch (estimate.kind) {
     case 'exact':

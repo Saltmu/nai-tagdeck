@@ -61,6 +61,8 @@
   --header-height: 57px;
   /* 狭い画面で下端に固定した生成ドック・未読プレビューの高さ。無いときは 0 */
   --dock-offset: 0px;
+  /* 狭い画面でのドックバー単体の高さ（編集・生成ペインの下余白に使う）。無いときは 0 */
+  --dock-bar-height: 0px;
   /* 下部に固定した生成バーの高さ（GenerateBar が実測値に更新する）。無いときは 0 */
   --generate-bar-height: 0px;
   --latest-offset: 0px;

@@ -29,12 +29,10 @@ function formatDate(ms: number): string {
 }
 
 /**
- * 生成ボタンの上に置く 1 行の表示。「消費 xxx / 残高 yyy」の形で、
- * 消費は生成前の見積もり、残高は合計 Anlas（付与分＋購入分）。
+ * ドックバーに統合する Anlas 残高表示。閉じた状態でも残高と更新ボタンを常時確認できる。
  */
-export function AnlasLine({ anlas, estimate }: { anlas: AnlasState; estimate: AnlasEstimate }) {
+export function AnlasBalance({ anlas }: { anlas: AnlasState }) {
   const { status, subscription, error, loading } = anlas;
-  const consumedText = formatAnlasEstimate(estimate);
   const balanceText =
     status === 'unset'
       ? '未設定'
@@ -46,15 +44,13 @@ export function AnlasLine({ anlas, estimate }: { anlas: AnlasState; estimate: An
             ? formatAnlas(subscription.totalAnlas)
             : '—';
   return (
-    <p className="anlas-line" role="status">
+    <div className={`dock-anlas${status === 'error' ? ' is-error' : ''}`} role="status">
       <AnlasIcon />
-      <span>
-        消費 {consumedText} / 残高 {balanceText}
-      </span>
+      <span className="dock-anlas-text">残高 {balanceText}</span>
       {status !== 'unset' && (
         <button
           type="button"
-          className="btn btn-small anlas-refresh"
+          className="icon-btn anlas-refresh"
           onClick={anlas.refresh}
           disabled={loading}
           aria-label="残高を更新"
@@ -64,7 +60,37 @@ export function AnlasLine({ anlas, estimate }: { anlas: AnlasState; estimate: An
         </button>
       )}
       {status === 'error' && error && <span className="anlas-error">{error}</span>}
-    </p>
+    </div>
+  );
+}
+
+/**
+ * 「生成する」ボタンの右上にオーバーレイ表示する消費見積 Anlas バッジ。
+ */
+export function AnlasCostBadge({ estimate, id }: { estimate: AnlasEstimate; id?: string }) {
+  const consumedText = formatAnlasEstimate(estimate);
+  const isPaid =
+    (estimate.kind === 'exact' && estimate.amount > 0) ||
+    estimate.kind === 'paid' ||
+    (estimate.kind === 'unknown' && estimate.minAdditional > 0);
+  const ariaLabel =
+    estimate.kind === 'exact'
+      ? `消費見積 ${consumedText} Anlas`
+      : estimate.kind === 'paid'
+        ? `消費見積 ${consumedText}`
+        : estimate.minAdditional > 0
+          ? `消費見積 ${consumedText} Anlas`
+          : '消費見積 不明';
+  return (
+    <span
+      id={id}
+      className={`gen-cost-badge${isPaid ? ' is-paid' : ''}`}
+      role="status"
+      aria-label={ariaLabel}
+    >
+      <AnlasIcon />
+      <span>{consumedText}</span>
+    </span>
   );
 }
 

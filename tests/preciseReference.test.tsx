@@ -68,7 +68,7 @@ async function renderApp() {
     );
   });
   await vi.waitFor(() => {
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('残高');
+    expect(container.querySelector('.dock-anlas')?.textContent).toContain('残高');
     expect(buttonByText('生成する').disabled).toBe(false);
   });
 }
@@ -170,11 +170,12 @@ afterEach(async () => {
 });
 
 describe('精密参照 UI・Anlas 連動・生成送信', () => {
-  it('アップロード・種別切替・強さ変更・一時 OFF・削除で GenerateBar と AnlasLine が連動し、生成リクエストに反映される', async () => {
+  it('アップロード・種別切替・強さ変更・一時 OFF・削除で GenerateBar と Anlas 表示が連動し、生成リクエストに反映される', async () => {
     await renderApp();
 
     // 初期状態: 消費 0、インジケーターなし、タブにアクティブバッジなし
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 0 / 残高 18,000');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('0');
+    expect(container.querySelector('.dock-anlas')?.textContent).toContain('残高 18,000');
     expect(container.querySelector('.gen-ref-indicator')).toBeNull();
     expect(dockTab('参照画像').querySelector('.dock-tab-badge')).toBeNull();
 
@@ -183,7 +184,8 @@ describe('精密参照 UI・Anlas 連動・生成送信', () => {
 
     // アップロードすると 5 Anlas・インジケーター・バッジが ON になる
     await uploadReferenceFile('my-outfit.png');
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 5 / 残高 18,000');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('5');
+    expect(container.querySelector('.dock-anlas')?.textContent).toContain('残高 18,000');
     expect(container.querySelector('.gen-ref-indicator')?.textContent).toContain('精密参照 ON（キャラクター / +5 Anlas）');
     expect(dockTab('参照画像').querySelector('.dock-tab-badge')?.textContent).toBe('1');
     expect(dockTab('参照画像').textContent).toContain('（精密参照 1枚 ON）');
@@ -214,7 +216,8 @@ describe('精密参照 UI・Anlas 連動・生成送信', () => {
 
     // GenerateBar の「一時 OFF」を押すと画像保持のまま 0 Anlas・インジケーター非表示になる
     await click(buttonByText('一時 OFF', container.querySelector('.generate-bar')!));
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 0 / 残高 18,000');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('0');
+    expect(container.querySelector('.dock-anlas')?.textContent).toContain('残高 18,000');
     expect(container.querySelector('.gen-ref-indicator')).toBeNull();
     expect(container.querySelector('.reference-thumb')).not.toBeNull();
     expect(dockTab('参照画像').querySelector('.dock-tab-badge')).toBeNull();
@@ -228,11 +231,13 @@ describe('精密参照 UI・Anlas 連動・生成送信', () => {
     // トグルで再び ON にし、削除すると 0 Anlas に戻りプレビュー URL が revoke される
     const toggle = container.querySelector<HTMLInputElement>('.reference-panel input[role="switch"]')!;
     await click(toggle);
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 5 / 残高 18,000');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('5');
+    expect(container.querySelector('.dock-anlas')?.textContent).toContain('残高 18,000');
 
     const previewUrl = container.querySelector<HTMLImageElement>('.reference-thumb')!.src;
     await click(buttonByText('削除', container.querySelector('.reference-panel')!));
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 0 / 残高 18,000');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('0');
+    expect(container.querySelector('.dock-anlas')?.textContent).toContain('残高 18,000');
     expect(container.querySelector('.reference-thumb')).toBeNull();
     expect(revokedUrls).toContain(previewUrl);
   });
@@ -246,7 +251,8 @@ describe('精密参照 UI・Anlas 連動・生成送信', () => {
     await vi.waitFor(() => {
       expect(container.querySelectorAll('.reference-card')).toHaveLength(2);
     });
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 10 / 残高 18,000');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('10');
+    expect(container.querySelector('.dock-anlas')?.textContent).toContain('残高 18,000');
     expect(container.querySelector('.gen-ref-indicator')?.textContent).toContain('精密参照 2枚 ON（+10 Anlas）');
     expect(container.querySelectorAll('.gen-ref-thumbs img')).toHaveLength(2);
     expect(dockTab('参照画像').querySelector('.dock-tab-badge')?.textContent).toBe('2');
@@ -277,7 +283,8 @@ describe('精密参照 UI・Anlas 連動・生成送信', () => {
 
     // スロット 2（slot-a.png）だけ一時 OFF にして生成すると、ON の 2 枚だけが順番どおり送信される
     await click(card2().querySelector<HTMLInputElement>('input[role="switch"]')!);
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 10 / 残高 18,000');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('10');
+    expect(container.querySelector('.dock-anlas')?.textContent).toContain('残高 18,000');
     expect(container.querySelector('.gen-ref-indicator')?.textContent).toContain('精密参照 2枚 ON（+10 Anlas）');
 
     await click(buttonByText('生成する'));
@@ -341,7 +348,7 @@ describe('精密参照 UI・Anlas 連動・生成送信', () => {
     }
   });
 
-  it('非 Opus / 枠超過時は AnlasLine が「+5N〜」になる', async () => {
+  it('非 Opus / 枠超過時は AnlasCostBadge が「+5N〜」になる', async () => {
     vi.mocked(fetchSubscription).mockResolvedValueOnce({
       tier: 1,
       fixedTrainingStepsLeft: 500,
@@ -351,14 +358,17 @@ describe('精密参照 UI・Anlas 連動・生成送信', () => {
       usage: null,
     });
     await renderApp();
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 有料 / 残高 500');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('有料');
+    expect(container.querySelector('.dock-anlas')?.textContent).toContain('残高 500');
 
     await click(dockTab('参照画像'));
     await uploadReferenceFile('first.png', 1);
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 +5〜 / 残高 500');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('+5〜');
+    expect(container.querySelector('.dock-anlas')?.textContent).toContain('残高 500');
 
     await uploadReferenceFile('second.png', 2);
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('消費 +10〜 / 残高 500');
+    expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('+10〜');
+    expect(container.querySelector('.dock-anlas')?.textContent).toContain('残高 500');
   });
 });
 

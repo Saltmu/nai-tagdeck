@@ -1,5 +1,7 @@
 import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import type { AnlasState } from '../hooks/useAnlas';
 import { copyText } from '../lib/browser';
+import { AnlasBalance } from './AnlasBalance';
 import { CheckIcon, ChevronUpIcon, CopyIcon } from './icons';
 
 export type DockTab = 'prompt' | 'generate' | 'reference';
@@ -19,6 +21,8 @@ interface Props {
   referenceActive?: boolean;
   /** 有効な精密参照の枚数。 */
   referenceCount?: number;
+  /** Anlas 残高の表示状態。渡さないときはドックバーに残高を出さない。 */
+  anlas?: AnlasState;
   error: string | null;
   onDismissError: () => void;
   promptPanel: ReactNode;
@@ -28,7 +32,7 @@ interface Props {
 
 /**
  * 画像の下に浮かべる「プロンプト / 生成 / 参照画像」のドック。
- * 閉じた状態ではタブのバーだけを見せ、画像を広く使う。スマホでは下からせり上がるシートになり、PC では画像一覧の下に固定される。
+ * 閉じた状態ではタブのバーと Anlas 残高だけを見せ、画像を広く使う。スマホでは編集・生成タブ共通で下からせり上がるシートになり、PC では画像一覧の下に固定される。
  */
 export function GenerateDock({
   collapseSignal,
@@ -36,6 +40,7 @@ export function GenerateDock({
   generating,
   referenceActive = false,
   referenceCount,
+  anlas,
   error,
   onDismissError,
   promptPanel,
@@ -44,6 +49,7 @@ export function GenerateDock({
 }: Props) {
   const id = useId();
   const dockRef = useRef<HTMLElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<Record<DockTab, HTMLButtonElement | null>>({
     prompt: null,
     generate: null,
@@ -87,23 +93,29 @@ export function GenerateDock({
     }, 1500);
   };
 
-  // 狭い画面ではドックが下端に固定される。高さの分だけ通知を持ち上げる。
+  // 狭い画面ではドックが下端に固定される。全体の高さは通知の持ち上げに、バーの高さは編集・生成ペインの下余白に使う。
   useEffect(() => {
     const el = dockRef.current;
+    const barEl = barRef.current;
     if (!el) return;
     const media = window.matchMedia?.('(max-width: 1099px)');
     const publish = () => {
-      const height = media?.matches ? Math.ceil(el.getBoundingClientRect().height) : 0;
+      const isNarrow = !!media?.matches;
+      const height = isNarrow ? Math.ceil(el.getBoundingClientRect().height) : 0;
+      const barHeight = isNarrow && barEl ? Math.ceil(barEl.getBoundingClientRect().height) : 0;
       document.documentElement.style.setProperty('--dock-offset', `${height}px`);
+      document.documentElement.style.setProperty('--dock-bar-height', `${barHeight}px`);
     };
     publish();
     const observer = new ResizeObserver(publish);
     observer.observe(el);
+    if (barEl) observer.observe(barEl);
     media?.addEventListener('change', publish);
     return () => {
       observer.disconnect();
       media?.removeEventListener('change', publish);
       document.documentElement.style.removeProperty('--dock-offset');
+      document.documentElement.style.removeProperty('--dock-bar-height');
     };
   }, [open, error]);
 
@@ -131,7 +143,7 @@ export function GenerateDock({
     const dy = e.clientY - start;
     if (dy < -24) setOpen(true);
     else if (dy > 24) setOpen(false);
-    else if (Math.abs(dy) < 8 && !open && !(e.target as Element).closest('button')) setOpen(true);
+    else if (Math.abs(dy) < 8 && !open && !(e.target as Element).closest('button, .dock-anlas')) setOpen(true);
   };
 
   const select = (next: DockTab) => {
@@ -185,7 +197,13 @@ export function GenerateDock({
           </div>
         </div>
       )}
-      <div className="dock-bar" onPointerDown={onBarPointerDown} onPointerUp={onBarPointerUp} onPointerCancel={() => { dragStart.current = null; }}>
+      <div
+        ref={barRef}
+        className="dock-bar"
+        onPointerDown={onBarPointerDown}
+        onPointerUp={onBarPointerUp}
+        onPointerCancel={() => { dragStart.current = null; }}
+      >
         <div className="dock-tabs" role="tablist" aria-label="ドックの切り替え" onKeyDown={onTabKeyDown}>
           {tabs.map((t) => (
             <button
@@ -216,6 +234,7 @@ export function GenerateDock({
             </button>
           ))}
         </div>
+        {anlas && <AnlasBalance anlas={anlas} />}
         <button
           type="button"
           className="icon-btn dock-toggle"

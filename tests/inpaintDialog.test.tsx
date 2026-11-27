@@ -76,7 +76,7 @@ async function renderApp() {
     );
   });
   await vi.waitFor(() => {
-    expect(container.querySelector('.anlas-line')?.textContent).toContain('残高');
+    expect(container.querySelector('.dock-anlas')?.textContent).toContain('残高');
     expect(buttonByText('生成する').disabled).toBe(false);
   });
 }
