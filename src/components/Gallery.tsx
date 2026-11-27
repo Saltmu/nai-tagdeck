@@ -224,7 +224,7 @@ export function Gallery({
             className="btn btn-small gallery-zip-btn"
             disabled={pinnedCount === 0}
             aria-busy={zipping}
-            aria-describedby={pinnedCount === 0 ? `${id}-actions-hint` : undefined}
+            aria-describedby={images.length === 0 ? `${id}-actions-hint` : undefined}
             title={pinnedCount === 0 ? 'ピン留めした画像をまとめて ZIP で保存します' : `ピン留めした ${pinnedCount}枚を ZIP で保存`}
             onClick={() => void downloadPinnedZip()}
           >
@@ -249,11 +249,9 @@ export function Gallery({
           </button>
         </div>
       </div>
-      {(images.length === 0 || pinnedCount === 0) && (
+      {images.length === 0 && (
         <p className="hint gallery-actions-hint" id={`${id}-actions-hint`} role="note">
-          {images.length === 0
-            ? '画像がまだありません'
-            : 'ピン留めした画像がありません。ZIP保存するには画像をピン留めしてください'}
+          画像がまだありません
         </p>
       )}
 

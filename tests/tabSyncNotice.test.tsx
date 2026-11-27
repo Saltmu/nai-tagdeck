@@ -183,6 +183,12 @@ async function mountApp() {
   await flush(80);
 }
 
+async function openDictionary() {
+  await click(button('設定'));
+  await waitForMount('.settings-nav-btn');
+  await click(container.querySelector<HTMLButtonElement>('.settings-nav-btn')!);
+}
+
 describe('multi-tab sync notice & conflict resolution', () => {
   it('pauses autosave on other-tab update, reloads latest without losing generated images, and closes dictionary drafts', async () => {
     const initialWs = workspaceReducer(emptyWorkspace(), { type: 'add', target: 'base', category: 'quality', tag: 'masterpiece' });
@@ -200,7 +206,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     expect(container.querySelectorAll('.gallery .thumb-frame')).toHaveLength(1);
 
     // 辞書タブで編集フォームを開く
-    await click(button('辞書'));
+    await openDictionary();
     await waitForMount('.dictionary');
     await click(button('編集', container.querySelector('.dictionary')!));
     expect(container.querySelector('.entry-form')).not.toBeNull();
@@ -236,7 +242,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     // 最新ワークスペースが反映されている
     expect(container.querySelector('output.preview-text')?.textContent).toContain('from-other-tab');
     // 辞書タブの下書きが閉じ、最新辞書が表示される
-    await click(button('辞書'));
+    await openDictionary();
     await waitForMount('.dictionary');
     expect(container.querySelector('.entry-form')).toBeNull();
     expect(container.textContent).toContain('moonlight');
@@ -555,7 +561,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
       dictionary: [{ id: 'd1', tag: 'smile', category: 'appearance', alias: '笑顔', default_weight: 1, sort_order: 0, updated_at: '2026-01-01' }],
     }, false);
     await mountApp();
-    await click(button('辞書'));
+    await openDictionary();
     await waitForMount('.dictionary');
 
     let releaseFileText!: (text: string) => void;
@@ -623,7 +629,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
 
     expect(container.querySelector('.tab-sync')?.textContent).toContain('migration failed');
     expect(container.querySelector('output.preview-text')?.textContent).toContain('keep-me');
-    await click(button('辞書'));
+    await openDictionary();
     await waitForMount('.dictionary');
     expect(container.textContent).toContain('old-dict');
     expect(container.textContent).not.toContain('new-dict');
@@ -902,7 +908,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
       return realPut(entries);
     });
 
-    await click(button('辞書'));
+    await openDictionary();
     await waitForMount('.dictionary');
     await click(button('＋ 新規登録'));
     const form = container.querySelector<HTMLFormElement>('section[aria-label="新規登録"] form')!;
@@ -973,7 +979,7 @@ describe('multi-tab sync notice & conflict resolution', () => {
     // 移行エラーと再試行ボタンが出るが、読み込めた辞書・作業タグは画面に表示されたまま
     expect(container.querySelector('.error-banner')?.textContent).toContain('quota exceeded');
     expect(container.querySelector('output.preview-text')?.textContent).toContain('legacy-saved-tag');
-    await click(button('辞書'));
+    await openDictionary();
     await waitForMount('.dictionary');
     expect(container.textContent).toContain('saved-dict-tag');
 

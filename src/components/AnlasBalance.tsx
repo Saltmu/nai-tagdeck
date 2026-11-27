@@ -29,7 +29,7 @@ function formatDate(ms: number): string {
 }
 
 /**
- * ドックバーに統合する Anlas 残高表示。閉じた状態でも残高と更新ボタンを常時確認できる。
+ * ヘッダーに置くコンパクトな Anlas 残高表示。トークン設定済みのときは押して手動更新できる。
  */
 export function AnlasBalance({ anlas }: { anlas: AnlasState }) {
   const { status, subscription, error, loading } = anlas;
@@ -37,29 +37,53 @@ export function AnlasBalance({ anlas }: { anlas: AnlasState }) {
     status === 'unset'
       ? '未設定'
       : status === 'loading'
-        ? '読み込み中…'
+        ? '…'
         : status === 'error'
-          ? '取得できませんでした'
+          ? '取得失敗'
           : subscription
             ? formatAnlas(subscription.totalAnlas)
             : '—';
+
+  if (status === 'unset') {
+    return (
+      <div className="header-anlas" role="status" title="Anlas 残高（トークン未設定）">
+        <AnlasIcon />
+        <span className="visually-hidden">残高 </span>
+        <span className="header-anlas-text">{balanceText}</span>
+      </div>
+    );
+  }
+
+  const title =
+    status === 'error' && error
+      ? `残高を取得できませんでした（${error}）。クリックして再取得`
+      : 'Anlas 残高を更新';
+
   return (
-    <div className={`dock-anlas${status === 'error' ? ' is-error' : ''}`} role="status">
-      <AnlasIcon />
-      <span className="dock-anlas-text">残高 {balanceText}</span>
-      {status !== 'unset' && (
-        <button
-          type="button"
-          className="icon-btn anlas-refresh"
-          onClick={anlas.refresh}
-          disabled={loading}
-          aria-label="残高を更新"
-          title="残高を更新"
-        >
-          <RefreshIcon />
-        </button>
-      )}
-      {status === 'error' && error && <span className="anlas-error">{error}</span>}
+    <div className={`header-anlas${status === 'error' ? ' is-error' : ''}`} role="status">
+      <button
+        type="button"
+        className="header-anlas-btn"
+        onClick={anlas.refresh}
+        disabled={loading}
+        aria-label="残高を更新"
+        title={title}
+      >
+        <AnlasIcon />
+        <span className="visually-hidden">残高 </span>
+        <span className="header-anlas-text">
+          {status === 'loading' ? (
+            <>
+              <span aria-hidden="true">{balanceText}</span>
+              <span className="visually-hidden">読み込み中…</span>
+            </>
+          ) : (
+            balanceText
+          )}
+        </span>
+        <RefreshIcon />
+        {status === 'error' && error && <span className="visually-hidden">（{error}）</span>}
+      </button>
     </div>
   );
 }
@@ -91,6 +115,60 @@ export function AnlasCostBadge({ estimate, id }: { estimate: AnlasEstimate; id?:
       <AnlasIcon />
       <span>{consumedText}</span>
     </span>
+  );
+}
+
+/**
+ * 設定画面の最上部に単独で置く V5 利用枠のインジケーターカード（Opus のときだけ表示）。
+ */
+export function V5UsageCard({ anlas }: { anlas?: AnlasState }) {
+  const subscription = anlas?.subscription;
+  const usage = subscription?.tier === 3 ? subscription.usage : null;
+  if (!anlas || !usage) return null;
+  const clamped = Math.min(100, Math.max(0, usage.percent));
+  const untilNext =
+    usage.timeUntilNextPercent !== null && usage.timeUntilNextPercent !== undefined
+      ? formatDuration(usage.timeUntilNextPercent)
+      : '';
+  const stateClass = usage.isNegative || clamped <= 5 ? ' is-over' : clamped <= 20 ? ' is-low' : '';
+
+  return (
+    <section className="card v5-usage-card" aria-labelledby="v5-usage-title">
+      <div className="card-head">
+        <h2 id="v5-usage-title" className="card-title">
+          V5 利用枠
+        </h2>
+        <div className="v5-usage-head-right">
+          <span className={`v5-usage-percent${stateClass}`}>{formatPercent(usage.percent)}%</span>
+          <button
+            type="button"
+            className="icon-btn v5-usage-refresh"
+            onClick={anlas.refresh}
+            disabled={anlas.loading}
+            aria-label="V5 利用枠を更新"
+            title="V5 利用枠を更新"
+          >
+            <RefreshIcon />
+          </button>
+        </div>
+      </div>
+      <div
+        className="v5-usage-bar"
+        role="progressbar"
+        aria-label="V5 利用枠の残量"
+        aria-valuenow={Math.round(clamped)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <span className={`v5-usage-fill${stateClass}`} style={{ width: `${clamped}%` }} />
+      </div>
+      {(usage.isNegative || untilNext) && (
+        <div className="v5-usage-meta">
+          {usage.isNegative && <span className="v5-usage-over">利用枠を超過しています</span>}
+          {untilNext && <span className="hint">次の1%回復まであと{untilNext}</span>}
+        </div>
+      )}
+    </section>
   );
 }
 

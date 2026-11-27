@@ -205,7 +205,7 @@ it('shows the disabled reason for the zip and clear buttons', async () => {
   expect(clearButton().disabled).toBe(true);
 
   await renderGallery([image(1)]);
-  expect(container.querySelector('.gallery-actions-hint')?.textContent).toContain('ピン留めした画像がありません');
+  expect(container.querySelector('.gallery-actions-hint')).toBeNull();
   expect(zipButton().disabled).toBe(true);
   expect(clearButton().disabled).toBe(false);
 

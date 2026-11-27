@@ -10,6 +10,7 @@ import { dateStamp, downloadText } from '../lib/browser';
 import { newId } from '../lib/id';
 import { DictionaryPager } from './DictionaryPager';
 import { EntryForm } from './EntryForm';
+import { PrevIcon } from './icons';
 import { ImportPanel } from './ImportPanel';
 import { useDialogs } from './Dialogs';
 
@@ -20,6 +21,8 @@ interface Props {
   locked?: boolean;
   /** 他タブから辞書を再読み込みした回数。増えたときだけ編集下書きを閉じる。 */
   reloadCount?: number;
+  /** 設定画面から遷移してきたときに設定へ戻る操作。 */
+  onBackToSettings?: () => void;
 }
 
 const PAGE_SIZE = 300;
@@ -29,7 +32,7 @@ function blankEntry(category: CategoryKey): DictEntry {
   return { id: newId(), tag: '', category, alias: '', default_weight: 1, sort_order: 0, updated_at: '' };
 }
 
-export function DictionaryView({ dictionary, notify, locked = false, reloadCount = 0 }: Props) {
+export function DictionaryView({ dictionary, notify, locked = false, reloadCount = 0, onBackToSettings }: Props) {
   const dialogs = useDialogs();
   const { entries, loaded, save, saveMany, remove, importEntries, restoreInitial } = dictionary;
   const [query, setQuery] = useState('');
@@ -243,6 +246,14 @@ export function DictionaryView({ dictionary, notify, locked = false, reloadCount
 
   return (
     <div className="dictionary">
+      {onBackToSettings && (
+        <div className="dict-back-row">
+          <button type="button" className="btn btn-small" onClick={onBackToSettings}>
+            <PrevIcon />
+            <span>設定へ戻る</span>
+          </button>
+        </div>
+      )}
       <section className="card dict-toolbar" aria-label="辞書の操作">
         <div className="toolbar-row">
           <input

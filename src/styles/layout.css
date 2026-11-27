@@ -36,7 +36,8 @@
 
 /* ヘッダー内のタブ。ラベルは狭い画面でも出す（生成ボタンをドックに移して空いた分） */
 .tabbar {
-  flex: 1 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   justify-content: center;
   gap: 0.25rem;
@@ -60,6 +61,75 @@
 .tab[aria-current='page'] {
   color: var(--accent);
   background: var(--accent-soft);
+}
+
+.header-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.header-anlas {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.header-anlas .anlas-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.header-anlas-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 34px;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.header-anlas-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.header-anlas-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.header-anlas-btn .icon:last-of-type {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.header-anlas.is-error .header-anlas-btn {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.header-anlas-text {
+  font-variant-numeric: tabular-nums;
+}
+
+.tab-settings {
+  padding: 0.45rem;
+  min-width: 36px;
+  min-height: 36px;
 }
 
 /* 狭い画面でも画面切替のラベルは表示する（アイコンのみだとどれが何か分からないため、ヘッダーのタブ左右余白を詰めて 1 行に収める幅） */

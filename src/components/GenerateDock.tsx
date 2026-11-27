@@ -1,7 +1,6 @@
-import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import type { AnlasState } from '../hooks/useAnlas';
+import { type ComponentProps, type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { copyText } from '../lib/browser';
-import { AnlasBalance } from './AnlasBalance';
+import { HistoryControls } from './HistoryControls';
 import { CheckIcon, ChevronUpIcon, CopyIcon } from './icons';
 
 export type DockTab = 'prompt' | 'generate' | 'reference';
@@ -21,8 +20,8 @@ interface Props {
   referenceActive?: boolean;
   /** 有効な精密参照の枚数。 */
   referenceCount?: number;
-  /** Anlas 残高の表示状態。渡さないときはドックバーに残高を出さない。 */
-  anlas?: AnlasState;
+  /** ワークスペース共通の操作履歴（Undo / Redo）。 */
+  history?: ComponentProps<typeof HistoryControls>;
   error: string | null;
   onDismissError: () => void;
   promptPanel: ReactNode;
@@ -32,7 +31,7 @@ interface Props {
 
 /**
  * 画像の下に浮かべる「プロンプト / 生成 / 参照画像」のドック。
- * 閉じた状態ではタブのバーと Anlas 残高だけを見せ、画像を広く使う。スマホでは編集・生成タブ共通で下からせり上がるシートになり、PC では画像一覧の下に固定される。
+ * 閉じた状態ではタブのバーだけを見せ、画像を広く使う。スマホでは編集・生成タブ共通で下からせり上がるシートになり、PC では画像一覧の下に固定される。
  */
 export function GenerateDock({
   collapseSignal,
@@ -40,7 +39,7 @@ export function GenerateDock({
   generating,
   referenceActive = false,
   referenceCount,
-  anlas,
+  history,
   error,
   onDismissError,
   promptPanel,
@@ -59,6 +58,7 @@ export function GenerateDock({
   const [open, setOpen] = useState(false);
   const [errorCopied, setErrorCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const swallowCleanupRef = useRef<(() => void) | null>(null);
   const mountedRef = useRef(true);
   const latestErrorRef = useRef(error);
   latestErrorRef.current = error;
@@ -77,6 +77,8 @@ export function GenerateDock({
     return () => {
       mountedRef.current = false;
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      swallowCleanupRef.current?.();
+      swallowCleanupRef.current = null;
     };
   }, []);
 
@@ -130,6 +132,44 @@ export function GenerateDock({
     setTab(openTabSignal.tab);
     setOpen(true);
   }
+
+  // ドックを開いているとき、ドック外の画面上部などをタップしたらドックを閉じるだけにし、
+  // 裏にある要素のイベント（クリック・フォーカス等）を起動させない。
+  useEffect(() => {
+    if (!open) return;
+    const onOutsidePointerDown = (e: globalThis.PointerEvent) => {
+      const target = e.target as Element | null;
+      if (!target) return;
+      if (dockRef.current?.contains(target)) return;
+      if (target.closest('.generate-bar, .viewer, .inpaint-dialog, .app-dialog, .thumb-menu-wrap')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      swallowCleanupRef.current?.();
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const cleanup = () => {
+        document.removeEventListener('click', swallowClick, true);
+        if (timer !== null) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        if (swallowCleanupRef.current === cleanup) swallowCleanupRef.current = null;
+      };
+      const swallowClick = (ev: MouseEvent) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        cleanup();
+      };
+      document.addEventListener('click', swallowClick, true);
+      timer = setTimeout(cleanup, 400);
+      swallowCleanupRef.current = cleanup;
+      setOpen(false);
+    };
+    document.addEventListener('pointerdown', onOutsidePointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onOutsidePointerDown, true);
+    };
+  }, [open]);
+
   const dragStart = useRef<number | null>(null);
 
   // バーの空いた所のタップ・上スワイプで開き、下スワイプで閉じる
@@ -143,7 +183,7 @@ export function GenerateDock({
     const dy = e.clientY - start;
     if (dy < -24) setOpen(true);
     else if (dy > 24) setOpen(false);
-    else if (Math.abs(dy) < 8 && !open && !(e.target as Element).closest('button, .dock-anlas')) setOpen(true);
+    else if (Math.abs(dy) < 8 && !open && !(e.target as Element).closest('button')) setOpen(true);
   };
 
   const select = (next: DockTab) => {
@@ -234,7 +274,7 @@ export function GenerateDock({
             </button>
           ))}
         </div>
-        {anlas && <AnlasBalance anlas={anlas} />}
+        {history && <HistoryControls {...history} />}
         <button
           type="button"
           className="icon-btn dock-toggle"

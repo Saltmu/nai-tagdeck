@@ -32,7 +32,6 @@ export function LatestPreview({ image, onOpen, onDismiss }: Props) {
     <div ref={ref} className="latest-preview" role="status">
       <button type="button" className="latest-open" onClick={onOpen} aria-label="生成した画像を開く">
         <img src={image.thumbUrl ?? image.url} alt="" style={{ aspectRatio: `${image.width} / ${image.height}` }} />
-        <span>生成しました</span>
       </button>
       <button type="button" className="icon-btn latest-close" aria-label="閉じる" onClick={onDismiss}>
         ✕

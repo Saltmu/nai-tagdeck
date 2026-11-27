@@ -4,10 +4,8 @@
   right: max(0.75rem, env(safe-area-inset-right));
   bottom: calc(env(safe-area-inset-bottom) + 0.75rem + var(--dock-offset) + var(--generate-bar-height, 0px));
   z-index: var(--z-latest-preview);
-  display: flex;
-  align-items: flex-start;
-  gap: 0.25rem;
-  padding: 0.4rem;
+  display: block;
+  padding: 0.25rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -15,27 +13,42 @@
 }
 
 .latest-open {
-  display: grid;
-  justify-items: center;
-  gap: 0.25rem;
+  display: block;
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text);
-  font-size: var(--text-xs);
   cursor: pointer;
 }
 
 .latest-open img {
   display: block;
-  width: 72px;
+  width: min(44vw, 180px);
+  max-height: 36dvh;
   border-radius: var(--radius-sm);
   object-fit: cover;
 }
 
 .latest-close {
-  width: 28px;
-  height: 28px;
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  /* .latest-preview 内で生成画像より手前に重ねる */
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--scrim-bg);
+  color: var(--scrim-text);
+  font-size: var(--text-xs);
+}
+
+.latest-close:hover:not(:disabled) {
+  background: var(--backdrop-strong);
+  color: var(--scrim-text);
 }
 
 /* 広い画面では画像一覧が常に見えているので出さない */

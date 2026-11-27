@@ -140,7 +140,7 @@ export function ReferencePanel({
             </p>
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn"
               disabled={reference.loading}
               onClick={() => addInputRef.current?.click()}
             >

@@ -74,22 +74,22 @@ it('keeps the scroll position per view when switching views', async () => {
   // 初回マウント時のスクロールは無視する
   scrollTo.mockClear();
 
-  // 編集タブで 1200 までスクロールしてから辞書へ。未訪問の辞書は先頭から開く
+  // 編集タブで 1200 までスクロールしてから設定へ。未訪問の設定は先頭から開く
   await scroll(1200);
-  await click(container.querySelector<HTMLButtonElement>('.tab-dictionary')!);
+  await click(container.querySelector<HTMLButtonElement>('.tab-settings')!);
   expect(scrollTo).toHaveBeenCalledWith(0, 0);
   await vi.waitFor(() => {
-    if (!container.querySelector('.dictionary')) throw new Error('waiting for dictionary');
+    if (!container.querySelector('.settings')) throw new Error('waiting for settings');
   }, { timeout: 5000 });
 
-  // 辞書で 300 までスクロールしてから編集へ戻る。編集は 1200 に戻る
+  // 設定で 300 までスクロールしてから編集へ戻る。編集は 1200 に戻る
   await scroll(300);
   scrollTo.mockClear();
   await click(container.querySelector<HTMLButtonElement>('.tab-editor')!);
   expect(scrollTo).toHaveBeenCalledWith(0, 1200);
 
-  // 再び辞書へ。辞書は 300 に戻る
+  // 再び設定へ。設定は 300 に戻る
   scrollTo.mockClear();
-  await click(container.querySelector<HTMLButtonElement>('.tab-dictionary')!);
+  await click(container.querySelector<HTMLButtonElement>('.tab-settings')!);
   expect(scrollTo).toHaveBeenCalledWith(0, 300);
 });

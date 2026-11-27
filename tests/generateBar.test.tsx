@@ -30,9 +30,9 @@ function button(text: string, scope: ParentNode = container): HTMLButtonElement 
 
 const click = (node: HTMLElement) => act(async () => node.click());
 
-/** ヘッダーの画面切り替えタブを押す（ドックのタブと名前が同じなので .tabbar に絞る）。 */
+/** ヘッダーの画面切り替えボタンを押す（ドックのタブと名前が同じなので .app-header に絞る）。 */
 async function switchTab(tabClass: string) {
-  await click(container.querySelector<HTMLButtonElement>(`.tabbar .${tabClass}`)!);
+  await click(container.querySelector<HTMLButtonElement>(`.app-header .${tabClass}`)!);
 }
 
 /** ドックのタブを押す。 */
@@ -162,10 +162,15 @@ it('starts generation from the editor tab', async () => {
   });
 });
 
-it('shows the Anlas balance in the dock bar, overlays the cost badge on the generate button, and refreshes balance after a generation', async () => {
+it('shows the Anlas balance in the header, overlays the cost badge on the generate button, and refreshes balance after a generation', async () => {
   await vi.waitFor(() => {
-    expect(container.querySelector('.dock-bar .dock-anlas')?.textContent).toContain('残高 18,000');
+    expect(container.querySelector('.app-header .header-anlas')?.textContent).toContain('残高 18,000');
   });
+  expect(container.querySelector('.dock-bar .header-anlas')).toBeNull();
+  expect(container.querySelector('.app-header .tab-dictionary')).toBeNull();
+  expect(container.querySelector('.app-header .tab-settings')?.textContent?.trim()).toBe('');
+  expect(container.querySelector('.app-header .tab-settings')?.getAttribute('aria-label')).toBe('設定');
+
   const submitWrap = container.querySelector('.gen-submit-wrap');
   const genBtn = generateButtons()[0]!;
   const costBadge = submitWrap?.querySelector('.gen-cost-badge');
@@ -183,22 +188,37 @@ it('shows the Anlas balance in the dock bar, overlays the cost badge on the gene
   await click(genBtn);
   await vi.waitFor(() => {
     expect(fetchSubscription).toHaveBeenCalledTimes(2);
-    expect(container.querySelector('.dock-bar .dock-anlas')?.textContent).toContain('残高 17,995');
+    expect(container.querySelector('.app-header .header-anlas')?.textContent).toContain('残高 17,995');
     expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('0');
   });
 });
 
 it('shows unknown estimate badge when subscription refresh fails after generation', async () => {
   await vi.waitFor(() => {
-    expect(container.querySelector('.dock-bar .dock-anlas')?.textContent).toContain('残高 18,000');
+    expect(container.querySelector('.app-header .header-anlas')?.textContent).toContain('残高 18,000');
     expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('0');
   });
   vi.mocked(fetchSubscription).mockRejectedValueOnce(new Error('network error'));
   await click(generateButtons()[0]!);
   await vi.waitFor(() => {
     expect(fetchSubscription).toHaveBeenCalledTimes(2);
-    expect(container.querySelector('.dock-bar .dock-anlas')?.textContent).toContain('残高 取得できませんでした');
+    expect(container.querySelector('.app-header .header-anlas')?.textContent).toContain('残高 取得失敗');
     expect(container.querySelector('.gen-cost-badge')?.textContent?.trim()).toBe('—');
+  });
+});
+
+it('navigates from settings to dictionary and back to settings', async () => {
+  await switchTab('tab-settings');
+  await vi.waitFor(() => {
+    expect(container.querySelector('.settings-nav-btn')).not.toBeNull();
+  });
+  await click(container.querySelector<HTMLButtonElement>('.settings-nav-btn')!);
+  await vi.waitFor(() => {
+    expect(container.querySelector('.dictionary')).not.toBeNull();
+  });
+  await click(button('設定へ戻る'));
+  await vi.waitFor(() => {
+    expect(container.querySelector('.settings')).not.toBeNull();
   });
 });
 
@@ -211,11 +231,29 @@ it('keeps the dock available on the editor tab and allows opening dock panels wi
   await switchDockTab('プロンプト');
   expect(dock?.classList.contains('is-open')).toBe(true);
   expect(container.querySelector('.workbench')?.getAttribute('data-tab')).toBe('editor');
+
+  // 生成バー内のタップではドックは閉じない
+  await act(async () => {
+    container.querySelector('.generate-bar')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  });
+  expect(dock?.classList.contains('is-open')).toBe(true);
+
+  // ドック外の画面上部（編集ペインなど）をタップするとドックが閉じ、裏の要素のクリックは発火しない
+  const paneEditor = container.querySelector('.pane-editor')!;
+  const underlyingClick = vi.fn();
+  paneEditor.addEventListener('click', underlyingClick);
+  await act(async () => {
+    paneEditor.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }));
+    paneEditor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+  paneEditor.removeEventListener('click', underlyingClick);
+  expect(dock?.classList.contains('is-open')).toBe(false);
+  expect(underlyingClick).not.toHaveBeenCalled();
 });
 
 it('shows the plan and the granted/purchased breakdown in the token settings', async () => {
   await vi.waitFor(() => {
-    expect(container.querySelector('.dock-bar .dock-anlas')?.textContent).toContain('残高 18,000');
+    expect(container.querySelector('.app-header .header-anlas')?.textContent).toContain('残高 18,000');
   });
   await switchTab('tab-settings');
   await vi.waitFor(() => {

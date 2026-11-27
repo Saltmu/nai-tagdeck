@@ -1,4 +1,5 @@
 import { lazy, Suspense, type MouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnlasBalance } from './components/AnlasBalance';
 import { AppErrorBanners } from './components/AppErrorBanners';
 import { Editor } from './components/Editor';
 import { GeneratePanel } from './components/GeneratePanel';
@@ -36,7 +37,7 @@ import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/p
 import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { TabSyncNotice } from './components/TabSyncNotice';
 import { useTabSync } from './hooks/useTabSync';
-import { BookIcon, BrandIcon, BrandWordmark, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
+import { BrandIcon, BrandWordmark, EditIcon, SettingsIcon, SparkleIcon } from './components/icons';
 import { copyText } from './lib/browser';
 import { applyTheme } from './lib/theme';
 import type { WorkspaceAction } from './lib/workspace';
@@ -58,11 +59,9 @@ function ScreenLoadingFallback() {
 
 type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
 
-const TABS: Array<{ key: Tab; label: string; icon: ReactNode }> = [
+const PRIMARY_TABS: Array<{ key: 'editor' | 'generate'; label: string; icon: ReactNode }> = [
   { key: 'editor', label: '編集', icon: <EditIcon /> },
-  { key: 'generate', label: '生成', icon: <SparkleIcon /> },
-  { key: 'dictionary', label: '辞書', icon: <BookIcon /> },
-  { key: 'settings', label: '設定', icon: <SettingsIcon /> },
+  { key: 'generate', label: '画像', icon: <SparkleIcon /> },
 ];
 
 export default function App({ onResetAll }: { onResetAll: () => void }) {
@@ -239,6 +238,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     commitAll: tabSync.commitAll,
   });
   const openSettings = useCallback(() => setTab('settings'), []);
+  const openDictionary = useCallback(() => setTab('dictionary'), []);
   const openReferenceTab = useCallback(() => {
     setTab((current) => (current === 'editor' || current === 'generate' ? current : 'generate'));
     setDockOpenTab((prev) => ({ tab: 'reference', seq: prev.seq + 1 }));
@@ -400,7 +400,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
           <BrandWordmark className="brand-wordmark" width={108} height={24} />
         </h1>
         <nav className="tabbar" aria-label="画面切り替え" data-occludes>
-          {TABS.map((t) => (
+          {PRIMARY_TABS.map((t) => (
             <button
               key={t.key}
               type="button"
@@ -428,8 +428,20 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             </button>
           ))}
         </nav>
-        {/* ヘッダーにはシード固定の表示だけを残す。生成ボタンとサイズ選択はドックに一本化した */}
-        <SeedLock seed={generation.seed} onClearSeed={handleClearSeed} />
+        <div className="header-actions" data-occludes>
+          <SeedLock seed={generation.seed} onClearSeed={handleClearSeed} />
+          <AnlasBalance anlas={anlas} />
+          <button
+            type="button"
+            className="tab tab-settings"
+            aria-label="設定"
+            title="設定"
+            aria-current={tab === 'settings' || tab === 'dictionary' ? 'page' : undefined}
+            onClick={openSettings}
+          >
+            <SettingsIcon />
+          </button>
+        </div>
       </header>
       <SwUpdateNotice />
       <TabSyncNotice
@@ -461,7 +473,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             <Editor
               workspace={workspace}
               dispatch={dispatch}
-              history={tagUndo}
               loaded={loaded}
               dictionary={dictionary}
               syntax={settings.weightSyntax}
@@ -503,7 +514,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               generating={generator.generating}
               referenceActive={referenceImage.activeItems.length > 0}
               referenceCount={referenceImage.activeItems.length}
-              anlas={anlas}
+              history={tagUndo}
               error={generator.error}
               onDismissError={generator.dismissError}
               promptPanel={
@@ -564,6 +575,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
                 notify={show}
                 locked={tabSync.bridge.locked}
                 reloadCount={tabSync.reloadCount}
+                onBackToSettings={openSettings}
               />
             </Suspense>
           </ChunkErrorBoundary>
@@ -584,6 +596,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
                 firstRunDisabled={!firstRunReady || firstRun.busy}
                 backupImportDisabled={!storesLoaded || tabSync.bridge.locked}
                 reloadCount={tabSync.reloadCount}
+                onOpenDictionary={openDictionary}
+                dictionaryCount={dictionary.entries.length}
               />
             </Suspense>
           </ChunkErrorBoundary>

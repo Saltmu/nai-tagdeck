@@ -295,7 +295,9 @@ it('aborts applying and returns to preview when a backup finishes while the conf
 it('aborts applying and uses the updated preview when the dictionary changes while the confirmation is open', async () => {
   let release!: () => void;
   vi.mocked(replaceAllEntries).mockImplementation(() => new Promise<void>((resolve) => { release = resolve; }));
-  await click(container.querySelector<HTMLButtonElement>('.tab-dictionary')!);
+  await click(button('設定'));
+  await waitForMount('.settings-nav-btn');
+  await click(container.querySelector<HTMLButtonElement>('.settings-nav-btn')!);
   await waitForMount('input[accept*="csv"]');
   const input = container.querySelector<HTMLInputElement>('input[accept*="csv"]');
   if (!input) throw new Error('辞書の入力がありません');
@@ -350,7 +352,7 @@ it('restores a metadata-less history image via fallback and undoes the import', 
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(<DialogProvider><DialogSpy /><App onResetAll={() => {}} /></DialogProvider>));
-  await click(button('生成'));
+  await click(container.querySelector<HTMLButtonElement>('.tab-generate')!);
   await click(button('生成する'));
   expect(container.querySelector('.thumb-btn')).not.toBeNull();
 
@@ -358,7 +360,7 @@ it('restores a metadata-less history image via fallback and undoes the import', 
   await click(button('existing を削除'));
   expect(preview()).toBe('ONのタグがありません');
 
-  await click(button('生成'));
+  await click(container.querySelector<HTMLButtonElement>('.tab-generate')!);
   await click(container.querySelector<HTMLButtonElement>('.thumb-btn')!);
   await waitForMount('.viewer');
   await click(button('プロンプトを読み込む', container.querySelector('.viewer')!));
