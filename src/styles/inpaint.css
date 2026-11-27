@@ -121,14 +121,11 @@
 /* ブラシサイズ変更中に画面中央へ表示する実寸プレビュー（キャンバス前面・ツールバー背面） */
 .inpaint-brush-preview {
   position: absolute;
-  top: 50%;
-  left: 50%;
+  inset: 0;
   z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.45rem;
-  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
   pointer-events: none;
 }
 
@@ -146,6 +143,9 @@
 }
 
 .inpaint-brush-preview-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   padding: 0.15rem 0.55rem;
   border-radius: var(--radius-pill);
   background: var(--scrim-bg);

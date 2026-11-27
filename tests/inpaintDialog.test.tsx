@@ -535,7 +535,14 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
       expect(preview.querySelector('.inpaint-brush-preview-label')?.textContent).toBe('96px');
 
       await act(async () => {
-        // スライダー外で指を離したケース（window の pointerup）でも自動で閉じる
+        // 別の指（別 pointerId）が離れてもプレビューは閉じない
+        window.dispatchEvent(makePointerEvent('pointerup', { pointerId: 2, clientX: 100, clientY: 100, pointerType: 'touch' }));
+        vi.advanceTimersByTime(500);
+      });
+      expect(dialog.querySelector('.inpaint-brush-preview')).not.toBeNull();
+
+      await act(async () => {
+        // 元のポインターがスライダー外で離れたときは自動で閉じる
         window.dispatchEvent(makePointerEvent('pointerup', { pointerId: 1, clientX: 300, clientY: 10, pointerType: 'mouse' }));
         vi.advanceTimersByTime(500);
       });

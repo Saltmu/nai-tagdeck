@@ -159,7 +159,7 @@ export function InpaintDialog({
 
   const toolRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const colorRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const brushSliderActiveRef = useRef(false);
+  const brushSliderPointerIdRef = useRef<number | null>(null);
   const brushPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const brushSliderCleanupRef = useRef<(() => void) | null>(null);
 
@@ -175,35 +175,48 @@ export function InpaintDialog({
       clearBrushPreviewTimer();
       brushPreviewTimerRef.current = setTimeout(() => {
         brushPreviewTimerRef.current = null;
-        if (!brushSliderActiveRef.current) setBrushPreviewVisible(false);
+        if (brushSliderPointerIdRef.current === null) setBrushPreviewVisible(false);
       }, delayMs);
     },
     [clearBrushPreviewTimer],
   );
 
   const finishBrushSliderDrag = useCallback(
-    (delayMs = 450) => {
+    (delayMs = 450, pointerId?: number) => {
+      if (
+        pointerId !== undefined &&
+        brushSliderPointerIdRef.current !== null &&
+        brushSliderPointerIdRef.current !== pointerId
+      ) {
+        return;
+      }
       brushSliderCleanupRef.current?.();
       brushSliderCleanupRef.current = null;
-      brushSliderActiveRef.current = false;
+      brushSliderPointerIdRef.current = null;
       scheduleHideBrushPreview(delayMs);
     },
     [scheduleHideBrushPreview],
   );
 
-  const startBrushSliderDrag = useCallback(() => {
-    brushSliderCleanupRef.current?.();
-    brushSliderActiveRef.current = true;
-    clearBrushPreviewTimer();
-    setBrushPreviewVisible(true);
-    const onWindowPointerEnd = () => finishBrushSliderDrag();
-    window.addEventListener('pointerup', onWindowPointerEnd, true);
-    window.addEventListener('pointercancel', onWindowPointerEnd, true);
-    brushSliderCleanupRef.current = () => {
-      window.removeEventListener('pointerup', onWindowPointerEnd, true);
-      window.removeEventListener('pointercancel', onWindowPointerEnd, true);
-    };
-  }, [clearBrushPreviewTimer, finishBrushSliderDrag]);
+  const startBrushSliderDrag = useCallback(
+    (e: ReactPointerEvent<HTMLInputElement>) => {
+      brushSliderCleanupRef.current?.();
+      const activePointerId = e.pointerId;
+      brushSliderPointerIdRef.current = activePointerId;
+      clearBrushPreviewTimer();
+      setBrushPreviewVisible(true);
+      const onWindowPointerEnd = (ev: globalThis.PointerEvent) => {
+        finishBrushSliderDrag(450, ev.pointerId);
+      };
+      window.addEventListener('pointerup', onWindowPointerEnd, true);
+      window.addEventListener('pointercancel', onWindowPointerEnd, true);
+      brushSliderCleanupRef.current = () => {
+        window.removeEventListener('pointerup', onWindowPointerEnd, true);
+        window.removeEventListener('pointercancel', onWindowPointerEnd, true);
+      };
+    },
+    [clearBrushPreviewTimer, finishBrushSliderDrag],
+  );
 
   useEffect(
     () => () => {
@@ -561,6 +574,11 @@ export function InpaintDialog({
         };
   const cursorDiameter = fitScale > 0 ? Math.max(6, session.brushRadius * 2 * fitScale * view.scale) : 0;
   const previewDiameter = cursorDiameter > 0 ? cursorDiameter : Math.max(6, session.brushRadius * 2);
+  // 高倍率＋大ブラシで円が画面高さを超える場合も、サイズ数値ラベルはステージ中央付近に収めて読めるようにする
+  const previewLabelOffsetY =
+    stageSize.height > 0
+      ? Math.min(previewDiameter / 2 + 18, Math.max(0, stageSize.height * 0.25))
+      : previewDiameter / 2 + 18;
 
   return (
     <dialog
@@ -628,7 +646,12 @@ export function InpaintDialog({
                       : `color-mix(in srgb, ${maskColorHex(session.maskColor)} ${Math.round(session.maskOpacity * 100)}%, transparent)`,
                 }}
               />
-              <span className="inpaint-brush-preview-label">{session.brushRadius * 2}px</span>
+              <span
+                className="inpaint-brush-preview-label"
+                style={{ transform: `translate(-50%, calc(-50% + ${previewLabelOffsetY}px))` }}
+              >
+                {session.brushRadius * 2}px
+              </span>
             </div>
           )}
         </div>
@@ -884,13 +907,13 @@ export function InpaintDialog({
                   step={INPAINT_BRUSH_STEP}
                   value={session.brushRadius}
                   onPointerDown={startBrushSliderDrag}
-                  onPointerUp={() => finishBrushSliderDrag()}
-                  onPointerCancel={() => finishBrushSliderDrag()}
+                  onPointerUp={(e) => finishBrushSliderDrag(450, e.pointerId)}
+                  onPointerCancel={(e) => finishBrushSliderDrag(450, e.pointerId)}
                   onBlur={() => finishBrushSliderDrag(200)}
                   onChange={(e) => {
                     onBrushRadiusChange(Number(e.target.value));
                     setBrushPreviewVisible(true);
-                    if (!brushSliderActiveRef.current) scheduleHideBrushPreview();
+                    if (brushSliderPointerIdRef.current === null) scheduleHideBrushPreview();
                   }}
                 />
                 <output htmlFor={`${id}-brush-size`} className="inpaint-toolbar-output">
