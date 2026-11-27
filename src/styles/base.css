@@ -9,6 +9,8 @@ html {
   -webkit-text-size-adjust: 100%;
   /* スクロールで見出しへ移動するときに固定ヘッダーの下に隠れないようにする */
   scroll-padding-top: calc(var(--header-height) + 0.5rem);
+  /* 画像ビューア・インペイント以外でのブラウザ標準ピンチ拡大を抑止する */
+  touch-action: pan-x pan-y;
 }
 
 body {
@@ -19,6 +21,7 @@ body {
     system-ui, -apple-system, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic UI', sans-serif;
   font-size: 15px;
   line-height: 1.5;
+  touch-action: pan-x pan-y;
 }
 
 button,
