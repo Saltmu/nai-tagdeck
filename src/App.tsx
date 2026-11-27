@@ -32,7 +32,6 @@ import { useDialogs } from './components/Dialogs';
 import { isEmptyWorkspace } from './lib/presets';
 import { isDefaultSettings } from './lib/settings';
 import { isDefaultGeneration, resolveSize } from './lib/generation';
-import type { InpaintInput } from './lib/novelai';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { TabSyncNotice } from './components/TabSyncNotice';
@@ -252,17 +251,36 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     },
     [referenceImage.addFromBlob, openReferenceTab, show],
   );
-  const ensurePreciseReferenceOffForInpaint = useCallback(async (): Promise<boolean> => {
-    if (referenceImage.activeItems.length === 0) return true;
-    const ok = await dialogs.confirm(
-      'インペイントでは精密参照を使えません。精密参照を一時 OFF にして開きますか？',
-      { okLabel: '一時 OFF にして開く' },
-    );
-    if (!ok) return false;
-    referenceImage.disableAll();
-    show('精密参照を一時 OFF にしました');
-    return true;
-  }, [referenceImage.activeItems.length, referenceImage.disableAll, dialogs, show]);
+  const ensurePreciseReferenceOffForInpaint = useCallback(
+    async (okLabel = '一時 OFF にして開く'): Promise<boolean> => {
+      if (referenceImage.activeItems.length === 0) return true;
+      const ok = await dialogs.confirm(
+        'インペイントでは精密参照を使えません。精密参照を一時 OFF にして切り替えますか？',
+        { okLabel },
+      );
+      if (!ok) return false;
+      referenceImage.disableAll();
+      show('精密参照を一時 OFF にしました');
+      return true;
+    },
+    [referenceImage.activeItems.length, referenceImage.disableAll, dialogs, show],
+  );
+
+  // 精密参照を後から追加・ON にした場合はインペイントを自動で一時 OFF にする（相互排他）
+  const activeReferenceCount = referenceImage.activeItems.length;
+  const prevActiveReferenceCountRef = useRef(activeReferenceCount);
+  useEffect(() => {
+    const prev = prevActiveReferenceCountRef.current;
+    prevActiveReferenceCountRef.current = activeReferenceCount;
+    if (activeReferenceCount > prev && inpaint.activeSession) {
+      inpaint.setEnabled(false);
+      show('精密参照を有効にしたため、インペイントを一時 OFF にしました');
+    }
+  }, [activeReferenceCount, inpaint.activeSession, inpaint.setEnabled, show]);
+
+  const collapseDock = useCallback(() => {
+    setDockCollapse((n) => n + 1);
+  }, []);
 
   const handleStartInpaintFromImage = useCallback(
     async (image: GeneratedImage) => {
@@ -271,24 +289,47 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
         width: image.width,
         height: image.height,
       });
-      if (!ok) show('インペイント用の画像を読み込めませんでした');
+      if (ok) collapseDock();
+      else show('インペイント用の画像を読み込めませんでした');
     },
-    [ensurePreciseReferenceOffForInpaint, inpaint.startFromBlob, show],
+    [ensurePreciseReferenceOffForInpaint, inpaint.startFromBlob, collapseDock, show],
   );
 
   const handleStartInpaintFromFile = useCallback(
     async (file: File) => {
       if (!(await ensurePreciseReferenceOffForInpaint())) return;
       const ok = await inpaint.startFromFile(file);
-      if (!ok) show('インペイント用の画像を読み込めませんでした');
+      if (ok) collapseDock();
+      else show('インペイント用の画像を読み込めませんでした');
     },
-    [ensurePreciseReferenceOffForInpaint, inpaint.startFromFile, show],
+    [ensurePreciseReferenceOffForInpaint, inpaint.startFromFile, collapseDock, show],
   );
 
   const handleResumeInpaint = useCallback(async () => {
     if (!(await ensurePreciseReferenceOffForInpaint())) return;
+    collapseDock();
     inpaint.resume();
-  }, [ensurePreciseReferenceOffForInpaint, inpaint.resume]);
+  }, [ensurePreciseReferenceOffForInpaint, collapseDock, inpaint.resume]);
+
+  const handleConfirmInpaint = useCallback(() => {
+    if (referenceImage.activeItems.length > 0) {
+      referenceImage.disableAll();
+    }
+    if (inpaint.confirm()) {
+      collapseDock();
+      show('インペイントを確定しました。「生成する」ボタンから実行できます');
+    }
+  }, [referenceImage.activeItems.length, referenceImage.disableAll, inpaint.confirm, collapseDock, show]);
+
+  const handleToggleInpaintEnabled = useCallback(
+    async (enabled: boolean) => {
+      if (enabled) {
+        if (!(await ensurePreciseReferenceOffForInpaint('一時 OFF にして有効化'))) return;
+      }
+      inpaint.setEnabled(enabled);
+    },
+    [ensurePreciseReferenceOffForInpaint, inpaint.setEnabled],
+  );
 
   const handleDiscardInpaint = useCallback(async () => {
     const ok = await dialogs.confirm(
@@ -300,41 +341,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     show('インペイントの一時保持データを破棄しました');
   }, [dialogs, inpaint.discard, show]);
 
-  const handleEditTagsFromInpaint = useCallback(() => {
-    inpaint.close();
-    setTab('editor');
-    show('マスクを一時保持しました。タグを編集後、「参照画像」タブから再開できます', 4500);
-  }, [inpaint.close, show]);
-
-  const handleExecuteInpaint = useCallback(
-    async (inpaintInput: InpaintInput): Promise<boolean> => {
-      if (!token.token) {
-        show('トークンが未設定です。設定タブで入力してください', 3500);
-        return false;
-      }
-      let succeeded = false;
-      await generator.generate({
-        token: token.token,
-        prompt: basePrompt,
-        negative: negativePrompt,
-        characters: characterPrompts.map((c) => ({
-          prompt: c.prompt,
-          negative: c.negative !== undefined ? c.negative : settings.characterNegativePrompt,
-          ...(c.center ? { center: c.center } : {}),
-        })),
-        settings: generation,
-        inpaint: inpaintInput,
-        onComplete: () => {
-          succeeded = true;
-          if (window.matchMedia?.('(max-width: 1099px)').matches) setTab('generate');
-          show('インペイント画像を生成しました');
-        },
-      });
-      return succeeded;
-    },
-    [token.token, generator.generate, basePrompt, negativePrompt, characterPrompts, settings.characterNegativePrompt, generation, show],
-  );
-
   const { blocker, startGenerate } = useGenerationControls({
     generator,
     token: token.token,
@@ -343,7 +349,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     negativePrompt,
     settings,
     generation,
-    activeReferences: referenceImage.activeItems,
+    activeReferences: inpaint.activeSession ? [] : referenceImage.activeItems,
+    activeInpaint: inpaint.activeSession,
     show,
     onOpenSettings: openSettings,
     shortcutsDisabled: tabSync.busy || inpaint.open,
@@ -476,7 +483,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             <Gallery
               images={imageStore.images}
               generating={generator.generating}
-              pendingSize={inpaint.open && inpaint.session ? { width: inpaint.session.width, height: inpaint.session.height } : resolveSize(generation)}
+              pendingSize={inpaint.activeSession ? { width: inpaint.activeSession.width, height: inpaint.activeSession.height } : resolveSize(generation)}
               evictedCount={imageStore.evictedCount}
               onDismissEviction={imageStore.dismissEviction}
               onRemove={imageStore.remove}
@@ -524,6 +531,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
                   inpaint={inpaint}
                   onStartInpaintFile={(file) => { void handleStartInpaintFromFile(file); }}
                   onResumeInpaint={() => { void handleResumeInpaint(); }}
+                  onToggleInpaintEnabled={(enabled) => { void handleToggleInpaintEnabled(enabled); }}
                   onDiscardInpaint={() => { void handleDiscardInpaint(); }}
                 />
               }
@@ -541,6 +549,9 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               activeReferences={referenceImage.activeItems}
               onDisableReference={referenceImage.disableAll}
               onOpenReferenceTab={openReferenceTab}
+              inpaintSession={inpaint.activeSession}
+              onResumeInpaint={() => { void handleResumeInpaint(); }}
+              onDisableInpaint={() => inpaint.setEnabled(false)}
             />
           </div>
         </div>
@@ -602,15 +613,8 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
           <Suspense fallback={null}>
             <InpaintDialog
               session={inpaint.session}
-              token={token.token}
-              basePrompt={basePrompt}
-              characterPrompts={characterPrompts}
-              negativePrompt={negativePrompt}
-              generation={generation}
-              generator={generator}
-              anlas={anlas}
+              onConfirm={handleConfirmInpaint}
               onClose={inpaint.close}
-              onEditTags={handleEditTagsFromInpaint}
               onDiscard={() => {
                 inpaint.discard();
                 show('インペイントの一時保持データを破棄しました');
@@ -624,7 +628,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onBrushRadiusChange={inpaint.setBrushRadius}
               onMaskColorChange={inpaint.setMaskColor}
               onMaskOpacityChange={inpaint.setMaskOpacity}
-              onExecute={handleExecuteInpaint}
             />
           </Suspense>
         </ChunkErrorBoundary>

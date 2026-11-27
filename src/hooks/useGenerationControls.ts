@@ -1,7 +1,9 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Settings } from '../types';
 import type { Generator } from './useGenerator';
+import type { InpaintSession } from './useInpaintSession';
 import type { GenerationSettings } from '../lib/generation';
+import { createInpaintMaskBase64, InpaintImageError, prepareInpaintBaseImageBase64 } from '../lib/inpaint';
 import type { buildCharacterPrompts } from '../lib/prompt';
 import type { PreciseReferenceItem } from '../lib/referenceImage';
 
@@ -15,6 +17,7 @@ interface Args {
   settings: Settings;
   generation: GenerationSettings;
   activeReferences?: readonly PreciseReferenceItem[];
+  activeInpaint?: InpaintSession | null;
   show: (message: string, duration?: number) => void;
   onOpenSettings: () => void;
   /** 競合解決中など、グローバルショートカットと生成開始を止める間は true。 */
@@ -30,11 +33,13 @@ export function useGenerationControls({
   settings,
   generation,
   activeReferences,
+  activeInpaint,
   show,
   onOpenSettings,
   shortcutsDisabled = false,
 }: Args) {
   const { generating, generate, error } = generator;
+  const preparingInpaintRef = useRef(false);
   // ---- 生成（ヘッダー・生成パネル・Ctrl+Enter の共通処理） ----
   // ケモノモードは先頭に fur dataset を補えるため、キャラに ON のタグがあればベースが空でも生成できる
   const missingPrompt = !basePrompt && !(generation.mode === 'furry' && characterPrompts.length > 0);
@@ -45,7 +50,7 @@ export function useGenerationControls({
       : null;
 
   const startGenerate = useCallback(() => {
-    if (generating || shortcutsDisabled) return;
+    if (generating || preparingInpaintRef.current || shortcutsDisabled) return;
     if (!token) {
       show('トークンが未設定です。設定タブで入力してください', 3500);
       onOpenSettings();
@@ -55,19 +60,77 @@ export function useGenerationControls({
       show('ベースに ON のタグがありません', 3000);
       return;
     }
+    const characters = characterPrompts.map((c) => ({
+      prompt: c.prompt,
+      negative: c.negative !== undefined ? c.negative : settings.characterNegativePrompt,
+      ...(c.center ? { center: c.center } : {}),
+    }));
+
+    if (activeInpaint) {
+      preparingInpaintRef.current = true;
+      void (async () => {
+        try {
+          const imageBase64 = await prepareInpaintBaseImageBase64(
+            activeInpaint.sourceBlob,
+            activeInpaint.width,
+            activeInpaint.height,
+          );
+          const maskBase64 = createInpaintMaskBase64(
+            activeInpaint.maskHistory,
+            activeInpaint.width,
+            activeInpaint.height,
+          );
+          await generate({
+            token,
+            prompt: basePrompt,
+            negative: negativePrompt,
+            characters,
+            settings: generation,
+            inpaint: {
+              imageBase64,
+              maskBase64,
+              width: activeInpaint.width,
+              height: activeInpaint.height,
+              strength: activeInpaint.strength,
+              addOriginalImage: activeInpaint.addOriginalImage,
+            },
+          });
+        } catch (err) {
+          show(
+            err instanceof InpaintImageError ? err.message : 'インペイント用の画像を準備できませんでした',
+            6000,
+          );
+        } finally {
+          preparingInpaintRef.current = false;
+        }
+      })();
+      return;
+    }
+
     void generate({
       token,
       prompt: basePrompt,
       negative: negativePrompt,
-      characters: characterPrompts.map((c) => ({
-        prompt: c.prompt,
-        negative: c.negative !== undefined ? c.negative : settings.characterNegativePrompt,
-        ...(c.center ? { center: c.center } : {}),
-      })),
+      characters,
       settings: generation,
       references: activeReferences,
     });
-  }, [generating, shortcutsDisabled, generate, token, basePrompt, missingPrompt, characterPrompts, negativePrompt, settings, generation, activeReferences, show, onOpenSettings]);
+  }, [
+    generating,
+    shortcutsDisabled,
+    generate,
+    token,
+    basePrompt,
+    missingPrompt,
+    characterPrompts,
+    negativePrompt,
+    settings,
+    generation,
+    activeReferences,
+    activeInpaint,
+    show,
+    onOpenSettings,
+  ]);
 
   // Ctrl+Enter（Mac は ⌘+Enter）でどこからでも生成する
   useEffect(() => {

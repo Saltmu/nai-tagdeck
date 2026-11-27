@@ -67,6 +67,8 @@
   }
 
   .gen-ref-disable,
+  .gen-inpaint-summary,
+  .gen-inpaint-disable,
   .thumb-menu-item,
   .inpaint-tool-btn {
     min-height: 44px;

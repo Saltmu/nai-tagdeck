@@ -14,6 +14,10 @@
   gap: 0.5rem;
 }
 
+.inpaint-session-card.is-disabled {
+  opacity: 0.72;
+}
+
 .inpaint-session-thumb {
   width: 68px;
   height: 68px;
@@ -312,41 +316,6 @@
   gap: 0.5rem;
   font-size: var(--text-sm);
   cursor: pointer;
-}
-
-.inpaint-prompt-details {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-  padding: 0.45rem 0.6rem;
-  font-size: var(--text-sm);
-}
-
-.inpaint-prompt-details summary {
-  cursor: pointer;
-  color: var(--text);
-  font-weight: 600;
-}
-
-.inpaint-prompt-list {
-  display: grid;
-  gap: 0.4rem;
-  margin: 0.5rem 0 0;
-  font-size: var(--text-caption);
-}
-
-.inpaint-prompt-list dt {
-  color: var(--muted);
-  font-weight: 600;
-}
-
-.inpaint-prompt-list dd {
-  margin: 0.1rem 0 0;
-  overflow-wrap: anywhere;
-}
-
-.inpaint-edit-tags-btn {
-  align-self: flex-start;
 }
 
 .inpaint-exec-footer {

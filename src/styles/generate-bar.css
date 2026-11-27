@@ -38,8 +38,9 @@
   color: var(--danger);
 }
 
-/* 精密参照 ON 中の誤課金防止インジケーター */
-.gen-ref-indicator {
+/* 精密参照 ON 中・インペイント中の状態インジケーター */
+.gen-ref-indicator,
+.gen-inpaint-indicator {
   display: flex;
   align-items: center;
   gap: 0.45rem;
@@ -51,7 +52,8 @@
   font-size: var(--text-sm);
 }
 
-.gen-ref-summary {
+.gen-ref-summary,
+.gen-inpaint-summary {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -63,6 +65,7 @@
   color: var(--text);
   text-align: left;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .gen-ref-thumbs {
@@ -72,7 +75,8 @@
   gap: 0.2rem;
 }
 
-.gen-ref-thumb {
+.gen-ref-thumb,
+.gen-inpaint-thumb {
   flex: none;
   width: 24px;
   height: 24px;
@@ -89,7 +93,8 @@
   color: var(--accent);
 }
 
-.gen-ref-text {
+.gen-ref-text,
+.gen-inpaint-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -98,7 +103,25 @@
   color: var(--accent);
 }
 
-.gen-ref-disable {
+.gen-inpaint-return {
+  flex: none;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.gen-inpaint-return .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.gen-ref-disable,
+.gen-inpaint-disable {
   flex: none;
 }
 

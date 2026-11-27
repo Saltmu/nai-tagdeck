@@ -81,7 +81,10 @@ async function renderApp() {
   });
 }
 
-function makePointerEvent(type: string, init: { pointerId?: number; clientX: number; clientY: number; pointerType?: string; button?: number }) {
+function makePointerEvent(
+  type: string,
+  init: { pointerId?: number; clientX: number; clientY: number; pointerType?: string; button?: number },
+) {
   const ev = new MouseEvent(type, {
     bubbles: true,
     cancelable: true,
@@ -193,8 +196,8 @@ afterEach(async () => {
   });
 });
 
-describe('インペイント導線・マスク編集・一時保持・排他・非永続化', () => {
-  it('ギャラリー ⋯ メニューと ImageViewer の両方からモーダルを開き、空マスクは無効・描画後は有効・ピンチ時は進行中ストロークを破棄する', async () => {
+describe('インペイント導線・マスク確定・通常生成ボタン連動・排他・非永続化', () => {
+  it('ギャラリー ⋯ メニューと ImageViewer の両方からモーダルを開き、空マスクは確定無効・描画後は有効・ピンチ時は進行中ストロークを破棄する', async () => {
     await renderApp();
 
     // まず 1 枚生成してギャラリーに表示する
@@ -207,15 +210,23 @@ describe('インペイント導線・マスク編集・一時保持・排他・�
     await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).not.toBeNull());
 
     const dialog = container.querySelector<HTMLDialogElement>('dialog.inpaint-dialog')!;
-    const runBtn = () => buttonByText('インペイントを実行', dialog);
-    expect(runBtn().disabled).toBe(true);
+    const confirmBtn = () => buttonByText('確定', dialog);
+    expect(confirmBtn().disabled).toBe(true);
     expect(dialog.textContent).toContain('描き直す部分をマスクで塗ってください');
 
     // 2 本指ピンチが入ったときは進行中ストロークを破棄する（空マスクのまま）
     const stage = dialog.querySelector<HTMLElement>('.inpaint-stage')!;
     const canvas = dialog.querySelector<HTMLCanvasElement>('.inpaint-mask-canvas')!;
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, left: 0, top: 0, right: 256, bottom: 256, width: 256, height: 256, toJSON: () => ({}),
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 256,
+      bottom: 256,
+      width: 256,
+      height: 256,
+      toJSON: () => ({}),
     });
     await act(async () => {
       stage.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 1, clientX: 50, clientY: 50, pointerType: 'touch' }));
@@ -223,19 +234,19 @@ describe('インペイント導線・マスク編集・一時保持・排他・�
       stage.dispatchEvent(makePointerEvent('pointerup', { pointerId: 1, clientX: 50, clientY: 50, pointerType: 'touch' }));
       stage.dispatchEvent(makePointerEvent('pointerup', { pointerId: 2, clientX: 100, clientY: 100, pointerType: 'touch' }));
     });
-    expect(runBtn().disabled).toBe(true);
+    expect(confirmBtn().disabled).toBe(true);
 
-    // 1 本指／マウスで描くと実行ボタンが有効になる
+    // 1 本指／マウスで描くと確定ボタンが有効になる
     await paintStrokeOnDialog(dialog);
-    expect(runBtn().disabled).toBe(false);
+    expect(confirmBtn().disabled).toBe(false);
 
     // Undo -> 無効、Redo -> 有効、全消去 -> 無効
     await click(buttonByText('元に戻す', dialog));
-    expect(runBtn().disabled).toBe(true);
+    expect(confirmBtn().disabled).toBe(true);
     await click(buttonByText('やり直す', dialog));
-    expect(runBtn().disabled).toBe(false);
+    expect(confirmBtn().disabled).toBe(false);
     await click(buttonByText('マスクを全消去', dialog));
-    expect(runBtn().disabled).toBe(true);
+    expect(confirmBtn().disabled).toBe(true);
 
     // 一時保持して閉じる
     await click(buttonByText('一時保持して閉じる', dialog));
@@ -249,10 +260,13 @@ describe('インペイント導線・マスク編集・一時保持・排他・�
     expect(container.querySelector('dialog.viewer')).toBeNull();
   });
 
-  it('ドック「参照画像」タブから任意画像で開き、閉じて一時保持→再開→実行・破棄と URL 寿命・非永続化が正しく動作する', async () => {
+  it('ドック「参照画像」タブから任意画像で開き、確定でドックを閉じたまま通常の「生成する」ボタンから実行・インペイント中バーから編集へ戻れる', async () => {
     await renderApp();
 
+    // ドック「参照画像」タブを開いてアップロードする
     await click(dockTab('参照画像'));
+    expect(container.querySelector('.dock')?.classList.contains('is-open')).toBe(true);
+
     const fileInput = container.querySelector<HTMLInputElement>('.reference-panel input.inpaint-file-input')!;
     const file = new File([PNG_512], 'custom-base.png', { type: 'image/png' });
     Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
@@ -261,11 +275,14 @@ describe('インペイント導線・マスク編集・一時保持・排他・�
     });
 
     await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).not.toBeNull());
+    // インペイント画面を開くと背後のドックも自動で閉じる
+    expect(container.querySelector('.dock')?.classList.contains('is-open')).toBe(false);
+
     const dialog1 = container.querySelector<HTMLDialogElement>('dialog.inpaint-dialog')!;
     expect(dialog1.textContent).toContain('custom-base.png');
     expect(dialog1.textContent).toContain('512×512');
 
-    // マスクを描画し、強さを 0.55 に変更
+    // マスクを描画し、強さを 0.55 に変更して「確定」する
     await paintStrokeOnDialog(dialog1);
     const strengthSlider = dialog1.querySelector<HTMLInputElement>('aside.inpaint-side input[type="range"]')!;
     await act(async () => {
@@ -274,27 +291,27 @@ describe('インペイント導線・マスク編集・一時保持・排他・�
     });
     expect(dialog1.querySelector('aside.inpaint-side output')?.textContent).toBe('0.55');
 
-    // 「タグを編集（一時保存して閉じる）」でモーダルを閉じる
-    await click(buttonByText('タグを編集（一時保存して閉じる）', dialog1));
+    await click(buttonByText('確定', dialog1));
     await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).toBeNull());
 
-    // 「参照画像」タブに一時保持セッションがサムネイル付きで表示される
-    await click(dockTab('参照画像'));
-    const sessionCard = container.querySelector<HTMLElement>('.inpaint-session-card')!;
-    expect(sessionCard).not.toBeNull();
-    expect(sessionCard.textContent).toContain('custom-base.png');
-    expect(sessionCard.textContent).toContain('マスク描画済み');
-    const sessionUrl = sessionCard.querySelector<HTMLImageElement>('.inpaint-session-thumb')!.getAttribute('src')!;
+    // ドックは閉じたまま、GenerateBar に「インペイント中」インジケーターが出る
+    expect(container.querySelector('.dock')?.classList.contains('is-open')).toBe(false);
+    const indicator = container.querySelector<HTMLElement>('.gen-inpaint-indicator')!;
+    expect(indicator).not.toBeNull();
+    expect(indicator.textContent).toContain('インペイント中（512×512 / 強さ 0.55）');
+    const sessionUrl = indicator.querySelector<HTMLImageElement>('.gen-inpaint-thumb')!.getAttribute('src')!;
 
-    // 「マスク編集を再開」で同じマスク状態・強さのまま再開できる
-    await click(buttonByText('マスク編集を再開', sessionCard));
+    // 「インペイント中」バーを押すと、そのまま同じマスク状態・強さでインペイント画面に戻れる
+    await click(indicator.querySelector<HTMLButtonElement>('.gen-inpaint-summary')!);
     await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).not.toBeNull());
     const dialog2 = container.querySelector<HTMLDialogElement>('dialog.inpaint-dialog')!;
-    expect(buttonByText('インペイントを実行', dialog2).disabled).toBe(false);
+    expect(buttonByText('確定', dialog2).disabled).toBe(false);
     expect(dialog2.querySelector('aside.inpaint-side output')?.textContent).toBe('0.55');
+    await click(buttonByText('確定', dialog2));
+    await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).toBeNull());
 
-    // 実行すると専用モデル・action: infill・ベース画像寸法 512×512・inpaintImg2ImgStrength 0.55 で送信される
-    await click(buttonByText('インペイントを実行', dialog2));
+    // 通常の「生成する」ボタンからインペイントが実行され、結果がそのままギャラリーに出る（ドックも閉じたまま）
+    await click(buttonByText('生成する'));
     await vi.waitFor(() => expect(requestImages).toHaveBeenCalledTimes(1));
     const req = vi.mocked(requestImages).mock.calls[0]![1];
     expect(req.model).toBe(NAI_INPAINT_MODEL);
@@ -311,13 +328,13 @@ describe('インペイント導線・マスク編集・一時保持・排他・�
     expect(typeof req.parameters.mask).toBe('string');
     expect(req.parameters).not.toHaveProperty('director_reference_images');
 
-    // 生成成功後はモーダルが閉じ、ギャラリーへ追加される（width/height は generation.size ではなく inpaint 寸法 512×512）
-    await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).toBeNull());
+    expect(container.querySelector('.dock')?.classList.contains('is-open')).toBe(false);
     expect(container.querySelectorAll('.thumb-frame')).toHaveLength(1);
     await click(container.querySelector<HTMLButtonElement>('.thumb-btn')!);
     await vi.waitFor(() => expect(container.querySelector('dialog.viewer')).not.toBeNull());
     expect(container.querySelector('dialog.viewer')?.textContent).toContain('512×512');
-    // ギャラリー画像を削除してもインペイント一時保持セッションの Object URL は revoke されない
+
+    // ギャラリー画像を削除してもインペイントセッションの Object URL は revoke されない
     const galleryUrl = container.querySelector<HTMLImageElement>('.thumb img')!.getAttribute('src')!;
     vi.useFakeTimers();
     try {
@@ -331,6 +348,16 @@ describe('インペイント導線・マスク編集・一時保持・排他・�
     }
     expect(revokedUrls).toContain(galleryUrl);
     expect(revokedUrls).not.toContain(sessionUrl);
+
+    // GenerateBar の「一時 OFF」を押すとセッション保持のまま通常生成へ切り替わる
+    await click(buttonByText('一時 OFF', container.querySelector('.gen-inpaint-indicator')!));
+    expect(container.querySelector('.gen-inpaint-indicator')).toBeNull();
+
+    await click(buttonByText('生成する'));
+    await vi.waitFor(() => expect(requestImages).toHaveBeenCalledTimes(2));
+    const normalReq = vi.mocked(requestImages).mock.calls[1]![1];
+    expect(normalReq.action).toBe('generate');
+    expect(normalReq.parameters).not.toHaveProperty('mask');
 
     // IndexedDB・localStorage・sessionStorage・バックアップ JSON にベース画像やマスクが含まれない
     const serializedWrites = JSON.stringify(vi.mocked(setKV).mock.calls);
@@ -348,16 +375,19 @@ describe('インペイント導線・マスク編集・一時保持・排他・�
     expect(backupJson).not.toContain('custom-base.png');
     expect(backupJson).not.toContain('inpaint');
 
-    // 「破棄」で確認ダイアログを確定するとセッションと Object URL が解放される
-    await click(buttonByText('破棄', container.querySelector('.inpaint-session-card')!));
+    // 「参照画像」タブにはセッションが残っており、「破棄」で解放・URL revoke される
+    await click(dockTab('参照画像'));
+    const sessionCard = container.querySelector<HTMLElement>('.inpaint-session-card')!;
+    expect(sessionCard).not.toBeNull();
+    expect(sessionCard.textContent).toContain('custom-base.png');
+    await click(buttonByText('破棄', sessionCard));
     const confirmDialog = container.querySelector<HTMLDialogElement>('dialog.app-dialog-confirm')!;
-    expect(confirmDialog).not.toBeNull();
     await click(confirmDialog.querySelector<HTMLButtonElement>('button.btn-danger')!);
     await vi.waitFor(() => expect(container.querySelector('.inpaint-session-card')).toBeNull());
     expect(revokedUrls).toContain(sessionUrl);
   });
 
-  it('精密参照 ON の状態からインペイントを開くと確認ダイアログで一時 OFF に切り替え、リクエストに精密参照を含めない', async () => {
+  it('精密参照 ON との相互排他（双方への切替）が動作し、アンマウント時に Object URL を解放する', async () => {
     await renderApp();
 
     // 精密参照を追加して ON にする
@@ -373,7 +403,7 @@ describe('インペイント導線・マスク編集・一時保持・排他・�
     await vi.waitFor(() => expect(container.querySelectorAll('.reference-card')).toHaveLength(1));
     expect(container.querySelector('.gen-ref-indicator')?.textContent).toContain('精密参照 ON');
 
-    // インペイントをアップロードで開こうとすると排他確認ダイアログが出る
+    // インペイントを開こうとすると排他確認ダイアログが出る
     const inpaintInput = container.querySelector<HTMLInputElement>('.reference-panel input.inpaint-file-input')!;
     const targetFile = new File([PNG_512], 'inpaint-target.png', { type: 'image/png' });
     Object.defineProperty(inpaintInput, 'files', { configurable: true, value: [targetFile] });
@@ -388,7 +418,7 @@ describe('インペイント導線・マスク編集・一時保持・排他・�
     expect(container.querySelector('dialog.inpaint-dialog')).toBeNull();
     expect(container.querySelector('.gen-ref-indicator')?.textContent).toContain('精密参照 ON');
 
-    // もう一度試して「一時 OFF にして開く」を確定する
+    // 確定すると精密参照が一時 OFF になり、インペイント画面が開く
     Object.defineProperty(inpaintInput, 'files', { configurable: true, value: [targetFile] });
     await act(async () => {
       inpaintInput.dispatchEvent(new Event('change', { bubbles: true }));
@@ -397,22 +427,34 @@ describe('インペイント導線・マスク編集・一時保持・排他・�
     await click(buttonByText('一時 OFF にして開く', confirmOk));
 
     await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).not.toBeNull());
-    // 精密参照は一時 OFF になり、インジケーターが消える
     expect(container.querySelector('.gen-ref-indicator')).toBeNull();
 
-    // マスクを描いて実行しても精密参照はリクエストに含まれない
+    // マスクを描いて確定し、通常の「生成する」で実行すると精密参照を含めない infill になる
     const dialog = container.querySelector<HTMLDialogElement>('dialog.inpaint-dialog')!;
     await paintStrokeOnDialog(dialog);
-    await click(buttonByText('インペイントを実行', dialog));
+    await click(buttonByText('確定', dialog));
+    await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).toBeNull());
+    expect(container.querySelector('.gen-inpaint-indicator')).not.toBeNull();
+
+    await click(buttonByText('生成する'));
     await vi.waitFor(() => expect(requestImages).toHaveBeenCalledTimes(1));
     const req = vi.mocked(requestImages).mock.calls[0]![1];
     expect(req.action).toBe('infill');
     expect(req.parameters).not.toHaveProperty('director_reference_images');
 
-    // アンマウント時にも保持中の Object URL が revoke される
+    // 逆にインペイント中に精密参照を再度 ON にすると、インペイントが自動で一時 OFF になる
     const heldThumbUrl = container
-      .querySelector<HTMLImageElement>('.inpaint-session-thumb')!
+      .querySelector<HTMLImageElement>('.gen-inpaint-thumb')!
       .getAttribute('src')!;
+    await click(dockTab('参照画像'));
+    const refSwitch = container.querySelector<HTMLInputElement>('.reference-card input[role="switch"]')!;
+    await click(refSwitch);
+    await vi.waitFor(() => {
+      expect(container.querySelector('.gen-ref-indicator')).not.toBeNull();
+      expect(container.querySelector('.gen-inpaint-indicator')).toBeNull();
+    });
+
+    // アンマウント時にも保持中の Object URL が revoke される
     await act(async () => root.unmount());
     expect(revokedUrls).toContain(heldThumbUrl);
   });
