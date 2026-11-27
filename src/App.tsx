@@ -13,6 +13,7 @@ import { LatestPreview } from './components/LatestPreview';
 import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { useDictionary } from './hooks/useDictionary';
 import { useHeaderHeight } from './hooks/useHeaderHeight';
+import { useWorkbenchSplit, MAX_GENERATE_RATIO, MIN_GENERATE_RATIO } from './hooks/useWorkbenchSplit';
 import { useWindowScrollMemory } from './hooks/useWindowScrollMemory';
 import { useGenerationSettings, useSettings, useWorkspace } from './hooks/useWorkspace';
 import { Toast, type ToastHandle } from './components/Toast';
@@ -119,7 +120,16 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const inpaint = useInpaintSession();
   const generator = useGenerator(imageStore.add, () => anlas.refresh());
   const [tab, setTab] = useState<Tab>('editor');
+  const lastWorkbenchTabRef = useRef<'editor' | 'generate'>('editor');
+  const selectTab = useCallback((next: Tab) => {
+    if (next === 'editor' || next === 'generate') {
+      lastWorkbenchTabRef.current = next;
+    }
+    setTab(next);
+  }, []);
   useWindowScrollMemory(tab);
+  const workbenchRef = useRef<HTMLDivElement>(null);
+  const split = useWorkbenchSplit(workbenchRef);
   // 広い画面では、画像エリアをクリックしたらドックを閉じる（バーは初期表示と同じ形で残る）
   const [dockCollapse, setDockCollapse] = useState(0);
   const [dockOpenTab, setDockOpenTab] = useState<DockTabSignal>({ tab: 'prompt', seq: 0 });
@@ -175,7 +185,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     tagUndo.discardHistory();
     rawDispatch(action);
   }, [rawDispatch, tagUndo.discardHistory]);
-  const openEditor = useCallback(() => setTab('editor'), []);
+  const openEditor = useCallback(() => selectTab('editor'), [selectTab]);
   const firstRunReady = dictionary.loaded && !dictionary.error &&
     [persistence, settingsPersistence, generationPersistence, ...presets.persistence].every((state) => state.loaded && !state.error);
   const hasExistingData = useMemo(
@@ -238,6 +248,9 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     commitAll: tabSync.commitAll,
   });
   const openSettings = useCallback(() => setTab('settings'), []);
+  const toggleSettings = useCallback(() => {
+    setTab((current) => (current === 'settings' ? lastWorkbenchTabRef.current : 'settings'));
+  }, []);
   const openDictionary = useCallback(() => setTab('dictionary'), []);
   const openReferenceTab = useCallback(() => {
     setTab((current) => (current === 'editor' || current === 'generate' ? current : 'generate'));
@@ -407,7 +420,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               className={`tab tab-${t.key}`}
               title={t.label}
               aria-current={tab === t.key ? 'page' : undefined}
-              onClick={() => setTab(t.key)}
+              onClick={() => selectTab(t.key)}
             >
               {t.icon}
               <span className="tab-label">{t.label}</span>
@@ -435,9 +448,9 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             type="button"
             className="tab tab-settings"
             aria-label="設定"
-            title="設定"
+            title={tab === 'settings' ? '元の画面へ戻る' : '設定'}
             aria-current={tab === 'settings' || tab === 'dictionary' ? 'page' : undefined}
-            onClick={openSettings}
+            onClick={toggleSettings}
           >
             <SettingsIcon />
           </button>
@@ -468,7 +481,13 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       />
       <main className="app-main" inert={tabSync.busy || undefined}>
         {/* 編集と生成は、広い画面では左右に並べ、狭い画面ではタブで切り替える（どちらも表示したまま CSS で隠す） */}
-        <div className="workbench" data-tab={tab} hidden={!showWorkbench}>
+        <div
+          ref={workbenchRef}
+          className={`workbench${split.dragging ? ' is-resizing' : ''}`}
+          data-tab={tab}
+          hidden={!showWorkbench}
+          style={split.style}
+        >
           <div className="pane pane-editor">
             <Editor
               workspace={workspace}
@@ -490,6 +509,23 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               shown={tab === 'editor'}
             />
           </div>
+          <div
+            className="workbench-splitter"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="編集エリアと画像エリアの幅を調整"
+            aria-valuemin={Math.round(MIN_GENERATE_RATIO * 100)}
+            aria-valuemax={Math.round(MAX_GENERATE_RATIO * 100)}
+            aria-valuenow={split.ratioPercent}
+            tabIndex={0}
+            title="ドラッグして幅を変更（ダブルクリックで初期幅に戻す）"
+            onPointerDown={split.onPointerDown}
+            onPointerMove={split.onPointerMove}
+            onPointerUp={split.onPointerUp}
+            onPointerCancel={split.onPointerCancel}
+            onDoubleClick={split.reset}
+            onKeyDown={split.onKeyDown}
+          />
           <div className="pane pane-generate" onClick={hideDockOnImageClick}>
             <Gallery
               images={imageStore.images}
@@ -649,7 +685,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
       )}
 
       {showLatest && latest && (
-        <LatestPreview image={latest} onOpen={() => setTab('generate')} onDismiss={dismiss} />
+        <LatestPreview image={latest} onOpen={() => selectTab('generate')} onDismiss={dismiss} />
       )}
 
       <Toast ref={toastRef} />

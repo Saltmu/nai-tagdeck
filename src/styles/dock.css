@@ -199,9 +199,42 @@
 
   .workbench {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(380px, 460px);
+    grid-template-columns: minmax(420px, 1fr) 12px var(--workbench-generate-width, minmax(380px, 460px));
     align-items: start;
-    gap: 1rem;
+    gap: 0.25rem;
+  }
+
+  .workbench.is-resizing {
+    user-select: none;
+    cursor: col-resize;
+  }
+
+  .workbench-splitter {
+    position: sticky;
+    top: 4.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: calc(100dvh - 6.5rem);
+    cursor: col-resize;
+    touch-action: none;
+    border-radius: var(--radius-pill);
+  }
+
+  .workbench-splitter::before {
+    content: '';
+    width: 4px;
+    height: 48px;
+    border-radius: var(--radius-pill);
+    background: var(--border);
+    transition: background 0.15s ease, height 0.15s ease;
+  }
+
+  .workbench-splitter:hover::before,
+  .workbench-splitter:focus-visible::before,
+  .workbench.is-resizing .workbench-splitter::before {
+    background: var(--accent);
+    height: 72px;
   }
 
   .workbench[data-tab] .pane-editor {
