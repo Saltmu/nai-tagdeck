@@ -36,7 +36,6 @@ interface Props {
 export function GenerateDock({
   collapseSignal,
   openTabSignal,
-  generating,
   referenceActive = false,
   referenceCount,
   history,
@@ -259,12 +258,6 @@ export function GenerateDock({
               onClick={() => select(t.key)}
             >
               {t.label}
-              {t.key === 'generate' && generating && (
-                <>
-                  <span className="spinner spinner-small" aria-hidden="true" />
-                  <span className="visually-hidden">（生成中）</span>
-                </>
-              )}
               {t.key === 'reference' && activeReferenceCount > 0 && (
                 <>
                   <span className="dock-tab-badge" aria-hidden="true">{activeReferenceCount}</span>

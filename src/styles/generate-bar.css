@@ -12,9 +12,18 @@
 }
 
 .generate-bar .btn-large {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
   min-height: 40px;
   padding-block: 0.35rem;
   font-size: var(--text-base);
+}
+
+.generate-bar .btn-primary .spinner-small {
+  border-color: color-mix(in srgb, var(--accent-text) 30%, transparent);
+  border-top-color: var(--accent-text);
 }
 
 .generate-bar .gen-blocker {
