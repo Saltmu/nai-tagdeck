@@ -26,8 +26,6 @@ export interface GenerateArgs {
   settings: GenerationSettings;
   references?: readonly PreciseReferenceItem[];
   inpaint?: InpaintInput;
-  /** この生成リクエストが成功したときだけ呼ぶ。 */
-  onComplete?: () => void;
 }
 
 export interface Generator {
@@ -73,7 +71,7 @@ export function useGenerator(
   useEffect(() => () => controller.current?.abort(), []);
 
   const generate = useCallback(
-    async ({ token, prompt, negative, characters, settings, references, inpaint, onComplete }: GenerateArgs) => {
+    async ({ token, prompt, negative, characters, settings, references, inpaint }: GenerateArgs) => {
       if (controller.current) return; // 同時に1件まで
       const ctrl = new AbortController();
       controller.current = ctrl;
@@ -127,7 +125,6 @@ export function useGenerator(
           })),
         );
         onSuccessRef.current?.();
-        onComplete?.();
       } catch (e) {
         if (!ctrl.signal.aborted) {
           setError(

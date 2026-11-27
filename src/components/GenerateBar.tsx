@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { Generator } from '../hooks/useGenerator';
+import type { InpaintSession } from '../hooks/useInpaintSession';
 import type { TokenState } from '../hooks/useToken';
 import type { AnlasState } from '../hooks/useAnlas';
 import { estimateAnlasCost, PRECISE_REFERENCE_ANLAS, type AnlasEstimate } from '../lib/anlasEstimate';
@@ -7,6 +8,7 @@ import { resolveSize, sizeChangePatch, type GenerationSettings, type SizeKey } f
 import { isFreeGeneration } from '../lib/novelai';
 import { referenceTypeLabel, type PreciseReferenceItem } from '../lib/referenceImage';
 import { AnlasLine } from './AnlasBalance';
+import { NextIcon } from './icons';
 import { SizePicker } from './SizePicker';
 
 interface Props {
@@ -31,6 +33,12 @@ interface Props {
   onDisableReference?: () => void;
   /** インジケーター押下で参照画像タブを開く。 */
   onOpenReferenceTab?: () => void;
+  /** 有効なインペイントセッション（インペイント中インジケーター表示用）。 */
+  inpaintSession?: InpaintSession | null;
+  /** インペイント中インジケーター押下でインペイント画面に戻る。 */
+  onResumeInpaint?: () => void;
+  /** インペイント中インジケーターからインペイントを一時 OFF にする。 */
+  onDisableInpaint?: () => void;
 }
 
 /**
@@ -52,22 +60,31 @@ export function GenerateBar({
   activeReference,
   onDisableReference,
   onOpenReferenceTab,
+  inpaintSession,
+  onResumeInpaint,
+  onDisableInpaint,
 }: Props) {
   const barRef = useRef<HTMLElement>(null);
   const { generating } = generator;
   const customSize = resolveSize(generation);
-  const activeList = activeReferences ?? (activeReference ? [activeReference] : []);
-  const effectiveReferenceCount = referenceCount ?? activeList.length;
+  const activeList = inpaintSession ? [] : (activeReferences ?? (activeReference ? [activeReference] : []));
+  const effectiveReferenceCount = inpaintSession ? 0 : (referenceCount ?? activeList.length);
   const additionalAnlas = effectiveReferenceCount * PRECISE_REFERENCE_ANLAS;
   const summaryText =
     activeList.length === 1
       ? `精密参照 ON（${referenceTypeLabel(activeList[0]!.type)} / +${additionalAnlas} Anlas）`
       : `精密参照 ${activeList.length}枚 ON（+${additionalAnlas} Anlas）`;
+  const inpaintSummaryText = inpaintSession
+    ? `インペイント中（${inpaintSession.width}×${inpaintSession.height} / 強さ ${inpaintSession.strength.toFixed(2)}）`
+    : '';
+  const effectiveSize = inpaintSession
+    ? { width: inpaintSession.width, height: inpaintSession.height }
+    : customSize;
   const resolvedEstimate =
     estimate ??
     estimateAnlasCost({
       subscription: anlas?.status === 'ready' ? anlas.subscription : null,
-      baseIsFree: isFreeGeneration({ width: customSize.width, height: customSize.height, steps: generation.steps }),
+      baseIsFree: isFreeGeneration({ width: effectiveSize.width, height: effectiveSize.height, steps: generation.steps }),
       referenceCount: effectiveReferenceCount,
     });
 
@@ -111,6 +128,19 @@ export function GenerateBar({
     </>
   );
 
+  const inpaintIndicatorContent = inpaintSession && (
+    <>
+      <img src={inpaintSession.sourceUrl} alt="" className="gen-inpaint-thumb" aria-hidden="true" />
+      <span className="gen-inpaint-text">{inpaintSummaryText}</span>
+      {onResumeInpaint && (
+        <span className="gen-inpaint-return" aria-hidden="true">
+          戻る
+          <NextIcon />
+        </span>
+      )}
+    </>
+  );
+
   return (
     <section ref={barRef} className="generate-bar" aria-label="生成操作">
       {anlas && <AnlasLine anlas={anlas} estimate={resolvedEstimate} />}
@@ -134,6 +164,33 @@ export function GenerateBar({
               className="btn btn-small gen-ref-disable"
               onClick={onDisableReference}
               aria-label="精密参照を一時 OFF にする"
+            >
+              一時 OFF
+            </button>
+          )}
+        </div>
+      )}
+      {inpaintSession && (
+        <div className="gen-inpaint-indicator" role="status">
+          {onResumeInpaint ? (
+            <button
+              type="button"
+              className="gen-inpaint-summary"
+              onClick={onResumeInpaint}
+              aria-label={`${inpaintSummaryText}。インペイント画面に戻る`}
+              title="インペイント画面に戻る"
+            >
+              {inpaintIndicatorContent}
+            </button>
+          ) : (
+            <div className="gen-inpaint-summary">{inpaintIndicatorContent}</div>
+          )}
+          {onDisableInpaint && (
+            <button
+              type="button"
+              className="btn btn-small gen-inpaint-disable"
+              onClick={onDisableInpaint}
+              aria-label="インペイントを一時 OFF にする"
             >
               一時 OFF
             </button>

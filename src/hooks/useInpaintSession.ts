@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   clearMaskHistory,
   DEFAULT_INPAINT_ADD_ORIGINAL_IMAGE,
@@ -6,6 +6,7 @@ import {
   DEFAULT_INPAINT_MASK_OPACITY,
   emptyMaskHistory,
   InpaintImageError,
+  isMaskEmpty,
   normalizeBrushRadius,
   normalizeInpaintStrength,
   normalizeMaskOpacity,
@@ -42,10 +43,14 @@ export interface InpaintSession {
   brushRadius: number;
   maskColor: InpaintMaskColorKey;
   maskOpacity: number;
+  /** 確定済みで通常の「生成する」ボタンからインペイント実行する状態か（一時 OFF で通常生成へ切替可）。 */
+  enabled: boolean;
 }
 
 export interface InpaintSessionStore {
   session: InpaintSession | null;
+  /** 確定済みかつマスクが 1 箇所以上塗られており、通常の「生成する」ボタンでインペイント実行されるセッション。 */
+  activeSession: InpaintSession | null;
   open: boolean;
   loading: boolean;
   error: string | null;
@@ -56,7 +61,12 @@ export interface InpaintSessionStore {
   ) => Promise<boolean>;
   startFromFile: (file: File) => Promise<boolean>;
   resume: () => void;
+  /** マスクを確定し、有効状態でモーダルを閉じる。空マスクのときは何もしない。 */
+  confirm: () => boolean;
+  /** セッションを保持したままモーダルを閉じる（空マスクなら enabled を false に落とす）。 */
   close: () => void;
+  /** セッションを保持したままインペイントの ON / 一時 OFF を切り替える。 */
+  setEnabled: (enabled: boolean) => void;
   discard: () => void;
   pushStroke: (stroke: MaskStroke) => void;
   undoMask: () => void;
@@ -72,7 +82,7 @@ export interface InpaintSessionStore {
 
 /**
  * インペイント用の一時保持セッション（メモリのみ、永続化・タブ同期・バックアップ対象外）。
- * モーダルを閉じてもベース画像・マスク履歴・強さ・ブラシ設定を保持し、タグ編集後に再開できる。
+ * モーダルでマスクを確定して閉じると、通常の「生成する」ボタンからインペイント生成できる。
  */
 export function useInpaintSession(): InpaintSessionStore {
   const [session, setSession] = useState<InpaintSession | null>(null);
@@ -138,6 +148,7 @@ export function useInpaintSession(): InpaintSessionStore {
           brushRadius: prev?.brushRadius ?? DEFAULT_INPAINT_BRUSH_RADIUS,
           maskColor: prev?.maskColor ?? 'red',
           maskOpacity: prev?.maskOpacity ?? DEFAULT_INPAINT_MASK_OPACITY,
+          enabled: false,
         };
         sessionRef.current = next;
         setSession(next);
@@ -170,9 +181,49 @@ export function useInpaintSession(): InpaintSessionStore {
     setOpen(true);
   }, []);
 
+  const updateSession = useCallback((updater: (current: InpaintSession) => InpaintSession) => {
+    const current = sessionRef.current;
+    if (!current) return;
+    const next = updater(current);
+    if (next === current) return;
+    sessionRef.current = next;
+    setSession(next);
+  }, []);
+
+  const confirm = useCallback((): boolean => {
+    const current = sessionRef.current;
+    if (!current) return false;
+    if (isMaskEmpty(current.maskHistory, current.width, current.height)) return false;
+    if (!current.enabled) {
+      const next = { ...current, enabled: true };
+      sessionRef.current = next;
+      setSession(next);
+    }
+    setOpen(false);
+    return true;
+  }, []);
+
   const close = useCallback(() => {
+    const current = sessionRef.current;
+    if (current?.enabled && isMaskEmpty(current.maskHistory, current.width, current.height)) {
+      const next = { ...current, enabled: false };
+      sessionRef.current = next;
+      setSession(next);
+    }
     setOpen(false);
   }, []);
+
+  const setEnabled = useCallback(
+    (enabled: boolean) => {
+      updateSession((current) => {
+        if (enabled && isMaskEmpty(current.maskHistory, current.width, current.height)) {
+          return current;
+        }
+        return current.enabled === enabled ? current : { ...current, enabled };
+      });
+    },
+    [updateSession],
+  );
 
   const discard = useCallback(() => {
     epochRef.current += 1;
@@ -183,15 +234,6 @@ export function useInpaintSession(): InpaintSessionStore {
     sessionRef.current = null;
     setSession(null);
     URL.revokeObjectURL(prev.sourceUrl);
-  }, []);
-
-  const updateSession = useCallback((updater: (current: InpaintSession) => InpaintSession) => {
-    const current = sessionRef.current;
-    if (!current) return;
-    const next = updater(current);
-    if (next === current) return;
-    sessionRef.current = next;
-    setSession(next);
   }, []);
 
   const pushStroke = useCallback(
@@ -265,15 +307,23 @@ export function useInpaintSession(): InpaintSessionStore {
 
   const dismissError = useCallback(() => setError(null), []);
 
+  const activeSession = useMemo(() => {
+    if (!session?.enabled) return null;
+    return isMaskEmpty(session.maskHistory, session.width, session.height) ? null : session;
+  }, [session]);
+
   return {
     session,
+    activeSession,
     open,
     loading,
     error,
     startFromBlob,
     startFromFile,
     resume,
+    confirm,
     close,
+    setEnabled,
     discard,
     pushStroke,
     undoMask,

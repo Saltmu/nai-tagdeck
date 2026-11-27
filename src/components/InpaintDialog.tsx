@@ -9,16 +9,11 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import type { AnlasState } from '../hooks/useAnlas';
-import type { Generator } from '../hooks/useGenerator';
 import type { InpaintSession } from '../hooks/useInpaintSession';
-import { estimateAnlasCost } from '../lib/anlasEstimate';
-import type { GenerationSettings } from '../lib/generation';
 import {
   activeMaskStrokes,
   canRedoMask,
   canUndoMask,
-  createInpaintMaskBase64,
   INPAINT_BRUSH_MAX,
   INPAINT_BRUSH_MIN,
   INPAINT_BRUSH_STEP,
@@ -26,10 +21,8 @@ import {
   INPAINT_MASK_OPACITY_MAX,
   INPAINT_MASK_OPACITY_MIN,
   INPAINT_MASK_OPACITY_STEP,
-  InpaintImageError,
   isMaskEmpty,
   maskColorHex,
-  prepareInpaintBaseImageBase64,
   renderMaskOverlay,
   type InpaintMaskColorKey,
   type InpaintTool,
@@ -39,17 +32,26 @@ import {
   INPAINT_STRENGTH_MAX,
   INPAINT_STRENGTH_MIN,
   INPAINT_STRENGTH_STEP,
-  isFreeGeneration,
-  type InpaintInput,
 } from '../lib/novelai';
-import { prefixFurryDataset, type buildCharacterPrompts } from '../lib/prompt';
-import { AnlasLine } from './AnlasBalance';
 import { useDialogs } from './Dialogs';
 import { RedoIcon, UndoIcon } from './icons';
 
 const INPAINT_HISTORY_STATE = 'naiTagdeckInpaint';
 const isInpaintHistoryState = (state: unknown) =>
   typeof state === 'object' && state !== null && (state as Record<string, unknown>)[INPAINT_HISTORY_STATE] === true;
+
+let mountedInpaintCount = 0;
+let pendingSelfBacks = 0;
+
+function onSelfBackPopState(e: PopStateEvent) {
+  if (pendingSelfBacks > 0) {
+    pendingSelfBacks -= 1;
+    e.stopImmediatePropagation();
+  }
+  if (pendingSelfBacks === 0) {
+    window.removeEventListener('popstate', onSelfBackPopState, true);
+  }
+}
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 8;
@@ -85,15 +87,8 @@ function clampView(view: ViewState, stageW: number, stageH: number): ViewState {
 
 export interface InpaintDialogProps {
   session: InpaintSession;
-  token: string | null;
-  basePrompt: string;
-  characterPrompts: ReturnType<typeof buildCharacterPrompts>;
-  negativePrompt: string;
-  generation: GenerationSettings;
-  generator: Generator;
-  anlas: AnlasState;
+  onConfirm: () => void;
   onClose: () => void;
-  onEditTags: () => void;
   onDiscard: () => void;
   onPushStroke: (stroke: MaskStroke) => void;
   onUndoMask: () => void;
@@ -104,20 +99,12 @@ export interface InpaintDialogProps {
   onBrushRadiusChange: (radius: number) => void;
   onMaskColorChange: (color: InpaintMaskColorKey) => void;
   onMaskOpacityChange: (opacity: number) => void;
-  onExecute: (input: InpaintInput) => Promise<boolean>;
 }
 
 export function InpaintDialog({
   session,
-  token,
-  basePrompt,
-  characterPrompts,
-  negativePrompt,
-  generation,
-  generator,
-  anlas,
+  onConfirm,
   onClose,
-  onEditTags,
   onDiscard,
   onPushStroke,
   onUndoMask,
@@ -128,7 +115,6 @@ export function InpaintDialog({
   onBrushRadiusChange,
   onMaskColorChange,
   onMaskOpacityChange,
-  onExecute,
 }: InpaintDialogProps) {
   const dialogs = useDialogs();
   const id = useId();
@@ -140,8 +126,6 @@ export function InpaintDialog({
   const [view, setView] = useState<ViewState>(FIT_VIEW);
   const [stageSize, setStageSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
 
   const toolRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const colorRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -154,17 +138,12 @@ export function InpaintDialog({
   toolRef.current = tool;
   const sessionRef = useRef(session);
   sessionRef.current = session;
-  const generatingRef = useRef(generator.generating);
-  generatingRef.current = generator.generating;
-  const submittingRef = useRef(submitting);
-  submittingRef.current = submitting;
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const draftStrokeRef = useRef<MaskStroke | null>(null);
   const pinchCanceledRef = useRef(false);
-  const activeHistoryRef = useRef(false);
 
   const committedStrokes = useMemo(() => activeMaskStrokes(session.maskHistory), [session.maskHistory]);
   const maskEmpty = useMemo(
@@ -174,42 +153,16 @@ export function InpaintDialog({
   const canUndo = canUndoMask(session.maskHistory);
   const canRedo = canRedoMask(session.maskHistory);
 
-  const effectiveBasePrompt = useMemo(
-    () => (generation.mode === 'furry' ? prefixFurryDataset(basePrompt) : basePrompt),
-    [basePrompt, generation.mode],
-  );
-  const missingPrompt = !basePrompt && !(generation.mode === 'furry' && characterPrompts.length > 0);
-  const executeBlocker = !token
-    ? 'トークンが未設定です（設定タブで入力してください）'
-    : missingPrompt
-      ? 'ベースに ON のタグがありません'
-      : maskEmpty
-        ? '描き直す部分をマスクで塗ってください'
-        : null;
-
-  const inpaintEstimate = useMemo(
-    () =>
-      estimateAnlasCost({
-        subscription: anlas.status === 'ready' ? anlas.subscription : null,
-        baseIsFree: isFreeGeneration({ width: session.width, height: session.height, steps: generation.steps }),
-        referenceCount: 0,
-      }),
-    [anlas.status, anlas.subscription, session.width, session.height, generation.steps],
-  );
-
-  const drawMaskPreview = useCallback(
-    (draft: MaskStroke | null) => {
-      const canvas = maskCanvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      const s = sessionRef.current;
-      const strokes = activeMaskStrokes(s.maskHistory);
-      const list = draft ? [...strokes, draft] : strokes;
-      renderMaskOverlay(ctx, list, s.width, s.height, maskColorHex(s.maskColor), s.maskOpacity);
-    },
-    [],
-  );
+  const drawMaskPreview = useCallback((draft: MaskStroke | null) => {
+    const canvas = maskCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const s = sessionRef.current;
+    const strokes = activeMaskStrokes(s.maskHistory);
+    const list = draft ? [...strokes, draft] : strokes;
+    renderMaskOverlay(ctx, list, s.width, s.height, maskColorHex(s.maskColor), s.maskOpacity);
+  }, []);
 
   // マスク履歴・色・不透明度が変わったらキャンバスを再描画する
   useEffect(() => {
@@ -224,8 +177,8 @@ export function InpaintDialog({
 
   // ブラウザの「戻る」ボタンではセッションを破棄せず一時保持して閉じる
   useEffect(() => {
-    activeHistoryRef.current = true;
-    if (!isInpaintHistoryState(window.history.state)) {
+    mountedInpaintCount += 1;
+    if (pendingSelfBacks > 0 || !isInpaintHistoryState(window.history.state)) {
       window.history.pushState({ [INPAINT_HISTORY_STATE]: true }, '');
     }
     const onPopState = () => {
@@ -235,10 +188,14 @@ export function InpaintDialog({
     };
     window.addEventListener('popstate', onPopState);
     return () => {
-      activeHistoryRef.current = false;
+      mountedInpaintCount = Math.max(0, mountedInpaintCount - 1);
       window.removeEventListener('popstate', onPopState);
       queueMicrotask(() => {
-        if (!activeHistoryRef.current && isInpaintHistoryState(window.history.state)) {
+        if (mountedInpaintCount === 0 && isInpaintHistoryState(window.history.state)) {
+          if (pendingSelfBacks === 0) {
+            window.addEventListener('popstate', onSelfBackPopState, true);
+          }
+          pendingSelfBacks += 1;
           window.history.back();
         }
       });
@@ -335,7 +292,7 @@ export function InpaintDialog({
 
     pinchCanceledRef.current = false;
     const currentTool = toolRef.current;
-    if (currentTool === 'pan' || generatingRef.current || submittingRef.current) return;
+    if (currentTool === 'pan') return;
 
     const pt = toImagePoint(e.clientX, e.clientY);
     if (!pt) return;
@@ -467,12 +424,12 @@ export function InpaintDialog({
     if (!mod) return;
     const key = e.key.toLowerCase();
     if (key === 'z' && !e.shiftKey) {
-      if (canUndo && !generator.generating) {
+      if (canUndo) {
         e.preventDefault();
         onUndoMask();
       }
     } else if ((key === 'z' && e.shiftKey) || key === 'y') {
-      if (canRedo && !generator.generating) {
+      if (canRedo) {
         e.preventDefault();
         onRedoMask();
       }
@@ -480,37 +437,11 @@ export function InpaintDialog({
   };
 
   const handleDiscardClick = async () => {
-    if (generator.generating || submitting) return;
     const ok = await dialogs.confirm(
       'インペイントの一時保持データ（ベース画像とマスク）を完全に破棄しますか？',
       { okLabel: '破棄', danger: true },
     );
     if (ok) onDiscard();
-  };
-
-  const handleExecute = async () => {
-    if (executeBlocker !== null || generator.generating || submitting) return;
-    setSubmitting(true);
-    setLocalError(null);
-    try {
-      const imageBase64 = await prepareInpaintBaseImageBase64(session.sourceBlob, session.width, session.height);
-      const maskBase64 = createInpaintMaskBase64(committedStrokes, session.width, session.height);
-      const succeeded = await onExecute({
-        imageBase64,
-        maskBase64,
-        width: session.width,
-        height: session.height,
-        strength: session.strength,
-        addOriginalImage: session.addOriginalImage,
-      });
-      if (succeeded) {
-        onClose();
-      }
-    } catch (err) {
-      setLocalError(err instanceof InpaintImageError ? err.message : 'インペイント用の画像を準備できませんでした');
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   const fitScale =
@@ -529,7 +460,6 @@ export function InpaintDialog({
           transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
         };
   const cursorDiameter = fitScale > 0 ? Math.max(6, session.brushRadius * 2 * fitScale * view.scale) : 0;
-  const activeError = localError ?? generator.error;
 
   return (
     <dialog
@@ -537,9 +467,9 @@ export function InpaintDialog({
       className="inpaint-dialog"
       aria-labelledby={`${id}-title`}
       onCancel={(e) => {
-        // マスク描画中・生成中は Escape で閉じない。それ以外は破棄せず一時保持して閉じる。
+        // マスク描画中は Escape で閉じない。それ以外は破棄せず一時保持して閉じる。
         e.preventDefault();
-        if (draftStrokeRef.current || generator.generating || submitting) return;
+        if (draftStrokeRef.current) return;
         onClose();
       }}
       onKeyDown={onDialogKeyDown}
@@ -566,7 +496,6 @@ export function InpaintDialog({
             <button
               type="button"
               className="btn btn-small btn-danger"
-              disabled={generator.generating || submitting}
               onClick={() => void handleDiscardClick()}
             >
               破棄
@@ -677,7 +606,7 @@ export function InpaintDialog({
                 <button
                   type="button"
                   className="btn btn-small"
-                  disabled={!canUndo || generator.generating}
+                  disabled={!canUndo}
                   aria-label="元に戻す"
                   title="元に戻す (Ctrl+Z)"
                   onClick={onUndoMask}
@@ -688,7 +617,7 @@ export function InpaintDialog({
                 <button
                   type="button"
                   className="btn btn-small"
-                  disabled={!canRedo || generator.generating}
+                  disabled={!canRedo}
                   aria-label="やり直す"
                   title="やり直す (Ctrl+Y)"
                   onClick={onRedoMask}
@@ -699,7 +628,7 @@ export function InpaintDialog({
                 <button
                   type="button"
                   className="btn btn-small"
-                  disabled={maskEmpty || generator.generating}
+                  disabled={maskEmpty}
                   onClick={onClearMask}
                 >
                   マスクを全消去
@@ -777,24 +706,7 @@ export function InpaintDialog({
             </div>
           </div>
 
-          <aside className="inpaint-side" aria-label="インペイント生成設定">
-            {activeError && (
-              <div className="gen-error" role="alert">
-                <p>{activeError}</p>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="エラーを閉じる"
-                  onClick={() => {
-                    setLocalError(null);
-                    generator.dismissError();
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
+          <aside className="inpaint-side" aria-label="インペイント設定">
             <div className="field">
               <label htmlFor={`${id}-strength`}>
                 強さ（{INPAINT_STRENGTH_MIN.toFixed(2)}〜{INPAINT_STRENGTH_MAX.toFixed(2)}）
@@ -826,51 +738,25 @@ export function InpaintDialog({
               <span>元画像を加える（add_original_image）</span>
             </label>
 
-            <details className="inpaint-prompt-details">
-              <summary>現在のプロンプトを確認</summary>
-              <dl className="inpaint-prompt-list">
-                <div>
-                  <dt>ベース</dt>
-                  <dd>{effectiveBasePrompt || '（なし）'}</dd>
-                </div>
-                {characterPrompts.map((ch, idx) => (
-                  <div key={`${ch.name}-${idx}`}>
-                    <dt>キャラ {idx + 1}: {ch.name}</dt>
-                    <dd>{ch.prompt || '（なし）'}</dd>
-                  </div>
-                ))}
-                <div>
-                  <dt>ネガティブ</dt>
-                  <dd>{negativePrompt || '（なし）'}</dd>
-                </div>
-              </dl>
-            </details>
-
-            <button type="button" className="btn btn-small inpaint-edit-tags-btn" onClick={onEditTags}>
-              タグを編集（一時保存して閉じる）
-            </button>
-
             <div className="inpaint-exec-footer">
-              <AnlasLine anlas={anlas} estimate={inpaintEstimate} />
-              {executeBlocker && (
+              {maskEmpty ? (
                 <p className="hint inpaint-blocker" role="status">
-                  {executeBlocker}
+                  描き直す部分をマスクで塗ってください
+                </p>
+              ) : (
+                <p className="hint inpaint-field-hint">
+                  確定して閉じると、通常の「生成する」ボタンからインペイント生成できます。
                 </p>
               )}
               <div className="inpaint-exec-actions">
-                {generator.generating && (
-                  <button type="button" className="btn" onClick={generator.cancel}>
-                    中止
-                  </button>
-                )}
                 <button
                   type="button"
                   className="btn btn-primary btn-large"
-                  disabled={executeBlocker !== null || generator.generating || submitting}
-                  title={executeBlocker ?? undefined}
-                  onClick={() => void handleExecute()}
+                  disabled={maskEmpty}
+                  title={maskEmpty ? '描き直す部分をマスクで塗ってください' : undefined}
+                  onClick={onConfirm}
                 >
-                  {generator.generating || submitting ? '生成中…' : 'インペイントを実行'}
+                  確定
                 </button>
               </div>
             </div>

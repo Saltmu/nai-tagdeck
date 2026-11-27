@@ -15,6 +15,7 @@ interface Props {
   inpaint?: InpaintSessionStore;
   onStartInpaintFile?: (file: File) => void;
   onResumeInpaint?: () => void;
+  onToggleInpaintEnabled?: (enabled: boolean) => void;
   onDiscardInpaint?: () => void;
 }
 
@@ -23,6 +24,7 @@ export function ReferencePanel({
   inpaint,
   onStartInpaintFile,
   onResumeInpaint,
+  onToggleInpaintEnabled,
   onDiscardInpaint,
 }: Props) {
   const id = useId();
@@ -306,7 +308,9 @@ export function ReferencePanel({
               インペイント（部分描き直し）
             </h3>
             <div className="reference-head-actions">
-              <span className="chip">{inpaintSession ? '一時保持中' : '無料枠対応'}</span>
+              <span className="chip">
+                {inpaint.activeSession ? 'インペイント中' : inpaintSession ? '一時 OFF' : '無料枠対応'}
+              </span>
             </div>
           </div>
 
@@ -340,7 +344,7 @@ export function ReferencePanel({
           )}
 
           {inpaintSession ? (
-            <article className="inpaint-session-card" aria-label="一時保持中のインペイント">
+            <article className={`inpaint-session-card${inpaint.activeSession ? '' : ' is-disabled'}`} aria-label="一時保持中のインペイント">
               <div className="reference-preview-card">
                 <img
                   src={inpaintSession.sourceUrl}
@@ -382,6 +386,26 @@ export function ReferencePanel({
                   </div>
                 </div>
               </div>
+              <label className="check-line reference-enable-label" htmlFor={`${id}-inpaint-enabled`}>
+                <input
+                  id={`${id}-inpaint-enabled`}
+                  type="checkbox"
+                  role="switch"
+                  checked={Boolean(inpaint.activeSession)}
+                  disabled={!inpaintHasMask}
+                  onChange={(e) => {
+                    if (onToggleInpaintEnabled) onToggleInpaintEnabled(e.target.checked);
+                    else inpaint.setEnabled(e.target.checked);
+                  }}
+                />
+                <span>
+                  {inpaint.activeSession
+                    ? '有効（通常の「生成する」ボタンでインペイント実行）'
+                    : inpaintHasMask
+                      ? '一時 OFF（通常生成）'
+                      : 'マスクを描画して確定すると有効にできます'}
+                </span>
+              </label>
             </article>
           ) : (
             <div className="reference-empty">
