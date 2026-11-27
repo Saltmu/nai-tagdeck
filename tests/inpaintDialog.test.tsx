@@ -213,6 +213,24 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
     const confirmBtn = () => buttonByText('確定', dialog);
     expect(confirmBtn().disabled).toBe(true);
     expect(dialog.textContent).toContain('描き直す部分をマスクで塗ってください');
+    // 編集ボタン類は画像上のオーバーレイとして配置され、独立サイドバーは持たない
+    expect(dialog.querySelector('.inpaint-overlay-top')).not.toBeNull();
+    expect(dialog.querySelector('.inpaint-overlay-bottom')).not.toBeNull();
+    expect(dialog.querySelector('aside.inpaint-side')).toBeNull();
+
+    // ブラシ・消しゴム・移動は SVG ピクトグラムのラジオボタンで切り替える
+    const toolButtons = [...dialog.querySelectorAll<HTMLButtonElement>('.inpaint-tool-group [role="radio"]')];
+    expect(toolButtons.map((b) => b.getAttribute('aria-label'))).toEqual(['ブラシ', '消しゴム', '移動・ズーム']);
+    for (const btn of toolButtons) {
+      expect(btn.querySelector('svg.icon')).not.toBeNull();
+      expect(btn.textContent?.trim()).toBe('');
+    }
+    expect(toolButtons[0]!.getAttribute('aria-checked')).toBe('true');
+    await click(toolButtons[2]!);
+    expect(toolButtons[2]!.getAttribute('aria-checked')).toBe('true');
+    expect(dialog.querySelector('.inpaint-stage')?.classList.contains('is-pan')).toBe(true);
+    await click(toolButtons[0]!);
+    expect(dialog.querySelector('.inpaint-stage')?.classList.contains('is-pan')).toBe(false);
 
     // 2 本指ピンチが入ったときは進行中ストロークを破棄する（空マスクのまま）
     const stage = dialog.querySelector<HTMLElement>('.inpaint-stage')!;
@@ -236,8 +254,16 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
     });
     expect(confirmBtn().disabled).toBe(true);
 
-    // 1 本指／マウスで描くと確定ボタンが有効になる
-    await paintStrokeOnDialog(dialog);
+    // ストローク描画中はオーバーレイが is-drawing で透過し、描画終了で元に戻る
+    await act(async () => {
+      stage.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 1, clientX: 40, clientY: 40 }));
+    });
+    expect(dialog.querySelector('.inpaint-overlay-bottom')?.classList.contains('is-drawing')).toBe(true);
+    await act(async () => {
+      stage.dispatchEvent(makePointerEvent('pointermove', { pointerId: 1, clientX: 120, clientY: 120 }));
+      stage.dispatchEvent(makePointerEvent('pointerup', { pointerId: 1, clientX: 120, clientY: 120 }));
+    });
+    expect(dialog.querySelector('.inpaint-overlay-bottom')?.classList.contains('is-drawing')).toBe(false);
     expect(confirmBtn().disabled).toBe(false);
 
     // Undo -> 無効、Redo -> 有効、全消去 -> 無効
@@ -247,6 +273,15 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
     expect(confirmBtn().disabled).toBe(false);
     await click(buttonByText('マスクを全消去', dialog));
     expect(confirmBtn().disabled).toBe(true);
+
+    // 設定ポップオーバーが開いているときの Escape はポップオーバーだけ閉じる
+    await click(buttonByText('インペイント設定', dialog));
+    expect(dialog.querySelector('.inpaint-settings-popover')).not.toBeNull();
+    await act(async () => {
+      dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+    });
+    expect(dialog.querySelector('.inpaint-settings-popover')).toBeNull();
+    expect(container.querySelector('dialog.inpaint-dialog')).not.toBeNull();
 
     // 一時保持して閉じる
     await click(buttonByText('一時保持して閉じる', dialog));
@@ -282,14 +317,19 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
     expect(dialog1.textContent).toContain('custom-base.png');
     expect(dialog1.textContent).toContain('512×512');
 
-    // マスクを描画し、強さを 0.55 に変更して「確定」する
+    // マスクを描画し、オーバーレイ設定ポップオーバーから強さを 0.55 に変更して「確定」する
     await paintStrokeOnDialog(dialog1);
-    const strengthSlider = dialog1.querySelector<HTMLInputElement>('aside.inpaint-side input[type="range"]')!;
+    expect(dialog1.querySelector('.inpaint-settings-popover')).toBeNull();
+    await click(buttonByText('インペイント設定', dialog1));
+    const popover1 = dialog1.querySelector<HTMLElement>('.inpaint-settings-popover')!;
+    expect(popover1).not.toBeNull();
+    const strengthSlider = popover1.querySelector<HTMLInputElement>('input[type="range"]')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(strengthSlider, '0.55');
       strengthSlider.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    expect(dialog1.querySelector('aside.inpaint-side output')?.textContent).toBe('0.55');
+    expect(popover1.querySelector('output')?.textContent).toBe('0.55');
+    expect(dialog1.querySelector('.inpaint-settings-strength')?.textContent).toBe('0.55');
 
     await click(buttonByText('確定', dialog1));
     await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).toBeNull());
@@ -306,7 +346,7 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
     await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).not.toBeNull());
     const dialog2 = container.querySelector<HTMLDialogElement>('dialog.inpaint-dialog')!;
     expect(buttonByText('確定', dialog2).disabled).toBe(false);
-    expect(dialog2.querySelector('aside.inpaint-side output')?.textContent).toBe('0.55');
+    expect(dialog2.querySelector('.inpaint-settings-strength')?.textContent).toBe('0.55');
     await click(buttonByText('確定', dialog2));
     await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).toBeNull());
 

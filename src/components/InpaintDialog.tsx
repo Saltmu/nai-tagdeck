@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from 'react';
 import type { InpaintSession } from '../hooks/useInpaintSession';
 import {
@@ -34,7 +35,16 @@ import {
   INPAINT_STRENGTH_STEP,
 } from '../lib/novelai';
 import { useDialogs } from './Dialogs';
-import { RedoIcon, UndoIcon } from './icons';
+import {
+  BrushIcon,
+  CheckIcon,
+  CloseIcon,
+  EraserIcon,
+  MoveIcon,
+  RedoIcon,
+  SettingsIcon,
+  UndoIcon,
+} from './icons';
 
 const INPAINT_HISTORY_STATE = 'naiTagdeckInpaint';
 const isInpaintHistoryState = (state: unknown) =>
@@ -65,10 +75,10 @@ interface ViewState {
 
 const FIT_VIEW: ViewState = { scale: 1, x: 0, y: 0 };
 
-const TOOLS: ReadonlyArray<{ value: InpaintTool; label: string }> = [
-  { value: 'brush', label: 'ブラシ' },
-  { value: 'eraser', label: '消しゴム' },
-  { value: 'pan', label: '移動・ズーム' },
+const TOOLS: ReadonlyArray<{ value: InpaintTool; label: string; renderIcon: () => ReactNode }> = [
+  { value: 'brush', label: 'ブラシ', renderIcon: () => <BrushIcon /> },
+  { value: 'eraser', label: '消しゴム', renderIcon: () => <EraserIcon /> },
+  { value: 'pan', label: '移動・ズーム', renderIcon: () => <MoveIcon /> },
 ];
 
 function clampView(view: ViewState, stageW: number, stageH: number): ViewState {
@@ -126,6 +136,8 @@ export function InpaintDialog({
   const [view, setView] = useState<ViewState>(FIT_VIEW);
   const [stageSize, setStageSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isDrawing, setIsDrawing] = useState(false);
 
   const toolRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const colorRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -273,6 +285,7 @@ export function InpaintDialog({
 
   const onStagePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    setSettingsOpen(false);
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
@@ -284,6 +297,7 @@ export function InpaintDialog({
       // 2 本指ピンチ時は進行中のストロークを破棄してズーム／パンへ切り替える
       if (draftStrokeRef.current) {
         draftStrokeRef.current = null;
+        setIsDrawing(false);
         drawMaskPreview(null);
       }
       pinchCanceledRef.current = true;
@@ -302,6 +316,7 @@ export function InpaintDialog({
       points: [pt],
     };
     draftStrokeRef.current = draft;
+    setIsDrawing(true);
     drawMaskPreview(draft);
   };
 
@@ -380,6 +395,7 @@ export function InpaintDialog({
     if (draftStrokeRef.current) {
       const finished = draftStrokeRef.current;
       draftStrokeRef.current = null;
+      setIsDrawing(false);
       if (e.type === 'pointerup' && !pinchCanceledRef.current) {
         onPushStroke(finished);
       } else {
@@ -467,32 +483,83 @@ export function InpaintDialog({
       className="inpaint-dialog"
       aria-labelledby={`${id}-title`}
       onCancel={(e) => {
-        // マスク描画中は Escape で閉じない。それ以外は破棄せず一時保持して閉じる。
+        // マスク描画中は Escape で閉じない。設定ポップオーバーが開いているときは先に閉じる。
         e.preventDefault();
         if (draftStrokeRef.current) return;
+        if (settingsOpen) {
+          setSettingsOpen(false);
+          return;
+        }
         onClose();
       }}
       onKeyDown={onDialogKeyDown}
     >
       <div className="inpaint-shell">
-        <header className="inpaint-header">
-          <div className="inpaint-header-info">
-            <h2 id={`${id}-title`} className="inpaint-title">
+        <div
+          ref={stageRef}
+          className={`inpaint-stage${tool === 'pan' ? ' is-pan' : ''}`}
+          onPointerDown={onStagePointerDown}
+          onPointerMove={onStagePointerMove}
+          onPointerUp={onStagePointerUp}
+          onPointerCancel={onStagePointerUp}
+          onPointerLeave={() => setCursorPos(null)}
+        >
+          <div className="inpaint-canvas-wrap" style={wrapStyle}>
+            <img
+              src={session.sourceUrl}
+              alt={`ベース画像: ${session.name}`}
+              className="inpaint-base-img"
+              draggable={false}
+            />
+            <canvas
+              ref={maskCanvasRef}
+              width={session.width}
+              height={session.height}
+              className="inpaint-mask-canvas"
+              aria-label="マスク描画キャンバス"
+            />
+          </div>
+          {cursorPos && tool !== 'pan' && cursorDiameter > 0 && (
+            <span
+              className={`inpaint-brush-cursor${tool === 'eraser' ? ' is-eraser' : ''}`}
+              aria-hidden="true"
+              style={{
+                width: `${cursorDiameter}px`,
+                height: `${cursorDiameter}px`,
+                transform: `translate(${cursorPos.x - cursorDiameter / 2}px, ${cursorPos.y - cursorDiameter / 2}px)`,
+              }}
+            />
+          )}
+        </div>
+
+        <header className={`inpaint-overlay-top${isDrawing ? ' is-drawing' : ''}`}>
+          <div className="inpaint-overlay-pill inpaint-overlay-info">
+            <button
+              type="button"
+              className="icon-btn inpaint-overlay-icon-btn"
+              aria-label="一時保持して閉じる"
+              title="一時保持して閉じる"
+              onClick={onClose}
+            >
+              <CloseIcon />
+            </button>
+            <h2 id={`${id}-title`} className="visually-hidden">
               インペイント
             </h2>
-            <span className="inpaint-meta" title={session.name}>
-              {session.name} · {session.width}×{session.height}
+            <span className="inpaint-meta" title={`${session.name} · ${session.width}×${session.height}`}>
+              <span className="inpaint-meta-name">{session.name}</span>
+              <span className="inpaint-meta-size">
+                {session.width}×{session.height}
+              </span>
             </span>
             {session.resized && (
               <span className="chip inpaint-resize-badge">
-                {session.originalWidth}×{session.originalHeight} → {session.width}×{session.height} に調整
+                {session.originalWidth}×{session.originalHeight} → {session.width}×{session.height}
               </span>
             )}
           </div>
-          <div className="inpaint-header-actions">
-            <button type="button" className="btn btn-small" onClick={onClose}>
-              一時保持して閉じる
-            </button>
+
+          <div className="inpaint-overlay-pill inpaint-overlay-actions">
             <button
               type="button"
               className="btn btn-small btn-danger"
@@ -500,12 +567,133 @@ export function InpaintDialog({
             >
               破棄
             </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-small inpaint-confirm-btn"
+              disabled={maskEmpty}
+              title={maskEmpty ? '描き直す部分をマスクで塗ってください' : 'マスクを確定して閉じる'}
+              onClick={onConfirm}
+            >
+              <CheckIcon />
+              <span>確定</span>
+            </button>
           </div>
         </header>
 
-        <div className="inpaint-body">
-          <div className="inpaint-workspace">
-            <div className="inpaint-toolbar" role="toolbar" aria-label="マスク編集ツール">
+        <div className={`inpaint-overlay-bottom${isDrawing ? ' is-drawing' : ''}`}>
+          {maskEmpty && !settingsOpen && (
+            <p className="inpaint-empty-hint" role="status">
+              描き直す部分をマスクで塗ってください
+            </p>
+          )}
+
+          {settingsOpen && (
+            <section
+              id={`${id}-settings`}
+              className="inpaint-settings-popover"
+              aria-label="インペイント設定"
+            >
+              <div className="inpaint-settings-head">
+                <h3 className="inpaint-settings-title">インペイント設定</h3>
+                <button
+                  type="button"
+                  className="icon-btn inpaint-overlay-icon-btn"
+                  aria-label="設定を閉じる"
+                  onClick={() => setSettingsOpen(false)}
+                >
+                  <CloseIcon />
+                </button>
+              </div>
+
+              <div className="field">
+                <label htmlFor={`${id}-strength`}>
+                  強さ（{INPAINT_STRENGTH_MIN.toFixed(2)}〜{INPAINT_STRENGTH_MAX.toFixed(2)}）
+                </label>
+                <div className="fader-row">
+                  <input
+                    id={`${id}-strength`}
+                    type="range"
+                    min={INPAINT_STRENGTH_MIN}
+                    max={INPAINT_STRENGTH_MAX}
+                    step={INPAINT_STRENGTH_STEP}
+                    value={session.strength}
+                    onChange={(e) => onStrengthChange(Number(e.target.value))}
+                  />
+                  <output htmlFor={`${id}-strength`}>{session.strength.toFixed(2)}</output>
+                </div>
+                <p className="hint inpaint-field-hint">
+                  値が大きいほどマスク内を強く描き直します（1.00 で全面描き直し）。
+                </p>
+              </div>
+
+              <label className="check-line inpaint-check-line" htmlFor={`${id}-add-original`}>
+                <input
+                  id={`${id}-add-original`}
+                  type="checkbox"
+                  checked={session.addOriginalImage}
+                  onChange={(e) => onAddOriginalImageChange(e.target.checked)}
+                />
+                <span>元画像を加える（add_original_image）</span>
+              </label>
+
+              <div className="inpaint-settings-divider" />
+
+              <div className="inpaint-settings-color-row">
+                <span className="inpaint-toolbar-label">マスク色</span>
+                <div
+                  className="inpaint-color-group"
+                  role="radiogroup"
+                  aria-label="マスク表示色"
+                  onKeyDown={onColorKeyDown}
+                >
+                  {INPAINT_MASK_COLORS.map((c, idx) => {
+                    const selected = session.maskColor === c.key;
+                    return (
+                      <button
+                        key={c.key}
+                        ref={(el) => {
+                          colorRefs.current[idx] = el;
+                        }}
+                        type="button"
+                        role="radio"
+                        tabIndex={selected ? 0 : -1}
+                        aria-checked={selected}
+                        aria-label={`マスク色: ${c.label}`}
+                        title={`マスク色: ${c.label}`}
+                        className="inpaint-color-btn"
+                        onClick={() => onMaskColorChange(c.key)}
+                      >
+                        <span
+                          className="inpaint-color-swatch"
+                          style={{ backgroundColor: c.hex }}
+                          aria-hidden="true"
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor={`${id}-mask-opacity`}>マスク不透明度</label>
+                <div className="fader-row">
+                  <input
+                    id={`${id}-mask-opacity`}
+                    type="range"
+                    min={INPAINT_MASK_OPACITY_MIN}
+                    max={INPAINT_MASK_OPACITY_MAX}
+                    step={INPAINT_MASK_OPACITY_STEP}
+                    value={session.maskOpacity}
+                    onChange={(e) => onMaskOpacityChange(Number(e.target.value))}
+                  />
+                  <output htmlFor={`${id}-mask-opacity`}>{Math.round(session.maskOpacity * 100)}%</output>
+                </div>
+              </div>
+            </section>
+          )}
+
+          <div className="inpaint-overlay-pill inpaint-toolbar" role="toolbar" aria-label="マスク編集ツール">
+            <div className="inpaint-toolbar-row">
               <div
                 className="inpaint-tool-group"
                 role="radiogroup"
@@ -524,15 +712,65 @@ export function InpaintDialog({
                       role="radio"
                       tabIndex={selected ? 0 : -1}
                       aria-checked={selected}
+                      aria-label={item.label}
+                      title={item.label}
                       className="inpaint-tool-btn"
                       onClick={() => setTool(item.value)}
                     >
-                      {item.label}
+                      {item.renderIcon()}
                     </button>
                   );
                 })}
               </div>
 
+              <div className="inpaint-history-group">
+                <button
+                  type="button"
+                  className="icon-btn inpaint-overlay-icon-btn"
+                  disabled={!canUndo}
+                  aria-label="元に戻す"
+                  title="元に戻す (Ctrl+Z)"
+                  onClick={onUndoMask}
+                >
+                  <UndoIcon />
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn inpaint-overlay-icon-btn"
+                  disabled={!canRedo}
+                  aria-label="やり直す"
+                  title="やり直す (Ctrl+Y)"
+                  onClick={onRedoMask}
+                >
+                  <RedoIcon />
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-small inpaint-clear-btn"
+                  disabled={maskEmpty}
+                  aria-label="マスクを全消去"
+                  title="マスクを全消去"
+                  onClick={onClearMask}
+                >
+                  全消去
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className={`btn btn-small inpaint-settings-btn${settingsOpen ? ' is-open' : ''}`}
+                aria-expanded={settingsOpen}
+                aria-controls={`${id}-settings`}
+                aria-label="インペイント設定"
+                title="強さ・マスク表示設定"
+                onClick={() => setSettingsOpen((v) => !v)}
+              >
+                <SettingsIcon />
+                <span className="inpaint-settings-strength">{session.strength.toFixed(2)}</span>
+              </button>
+            </div>
+
+            <div className="inpaint-toolbar-row">
               <div className="inpaint-slider-group">
                 <label htmlFor={`${id}-brush-size`} className="inpaint-toolbar-label">
                   サイズ
@@ -551,94 +789,10 @@ export function InpaintDialog({
                 </output>
               </div>
 
-              <div
-                className="inpaint-color-group"
-                role="radiogroup"
-                aria-label="マスク表示色"
-                onKeyDown={onColorKeyDown}
-              >
-                {INPAINT_MASK_COLORS.map((c, idx) => {
-                  const selected = session.maskColor === c.key;
-                  return (
-                    <button
-                      key={c.key}
-                      ref={(el) => {
-                        colorRefs.current[idx] = el;
-                      }}
-                      type="button"
-                      role="radio"
-                      tabIndex={selected ? 0 : -1}
-                      aria-checked={selected}
-                      aria-label={`マスク色: ${c.label}`}
-                      title={`マスク色: ${c.label}`}
-                      className="inpaint-color-btn"
-                      onClick={() => onMaskColorChange(c.key)}
-                    >
-                      <span
-                        className="inpaint-color-swatch"
-                        style={{ backgroundColor: c.hex }}
-                        aria-hidden="true"
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="inpaint-slider-group">
-                <label htmlFor={`${id}-mask-opacity`} className="inpaint-toolbar-label">
-                  不透明度
-                </label>
-                <input
-                  id={`${id}-mask-opacity`}
-                  type="range"
-                  min={INPAINT_MASK_OPACITY_MIN}
-                  max={INPAINT_MASK_OPACITY_MAX}
-                  step={INPAINT_MASK_OPACITY_STEP}
-                  value={session.maskOpacity}
-                  onChange={(e) => onMaskOpacityChange(Number(e.target.value))}
-                />
-                <output htmlFor={`${id}-mask-opacity`} className="inpaint-toolbar-output">
-                  {Math.round(session.maskOpacity * 100)}%
-                </output>
-              </div>
-
-              <div className="inpaint-history-group">
-                <button
-                  type="button"
-                  className="btn btn-small"
-                  disabled={!canUndo}
-                  aria-label="元に戻す"
-                  title="元に戻す (Ctrl+Z)"
-                  onClick={onUndoMask}
-                >
-                  <UndoIcon />
-                  <span>元に戻す</span>
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-small"
-                  disabled={!canRedo}
-                  aria-label="やり直す"
-                  title="やり直す (Ctrl+Y)"
-                  onClick={onRedoMask}
-                >
-                  <RedoIcon />
-                  <span>やり直す</span>
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-small"
-                  disabled={maskEmpty}
-                  onClick={onClearMask}
-                >
-                  マスクを全消去
-                </button>
-              </div>
-
               <div className="inpaint-zoom-group" role="group" aria-label="拡大縮小">
                 <button
                   type="button"
-                  className="btn btn-small"
+                  className="btn btn-small inpaint-zoom-step"
                   disabled={view.scale <= MIN_SCALE}
                   aria-label="縮小"
                   title="縮小"
@@ -657,7 +811,7 @@ export function InpaintDialog({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-small"
+                  className="btn btn-small inpaint-zoom-step"
                   disabled={view.scale >= MAX_SCALE}
                   aria-label="拡大"
                   title="拡大"
@@ -667,100 +821,7 @@ export function InpaintDialog({
                 </button>
               </div>
             </div>
-
-            <div
-              ref={stageRef}
-              className={`inpaint-stage${tool === 'pan' ? ' is-pan' : ''}`}
-              onPointerDown={onStagePointerDown}
-              onPointerMove={onStagePointerMove}
-              onPointerUp={onStagePointerUp}
-              onPointerCancel={onStagePointerUp}
-              onPointerLeave={() => setCursorPos(null)}
-            >
-              <div className="inpaint-canvas-wrap" style={wrapStyle}>
-                <img
-                  src={session.sourceUrl}
-                  alt={`ベース画像: ${session.name}`}
-                  className="inpaint-base-img"
-                  draggable={false}
-                />
-                <canvas
-                  ref={maskCanvasRef}
-                  width={session.width}
-                  height={session.height}
-                  className="inpaint-mask-canvas"
-                  aria-label="マスク描画キャンバス"
-                />
-              </div>
-              {cursorPos && tool !== 'pan' && cursorDiameter > 0 && (
-                <span
-                  className={`inpaint-brush-cursor${tool === 'eraser' ? ' is-eraser' : ''}`}
-                  aria-hidden="true"
-                  style={{
-                    width: `${cursorDiameter}px`,
-                    height: `${cursorDiameter}px`,
-                    transform: `translate(${cursorPos.x - cursorDiameter / 2}px, ${cursorPos.y - cursorDiameter / 2}px)`,
-                  }}
-                />
-              )}
-            </div>
           </div>
-
-          <aside className="inpaint-side" aria-label="インペイント設定">
-            <div className="field">
-              <label htmlFor={`${id}-strength`}>
-                強さ（{INPAINT_STRENGTH_MIN.toFixed(2)}〜{INPAINT_STRENGTH_MAX.toFixed(2)}）
-              </label>
-              <div className="fader-row">
-                <input
-                  id={`${id}-strength`}
-                  type="range"
-                  min={INPAINT_STRENGTH_MIN}
-                  max={INPAINT_STRENGTH_MAX}
-                  step={INPAINT_STRENGTH_STEP}
-                  value={session.strength}
-                  onChange={(e) => onStrengthChange(Number(e.target.value))}
-                />
-                <output htmlFor={`${id}-strength`}>{session.strength.toFixed(2)}</output>
-              </div>
-              <p className="hint inpaint-field-hint">
-                値が大きいほどマスク内を強く描き直します（1.00 で全面描き直し）。
-              </p>
-            </div>
-
-            <label className="check-line inpaint-check-line" htmlFor={`${id}-add-original`}>
-              <input
-                id={`${id}-add-original`}
-                type="checkbox"
-                checked={session.addOriginalImage}
-                onChange={(e) => onAddOriginalImageChange(e.target.checked)}
-              />
-              <span>元画像を加える（add_original_image）</span>
-            </label>
-
-            <div className="inpaint-exec-footer">
-              {maskEmpty ? (
-                <p className="hint inpaint-blocker" role="status">
-                  描き直す部分をマスクで塗ってください
-                </p>
-              ) : (
-                <p className="hint inpaint-field-hint">
-                  確定して閉じると、通常の「生成する」ボタンからインペイント生成できます。
-                </p>
-              )}
-              <div className="inpaint-exec-actions">
-                <button
-                  type="button"
-                  className="btn btn-primary btn-large"
-                  disabled={maskEmpty}
-                  title={maskEmpty ? '描き直す部分をマスクで塗ってください' : undefined}
-                  onClick={onConfirm}
-                >
-                  確定
-                </button>
-              </div>
-            </div>
-          </aside>
         </div>
       </div>
     </dialog>
