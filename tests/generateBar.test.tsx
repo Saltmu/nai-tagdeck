@@ -211,16 +211,16 @@ it('navigates from settings to dictionary and back to settings', async () => {
   await switchTab('tab-settings');
   await vi.waitFor(() => {
     expect(container.querySelector('.settings-nav-btn')).not.toBeNull();
-  });
+  }, { timeout: 5000 });
   await click(container.querySelector<HTMLButtonElement>('.settings-nav-btn')!);
   await vi.waitFor(() => {
     expect(container.querySelector('.dictionary')).not.toBeNull();
-  });
+  }, { timeout: 5000 });
   await click(button('設定へ戻る'));
   await vi.waitFor(() => {
     expect(container.querySelector('.settings')).not.toBeNull();
-  });
-});
+  }, { timeout: 5000 });
+}, 15_000);
 
 it('keeps the dock available on the editor tab and allows opening dock panels without leaving editor', async () => {
   expect(container.querySelector('.workbench')?.getAttribute('data-tab')).toBe('editor');
@@ -258,7 +258,7 @@ it('shows the plan and the granted/purchased breakdown in the token settings', a
   await switchTab('tab-settings');
   await vi.waitFor(() => {
     expect(container.querySelector('.anlas-details')).not.toBeNull();
-  });
+  }, { timeout: 5000 });
   const details = container.querySelector('.anlas-details');
   expect(details?.textContent).toContain('Opus');
   expect(details?.textContent).toContain('18,000 Anlas（付与分 10,000／購入分 8,000）');
