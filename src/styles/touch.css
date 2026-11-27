@@ -70,7 +70,19 @@
   .gen-inpaint-summary,
   .gen-inpaint-disable,
   .thumb-menu-item,
-  .inpaint-tool-btn {
+  .inpaint-confirm-btn,
+  .inpaint-clear-btn,
+  .inpaint-settings-btn,
+  .inpaint-zoom-step,
+  .inpaint-zoom-reset {
+    min-height: 44px;
+  }
+
+  .inpaint-tool-btn,
+  .inpaint-overlay-icon-btn {
+    width: 40px;
+    min-width: 40px;
+    height: 44px;
     min-height: 44px;
   }
 

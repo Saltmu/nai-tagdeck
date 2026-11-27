@@ -264,6 +264,45 @@ export function TempIcon() {
   );
 }
 
+/** ブラシ（絵筆）。 */
+export function BrushIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M14.6 3.4a1.6 1.6 0 0 1 2.2 2.2L10.8 11.6 8.4 9.2Z" {...stroke} />
+      <path
+        d="M8.4 9.2C6.4 9.4 5.2 10.8 5 12.6c-.2 1.2-.8 2.1-1.8 2.8 1.6.9 3.8 1.1 5.4.1 1.4-.9 2.2-2.2 2.2-3.9"
+        {...stroke}
+      />
+    </svg>
+  );
+}
+
+/** 消しゴム。 */
+export function EraserIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path
+        d="M10 4.4a1.4 1.4 0 0 1 2 0l3.6 3.6a1.4 1.4 0 0 1 0 2L9.6 16h-2L4 12.4a1.4 1.4 0 0 1 0-2Z"
+        {...stroke}
+      />
+      <path d="M7.2 7.2 12.8 12.8M9.6 16h6.9" {...stroke} />
+    </svg>
+  );
+}
+
+/** 移動（4 方向矢印）。 */
+export function MoveIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <path d="M10 3.2v13.6M3.2 10h13.6" {...stroke} />
+      <path
+        d="M7.6 5.6 10 3.2l2.4 2.4M7.6 14.4 10 16.8l2.4-2.4M5.6 7.6 3.2 10l2.4 2.4M14.4 7.6 16.8 10l-2.4 2.4"
+        {...stroke}
+      />
+    </svg>
+  );
+}
+
 interface BrandProps {
   className?: string;
   width?: number;

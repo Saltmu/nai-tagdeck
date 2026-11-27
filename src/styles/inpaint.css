@@ -29,13 +29,15 @@
 }
 
 .inpaint-dialog {
-  width: min(1280px, 100vw - 1rem);
+  width: 100vw;
+  height: 100dvh;
   max-width: none;
-  max-height: calc(100dvh - 1rem);
+  max-height: 100dvh;
+  margin: 0;
   padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  border: 0;
+  border-radius: 0;
+  background: var(--surface-2);
   color: var(--text);
   box-shadow: var(--shadow-pop);
 }
@@ -45,197 +47,19 @@
 }
 
 .inpaint-shell {
-  display: flex;
-  flex-direction: column;
-  height: calc(100dvh - 1rem - 2px);
-  min-height: 0;
-}
-
-.inpaint-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border);
-  flex: none;
-}
-
-.inpaint-header-info {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem 0.6rem;
-  min-width: 0;
-}
-
-.inpaint-title {
-  margin: 0;
-  font-size: var(--text-lg);
-}
-
-.inpaint-meta {
-  color: var(--muted);
-  font-size: var(--text-caption);
-  font-variant-numeric: tabular-nums;
+  position: relative;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 36ch;
-}
-
-.inpaint-resize-badge {
-  font-variant-numeric: tabular-nums;
-}
-
-.inpaint-header-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.inpaint-body {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.inpaint-workspace {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-}
-
-.inpaint-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.45rem 0.7rem;
-  padding: 0.45rem 0.75rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  flex: none;
-}
-
-.inpaint-tool-group {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
   background: var(--surface-2);
-}
-
-.inpaint-tool-btn {
-  min-height: 34px;
-  padding: 0.25rem 0.6rem;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  touch-action: manipulation;
-}
-
-.inpaint-tool-btn:hover {
-  color: var(--text);
-}
-
-.inpaint-tool-btn[aria-checked='true'] {
-  background: var(--surface);
-  color: var(--accent);
-  box-shadow: var(--shadow);
-}
-
-.inpaint-slider-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: var(--text-caption);
-}
-
-.inpaint-toolbar-label {
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.inpaint-slider-group input[type='range'] {
-  width: 96px;
-}
-
-.inpaint-toolbar-output {
-  min-width: 3.4em;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-
-.inpaint-color-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.inpaint-color-btn {
-  display: inline-grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.inpaint-color-btn[aria-checked='true'] {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  box-shadow: var(--shadow);
-}
-
-.inpaint-color-swatch {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-}
-
-.inpaint-history-group,
-.inpaint-zoom-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.inpaint-history-group .icon {
-  width: 16px;
-  height: 16px;
-}
-
-.inpaint-zoom-reset {
-  min-width: 3.8rem;
-  font-variant-numeric: tabular-nums;
 }
 
 .inpaint-stage {
   position: relative;
   display: grid;
   place-items: center;
-  flex: 1;
-  min-height: 220px;
   width: 100%;
+  height: 100%;
   overflow: hidden;
   background: var(--surface-2);
   touch-action: none;
@@ -294,19 +118,331 @@
   border-style: dashed;
 }
 
-.inpaint-side {
+/* 画像上に浮かせる操作オーバーレイ（余白は画像へのポインター操作を通す） */
+.inpaint-overlay-top {
+  position: absolute;
+  top: max(0.5rem, env(safe-area-inset-top));
+  left: max(0.5rem, env(safe-area-inset-left));
+  right: max(0.5rem, env(safe-area-inset-right));
+  z-index: 3;
   display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  padding: 0.65rem 0.75rem;
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-  overflow: auto;
-  overscroll-behavior: contain;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.45rem;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
 }
 
-.inpaint-field-hint,
-.inpaint-blocker {
+.inpaint-overlay-bottom {
+  position: absolute;
+  left: max(0.5rem, env(safe-area-inset-left));
+  right: max(0.5rem, env(safe-area-inset-right));
+  bottom: max(0.5rem, env(safe-area-inset-bottom));
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+
+.inpaint-overlay-top.is-drawing,
+.inpaint-overlay-bottom.is-drawing {
+  opacity: 0.22;
+}
+
+.inpaint-overlay-top.is-drawing .inpaint-overlay-pill,
+.inpaint-overlay-bottom.is-drawing .inpaint-overlay-pill,
+.inpaint-overlay-bottom.is-drawing .inpaint-settings-popover {
+  pointer-events: none;
+}
+
+.inpaint-overlay-pill {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-pop);
+  max-width: 100%;
+}
+
+.inpaint-overlay-info {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.inpaint-overlay-actions {
+  flex: none;
+}
+
+.inpaint-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.inpaint-meta-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 18ch;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.inpaint-meta-size {
+  flex: none;
+  white-space: nowrap;
+}
+
+.inpaint-resize-badge {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.inpaint-overlay-icon-btn {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  flex: none;
+}
+
+.inpaint-overlay-icon-btn .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.inpaint-confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-inline: 0.7rem;
+}
+
+.inpaint-confirm-btn .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.inpaint-empty-hint {
+  margin: 0;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-pill);
+  background: var(--scrim-bg);
+  color: var(--scrim-text);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  backdrop-filter: blur(6px);
+}
+
+.inpaint-toolbar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.inpaint-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.45rem;
+}
+
+.inpaint-tool-group {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.inpaint-tool-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.inpaint-tool-btn .icon {
+  width: 19px;
+  height: 19px;
+}
+
+.inpaint-tool-btn:hover {
+  color: var(--text);
+}
+
+.inpaint-tool-btn[aria-checked='true'] {
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: var(--shadow);
+}
+
+.inpaint-history-group,
+.inpaint-zoom-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.inpaint-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.inpaint-settings-btn .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.inpaint-settings-btn.is-open {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.inpaint-settings-strength {
+  font-variant-numeric: tabular-nums;
+}
+
+.inpaint-slider-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--text-caption);
+  min-width: 0;
+  flex: 1;
+}
+
+.inpaint-toolbar-label {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.inpaint-slider-group input[type='range'] {
+  width: 96px;
+  min-width: 68px;
+  flex: 1;
+}
+
+.inpaint-toolbar-output {
+  min-width: 3.2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.inpaint-zoom-step {
+  min-width: 28px;
+  padding-inline: 0.35rem;
+}
+
+.inpaint-zoom-reset {
+  min-width: 3.3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.inpaint-settings-popover {
+  pointer-events: auto;
+  z-index: 4;
+  width: min(320px, 100%);
+  max-height: min(58dvh, 360px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-pop);
+}
+
+.inpaint-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.inpaint-settings-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.inpaint-settings-divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.inpaint-settings-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: var(--text-sm);
+}
+
+.inpaint-color-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.inpaint-color-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.inpaint-color-btn[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: var(--shadow);
+}
+
+.inpaint-color-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+
+.inpaint-field-hint {
   margin: 0;
 }
 
@@ -318,53 +454,41 @@
   cursor: pointer;
 }
 
-.inpaint-exec-footer {
-  display: grid;
-  gap: 0.45rem;
-  margin-top: auto;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--border);
-}
-
-.inpaint-exec-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-.inpaint-exec-actions .btn-primary {
-  flex: 1;
-}
-
-/* ステージ＋サイドパネル（320px）を横並びにできない幅では下段をスクロールに収め、Canvas を確保する */
-@media (max-width: 899px) {
-  .inpaint-side {
-    flex: 0 1 auto;
-    min-height: 0;
-    max-height: 44%;
+@media (max-width: 599px) {
+  .inpaint-meta-name {
+    max-width: 10ch;
   }
 
+  .inpaint-resize-badge {
+    display: none;
+  }
+}
+
+@media (min-width: 760px) {
   .inpaint-toolbar {
-    gap: 0.35rem 0.5rem;
-    padding: 0.4rem 0.55rem;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.35rem 0.55rem;
+  }
+
+  .inpaint-slider-group {
+    flex: none;
   }
 
   .inpaint-slider-group input[type='range'] {
-    width: 78px;
+    width: 104px;
+    flex: none;
   }
 }
 
-/* ビューアと同様に 900px 以上ではステージ＋設定サイドバー（320px）を横並びにする */
 @media (min-width: 900px) {
-  .inpaint-body {
-    flex-direction: row;
-  }
-
-  .inpaint-side {
-    flex: 0 0 320px;
-    border-top: 0;
-    border-left: 1px solid var(--border);
+  .inpaint-dialog {
+    width: min(1440px, 100vw - 1rem);
+    height: calc(100dvh - 1rem);
+    max-height: calc(100dvh - 1rem);
+    margin: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
   }
 }
