@@ -123,18 +123,20 @@
   position: absolute;
   inset: 0;
   z-index: 2;
-  display: grid;
-  place-items: center;
   overflow: hidden;
   pointer-events: none;
 }
 
 .inpaint-brush-preview-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   display: block;
   border-radius: 50%;
   border: 2px solid var(--scrim-text);
   outline: 1px solid var(--scrim-bg);
   box-shadow: var(--shadow-pop);
+  transform: translate(-50%, -50%);
 }
 
 .inpaint-brush-preview-circle.is-eraser {
