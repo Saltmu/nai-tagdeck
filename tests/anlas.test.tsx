@@ -130,7 +130,7 @@ describe('AnlasBalance', () => {
 
   const renderBalance = async (state: AnlasState) => {
     await act(async () => root.render(<AnlasBalance anlas={state} />));
-    return container.querySelector('.dock-anlas')!;
+    return container.querySelector('.header-anlas')!;
   };
 
   it('未設定のときは「残高 未設定」と出し、更新ボタンを出さない', async () => {
@@ -141,7 +141,7 @@ describe('AnlasBalance', () => {
 
   it('読み込み中は残高を「読み込み中…」と出す', async () => {
     const el = await renderBalance(fakeState({ status: 'loading', subscription: null, loading: true }));
-    expect(el.textContent).toContain('残高 読み込み中…');
+    expect(el.textContent).toContain('読み込み中…');
   });
 
   it('取得済みのときは「残高 18,000」と出す', async () => {
@@ -149,12 +149,12 @@ describe('AnlasBalance', () => {
     expect(el.textContent).toContain('残高 18,000');
   });
 
-  it('取得失敗のときは「取得できませんでした」と理由を出し、更新ボタンも出す', async () => {
+  it('取得失敗のときは「取得失敗」と理由を出し、更新ボタンも出す', async () => {
     const el = await renderBalance(
       fakeState({ status: 'error', subscription: null, error: 'トークンが無効です' }),
     );
     expect(el.classList.contains('is-error')).toBe(true);
-    expect(el.textContent).toContain('残高 取得できませんでした');
+    expect(el.textContent).toContain('残高 取得失敗');
     expect(el.textContent).toContain('トークンが無効です');
     expect(el.querySelector('[aria-label="残高を更新"]')).not.toBeNull();
   });

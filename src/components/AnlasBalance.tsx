@@ -29,7 +29,7 @@ function formatDate(ms: number): string {
 }
 
 /**
- * ドックバーに統合する Anlas 残高表示。閉じた状態でも残高と更新ボタンを常時確認できる。
+ * ヘッダーに置くコンパクトな Anlas 残高表示。トークン設定済みのときは押して手動更新できる。
  */
 export function AnlasBalance({ anlas }: { anlas: AnlasState }) {
   const { status, subscription, error, loading } = anlas;
@@ -37,29 +37,53 @@ export function AnlasBalance({ anlas }: { anlas: AnlasState }) {
     status === 'unset'
       ? '未設定'
       : status === 'loading'
-        ? '読み込み中…'
+        ? '…'
         : status === 'error'
-          ? '取得できませんでした'
+          ? '取得失敗'
           : subscription
             ? formatAnlas(subscription.totalAnlas)
             : '—';
+
+  if (status === 'unset') {
+    return (
+      <div className="header-anlas" role="status" title="Anlas 残高（トークン未設定）">
+        <AnlasIcon />
+        <span className="visually-hidden">残高 </span>
+        <span className="header-anlas-text">{balanceText}</span>
+      </div>
+    );
+  }
+
+  const title =
+    status === 'error' && error
+      ? `残高を取得できませんでした（${error}）。クリックして再取得`
+      : 'Anlas 残高を更新';
+
   return (
-    <div className={`dock-anlas${status === 'error' ? ' is-error' : ''}`} role="status">
-      <AnlasIcon />
-      <span className="dock-anlas-text">残高 {balanceText}</span>
-      {status !== 'unset' && (
-        <button
-          type="button"
-          className="icon-btn anlas-refresh"
-          onClick={anlas.refresh}
-          disabled={loading}
-          aria-label="残高を更新"
-          title="残高を更新"
-        >
-          <RefreshIcon />
-        </button>
-      )}
-      {status === 'error' && error && <span className="anlas-error">{error}</span>}
+    <div className={`header-anlas${status === 'error' ? ' is-error' : ''}`} role="status">
+      <button
+        type="button"
+        className="header-anlas-btn"
+        onClick={anlas.refresh}
+        disabled={loading}
+        aria-label="残高を更新"
+        title={title}
+      >
+        <AnlasIcon />
+        <span className="visually-hidden">残高 </span>
+        <span className="header-anlas-text">
+          {status === 'loading' ? (
+            <>
+              <span aria-hidden="true">{balanceText}</span>
+              <span className="visually-hidden">読み込み中…</span>
+            </>
+          ) : (
+            balanceText
+          )}
+        </span>
+        <RefreshIcon />
+        {status === 'error' && error && <span className="visually-hidden">（{error}）</span>}
+      </button>
     </div>
   );
 }

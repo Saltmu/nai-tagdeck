@@ -80,3 +80,19 @@ textarea {
   margin: 0;
 }
 
+.settings-nav-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+}
+
+.settings-nav-row .hint {
+  margin: 0.2rem 0 0;
+}
+
+.settings-nav-btn {
+  flex: none;
+}
+

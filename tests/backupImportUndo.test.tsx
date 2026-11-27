@@ -59,12 +59,13 @@ const checkedSizeLabel = () =>
   container.querySelector('.size-toggle [role="radio"][aria-checked="true"]')?.getAttribute('aria-label');
 const undoButton = () => button('元に戻す');
 /**
- * 辞書の件数はヘッダーの辞書タブバッジではなく、辞書画面の件数表示で確認する
- * （#144 でヘッダーバッジは削除され、辞書一覧の「N件 / 全M件」は残した）。
+ * 辞書の件数は設定画面経由で開いた辞書画面の件数表示で確認する。
  */
 async function expectDictionaryTotal(expected: number) {
-  expect(container.querySelector('.tab-dictionary .tab-count')).toBeNull();
-  await click(button('辞書'));
+  expect(container.querySelector('.tab-dictionary')).toBeNull();
+  await click(button('設定'));
+  await waitForMount('.settings-nav-btn');
+  await click(container.querySelector<HTMLButtonElement>('.settings-nav-btn')!);
   await waitForMount('.dict-list-card');
   expect(container.querySelector('.dict-count')?.textContent).toContain(`全${expected}件`);
   await click(button('編集'));
@@ -171,9 +172,11 @@ afterEach(async () => {
   });
 });
 
-it('does not show a word-count badge on the dictionary tab', async () => {
-  expect(container.querySelector('.tab-dictionary .tab-count')).toBeNull();
-  expect(button('辞書')?.textContent?.trim()).toBe('辞書');
+it('moves dictionary navigation out of the header and into settings', async () => {
+  expect(container.querySelector('.tab-dictionary')).toBeNull();
+  await click(button('設定'));
+  await waitForMount('.settings-nav-btn');
+  expect(container.querySelector('.settings-nav-btn')?.textContent).toContain('辞書を開く');
 });
 
 it('clears undo after a backup import so the workspace stays with the merged dictionary and settings', async () => {

@@ -1,4 +1,8 @@
 /* ---- dictionary ---- */
+.dict-back-row {
+  margin-bottom: 0.5rem;
+}
+
 .dict-toolbar {
   display: grid;
   gap: 0.5rem;

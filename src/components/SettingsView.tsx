@@ -3,6 +3,7 @@ import type { AnlasState } from '../hooks/useAnlas';
 import { TokenSettings } from './TokenSettings';
 import { BackupCard } from './BackupCard';
 import type { Backup, BackupImportMode } from '../lib/backup';
+import { BookIcon, NextIcon } from './icons';
 import { DangerZone } from './DangerZone';
 import { tutorialUrl } from '../lib/tutorialLinks';
 import type { ThemePreference } from '../types';
@@ -27,6 +28,8 @@ interface Props {
   firstRunDisabled: boolean;
   backupImportDisabled?: boolean;
   reloadCount?: number;
+  onOpenDictionary?: () => void;
+  dictionaryCount?: number;
 }
 
 export function SettingsView({
@@ -42,9 +45,29 @@ export function SettingsView({
   firstRunDisabled,
   backupImportDisabled = false,
   reloadCount = 0,
+  onOpenDictionary,
+  dictionaryCount,
 }: Props) {
   return (
     <div className="settings">
+      {onOpenDictionary && (
+        <section className="card" aria-labelledby="dictionary-nav-title">
+          <div className="settings-nav-row">
+            <div>
+              <h2 id="dictionary-nav-title" className="card-title">タグ辞書</h2>
+              <p className="hint">
+                タグの登録・編集や CSV / JSON の入出力を行います
+                {dictionaryCount !== undefined ? `（現在 ${dictionaryCount}件）` : ''}。
+              </p>
+            </div>
+            <button type="button" className="btn settings-nav-btn" onClick={onOpenDictionary}>
+              <BookIcon />
+              <span>辞書を開く</span>
+              <NextIcon />
+            </button>
+          </div>
+        </section>
+      )}
       <section className="card" aria-labelledby="appearance-title">
         <h2 id="appearance-title" className="card-title">外観</h2>
         <fieldset className="theme-picker">
