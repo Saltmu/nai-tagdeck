@@ -258,6 +258,7 @@ it('clears undo when the first-run sample replaces the workspace and restores th
   expect(container.textContent).toContain('キャラ1');
   expect(undoButton().getAttribute('aria-disabled')).toBe('false');
   await click(button('設定'));
+  await waitForMount('.settings');
   await click(button('初回案内をもう一度表示'));
   const choose = Array.from(container.querySelectorAll('dialog')).find((dialog) => dialog.textContent?.includes('どの状態から始めますか'));
   const sample = choose && Array.from(choose.querySelectorAll('button')).find((node) =>
@@ -268,7 +269,9 @@ it('clears undo when the first-run sample replaces the workspace and restores th
   if (!confirm) throw new Error('置き換え確認がありません');
   await click(button('タグの例で置き換える', confirm));
 
-  expect(container.querySelector('.toast')?.textContent).toContain('タグの例と辞書を読み込みました');
+  await vi.waitFor(() => {
+    expect(container.querySelector('.toast')?.textContent).toContain('タグの例と辞書を読み込みました');
+  }, { timeout: 5000 });
   expect(container.textContent).toContain('サンプルキャラ');
   expect(preview()).toContain('1girl');
   expect(preview()).not.toContain('existing');
