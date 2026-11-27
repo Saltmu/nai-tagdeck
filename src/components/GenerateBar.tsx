@@ -215,7 +215,14 @@ export function GenerateBar({
             aria-describedby={showCostBadge ? costBadgeId : undefined}
             onClick={onGenerate}
           >
-            {generating ? '生成中…' : '生成する'}
+            {generating ? (
+              <>
+                <span className="spinner spinner-small" aria-hidden="true" />
+                <span>生成中…</span>
+              </>
+            ) : (
+              '生成する'
+            )}
           </button>
           {showCostBadge && <AnlasCostBadge id={costBadgeId} estimate={resolvedEstimate} />}
         </div>

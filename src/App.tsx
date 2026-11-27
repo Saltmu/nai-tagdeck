@@ -547,7 +547,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             <GenerateDock
               collapseSignal={dockCollapse}
               openTabSignal={dockOpenTab}
-              generating={generator.generating}
               referenceActive={referenceImage.activeItems.length > 0}
               referenceCount={referenceImage.activeItems.length}
               history={tagUndo}

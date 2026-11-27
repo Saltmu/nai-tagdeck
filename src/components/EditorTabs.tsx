@@ -36,13 +36,14 @@ export function EditorTabs({
   const tabKeys = useMemo<TargetId[]>(() => [BASE, NEGATIVE, ...characters.map((c) => c.id)], [characters]);
   const [helpOpen, setHelpOpen] = useState(false);
   const helpId = useId();
-  const helpWrapRef = useRef<HTMLDivElement>(null);
+  const helpBtnRef = useRef<HTMLButtonElement>(null);
+  const helpPopoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!helpOpen) return;
     const onPointerDown = (e: globalThis.PointerEvent) => {
       const target = e.target as Node | null;
-      if (target && helpWrapRef.current?.contains(target)) return;
+      if (target && (helpBtnRef.current?.contains(target) || helpPopoverRef.current?.contains(target))) return;
       setHelpOpen(false);
     };
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -77,81 +78,82 @@ export function EditorTabs({
       className={`editor-tabs${tabsStuck ? ' is-stuck' : ''}`}
       data-occludes={tabsStuck ? '' : undefined}
     >
-      <div className="editor-tablist" role="tablist" aria-label="編集対象" onKeyDown={onTabKeyDown}>
+      <div className="editor-tabs-scroll">
+        <div className="editor-tablist" role="tablist" aria-label="編集対象" onKeyDown={onTabKeyDown}>
+          <button
+            ref={(el) => { tabRefs.current.set(BASE, el); }}
+            type="button"
+            role="tab"
+            id={`${idPrefix}-tab-${BASE}`}
+            tabIndex={paneTarget === BASE ? 0 : -1}
+            aria-selected={!activeCharacterId && !negativeSelected}
+            aria-controls={paneTarget === BASE ? panelId : undefined}
+            className="editor-tab"
+            onClick={() => onSelect(BASE)}
+          >
+            ベース
+          </button>
+          <button
+            ref={(el) => { tabRefs.current.set(NEGATIVE, el); }}
+            type="button"
+            role="tab"
+            id={`${idPrefix}-tab-${NEGATIVE}`}
+            tabIndex={paneTarget === NEGATIVE ? 0 : -1}
+            aria-selected={negativeSelected}
+            aria-controls={paneTarget === NEGATIVE ? panelId : undefined}
+            className="editor-tab editor-tab-negative"
+            onClick={() => onSelect(NEGATIVE)}
+          >
+            ネガティブ
+          </button>
+          {characters.map((c, i) => {
+            const name = displayedCharacterName(c, i);
+            const locked = !c.enabled && enabledCount >= MAX_ENABLED_CHARACTERS;
+            const isSelected = c.id === activeCharacterId;
+            return (
+              <div key={c.id} className="editor-tab-wrap" role="presentation">
+                <input
+                  type="checkbox"
+                  className="editor-tab-check"
+                  checked={c.enabled}
+                  disabled={locked}
+                  aria-label={`${name} を生成に含める`}
+                  title={
+                    locked
+                      ? `生成対象は最大${MAX_ENABLED_CHARACTERS}人です。他のキャラクターのチェックを外してください`
+                      : 'OFF にすると出力・生成から外します'
+                  }
+                  onChange={() => onToggleCharacter(c.id)}
+                />
+                <button
+                  ref={(el) => { tabRefs.current.set(c.id, el); }}
+                  type="button"
+                  role="tab"
+                  id={`${idPrefix}-tab-${c.id}`}
+                  tabIndex={isSelected ? 0 : -1}
+                  aria-selected={isSelected}
+                  aria-controls={isSelected ? panelId : undefined}
+                  className={`editor-tab editor-tab-character${c.enabled ? '' : ' is-off'}`}
+                  onClick={() => onSelect(c.id)}
+                >
+                  {name}
+                </button>
+              </div>
+            );
+          })}
+        </div>
         <button
-          ref={(el) => { tabRefs.current.set(BASE, el); }}
           type="button"
-          role="tab"
-          id={`${idPrefix}-tab-${BASE}`}
-          tabIndex={paneTarget === BASE ? 0 : -1}
-          aria-selected={!activeCharacterId && !negativeSelected}
-          aria-controls={paneTarget === BASE ? panelId : undefined}
-          className="editor-tab"
-          onClick={() => onSelect(BASE)}
+          className="editor-tab editor-tab-add"
+          aria-label="キャラクターを追加"
+          title="キャラクターを追加"
+          disabled={characters.length >= MAX_CHARACTERS}
+          onClick={onAddCharacter}
         >
-          ベース
+          ＋
         </button>
         <button
-          ref={(el) => { tabRefs.current.set(NEGATIVE, el); }}
-          type="button"
-          role="tab"
-          id={`${idPrefix}-tab-${NEGATIVE}`}
-          tabIndex={paneTarget === NEGATIVE ? 0 : -1}
-          aria-selected={negativeSelected}
-          aria-controls={paneTarget === NEGATIVE ? panelId : undefined}
-          className="editor-tab editor-tab-negative"
-          onClick={() => onSelect(NEGATIVE)}
-        >
-          ネガティブ
-        </button>
-        {characters.map((c, i) => {
-          const name = displayedCharacterName(c, i);
-          const locked = !c.enabled && enabledCount >= MAX_ENABLED_CHARACTERS;
-          const isSelected = c.id === activeCharacterId;
-          return (
-            <div key={c.id} className="editor-tab-wrap" role="presentation">
-              <input
-                type="checkbox"
-                className="editor-tab-check"
-                checked={c.enabled}
-                disabled={locked}
-                aria-label={`${name} を生成に含める`}
-                title={
-                  locked
-                    ? `生成対象は最大${MAX_ENABLED_CHARACTERS}人です。他のキャラクターのチェックを外してください`
-                    : 'OFF にすると出力・生成から外します'
-                }
-                onChange={() => onToggleCharacter(c.id)}
-              />
-              <button
-                ref={(el) => { tabRefs.current.set(c.id, el); }}
-                type="button"
-                role="tab"
-                id={`${idPrefix}-tab-${c.id}`}
-                tabIndex={isSelected ? 0 : -1}
-                aria-selected={isSelected}
-                aria-controls={isSelected ? panelId : undefined}
-                className={`editor-tab editor-tab-character${c.enabled ? '' : ' is-off'}`}
-                onClick={() => onSelect(c.id)}
-              >
-                {name}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-      <button
-        type="button"
-        className="editor-tab editor-tab-add"
-        aria-label="キャラクターを追加"
-        title="キャラクターを追加"
-        disabled={characters.length >= MAX_CHARACTERS}
-        onClick={onAddCharacter}
-      >
-        ＋
-      </button>
-      <div ref={helpWrapRef} className="editor-help-wrap">
-        <button
+          ref={helpBtnRef}
           type="button"
           className="help-btn editor-tab-help"
           aria-label="複数キャラクターの描き方の説明"
@@ -162,28 +164,28 @@ export function EditorTabs({
         >
           ?
         </button>
-        {helpOpen && (
-          <div id={helpId} className="editor-help-popover" role="region" aria-label="複数キャラクターの描き方">
-            <div className="editor-help-head">
-              <strong>複数キャラクターの描き方</strong>
-              <button
-                type="button"
-                className="icon-btn editor-help-close"
-                aria-label="説明を閉じる"
-                onClick={() => setHelpOpen(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <p className="hint">
-              複数のキャラクターを描くときは、タブ右端の「＋」でキャラクターを追加し、キャラクターごとにタグを分けて登録します（V4 以降のキャラクタープロンプト）。
-              人数（2girls など）や背景・画風はベースに書き、各キャラは「被写体」の girl / boy / other ボタンで種類を選びます（人数は付けません）。
-              キャラ同士の動作はそれぞれのキャラの「ポーズ」に書き、する側に source#、される側に target#、お互いなら両方に mutual# を付けます（例: source#hug と
-              target#hug、両方に mutual#holding hands）。「ポーズ」の入力欄の上のボタンで付けられます。
-            </p>
-          </div>
-        )}
       </div>
+      {helpOpen && (
+        <div ref={helpPopoverRef} id={helpId} className="editor-help-popover" role="region" aria-label="複数キャラクターの描き方">
+          <div className="editor-help-head">
+            <strong>複数キャラクターの描き方</strong>
+            <button
+              type="button"
+              className="icon-btn editor-help-close"
+              aria-label="説明を閉じる"
+              onClick={() => setHelpOpen(false)}
+            >
+              ✕
+            </button>
+          </div>
+          <p className="hint">
+            複数のキャラクターを描くときは、タブ末尾の「＋」でキャラクターを追加し、キャラクターごとにタグを分けて登録します（V4 以降のキャラクタープロンプト）。
+            人数（2girls など）や背景・画風はベースに書き、各キャラは「被写体」の girl / boy / other ボタンで種類を選びます（人数は付けません）。
+            キャラ同士の動作はそれぞれのキャラの「ポーズ」に書き、する側に source#、される側に target#、お互いなら両方に mutual# を付けます（例: source#hug と
+            target#hug、両方に mutual#holding hands）。「ポーズ」の入力欄の上のボタンで付けられます。
+          </p>
+        </div>
+      )}
     </div>
   );
 }

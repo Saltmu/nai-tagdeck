@@ -175,82 +175,81 @@ export function ImageViewer({ image, hasPrev, hasNext, onPrev, onNext, onClose, 
               {removeArmed && removeReady ? '削除の準備ができました。もう一度押すと削除します' : ''}
             </span>
           </div>
-          <dl className="viewer-meta">
-            <div>
-              <dt>シード</dt>
-              <dd className="viewer-seed">
-                {image.seed}
-                <button
-                  type="button"
-                  className="btn btn-small viewer-seed-apply"
-                  aria-label={seedApplied ? '設定済み' : 'このシードを次の生成で使う'}
-                  title={seedApplied ? '設定済み' : 'このシードを次の生成で使う'}
-                  onClick={() => {
-                    onUseSeed(image.seed);
-                    setSeedApplied(true);
-                  }}
-                >
-                  {seedApplied ? <CheckIcon /> : <LockIcon />}
-                  <span>{seedApplied ? '設定済み' : '次に使う'}</span>
-                </button>
-              </dd>
-            </div>
-            <div>
-              <dt>サイズ</dt>
-              <dd>
-                {image.width}×{image.height}
-              </dd>
-            </div>
-            <div>
-              <dt>生成</dt>
-              <dd>{new Date(image.createdAt).toLocaleTimeString()}</dd>
-            </div>
-            {image.params && (
-              <>
-                <div>
-                  <dt>モード</dt>
-                  <dd>{modeLabel(image.params.mode)}</dd>
-                </div>
-                <div>
-                  <dt>ステップ</dt>
-                  <dd>{image.params.steps}</dd>
-                </div>
-                <div>
-                  <dt>スケール</dt>
-                  <dd>{image.params.scale}</dd>
-                </div>
-                <div>
-                  <dt>サンプラー</dt>
-                  <dd>{samplerLabel(image.params.sampler)}</dd>
-                </div>
-                <div>
-                  <dt>ノイズスケジュール</dt>
-                  <dd>{image.params.noiseSchedule}</dd>
-                </div>
-                <div>
-                  <dt>CFG リスケール</dt>
-                  <dd>{image.params.cfgRescale}</dd>
-                </div>
-                <div>
-                  <dt>ダイナミックしきい値</dt>
-                  <dd>{image.params.dynamicThresholding ? 'オン' : 'オフ'}</dd>
-                </div>
-              </>
+          <div className="viewer-actions">
+            <button
+              type="button"
+              className="btn btn-small viewer-seed-apply"
+              aria-label={seedApplied ? '設定済み' : 'このシードを次の生成で使う'}
+              title={seedApplied ? '設定済み' : `シード ${image.seed} を次の生成で使う`}
+              onClick={() => {
+                onUseSeed(image.seed);
+                setSeedApplied(true);
+              }}
+            >
+              {seedApplied ? <CheckIcon /> : <LockIcon />}
+              <span>{seedApplied ? '設定済み' : 'シードを次に使う'}</span>
+            </button>
+            {onImportPrompt && (
+              <button type="button" className="btn btn-small" onClick={onImportPrompt}>プロンプトを読み込む</button>
             )}
-          </dl>
-          {(onImportPrompt || onUseAsReference || onInpaint) && (
-            <div className="viewer-actions">
-              {onImportPrompt && (
-                <button type="button" className="btn btn-small" onClick={onImportPrompt}>プロンプトを読み込む</button>
+            {onUseAsReference && (
+              <button type="button" className="btn btn-small" onClick={onUseAsReference}>参照に使う</button>
+            )}
+            {onInpaint && (
+              <button type="button" className="btn btn-small" onClick={onInpaint}>インペイント</button>
+            )}
+          </div>
+          <details className="viewer-params">
+            <summary>パラメータ</summary>
+            <dl className="viewer-meta">
+              <div>
+                <dt>シード</dt>
+                <dd>{image.seed}</dd>
+              </div>
+              <div>
+                <dt>サイズ</dt>
+                <dd>
+                  {image.width}×{image.height}
+                </dd>
+              </div>
+              <div>
+                <dt>生成</dt>
+                <dd>{new Date(image.createdAt).toLocaleTimeString()}</dd>
+              </div>
+              {image.params && (
+                <>
+                  <div>
+                    <dt>モード</dt>
+                    <dd>{modeLabel(image.params.mode)}</dd>
+                  </div>
+                  <div>
+                    <dt>ステップ</dt>
+                    <dd>{image.params.steps}</dd>
+                  </div>
+                  <div>
+                    <dt>スケール</dt>
+                    <dd>{image.params.scale}</dd>
+                  </div>
+                  <div>
+                    <dt>サンプラー</dt>
+                    <dd>{samplerLabel(image.params.sampler)}</dd>
+                  </div>
+                  <div>
+                    <dt>ノイズスケジュール</dt>
+                    <dd>{image.params.noiseSchedule}</dd>
+                  </div>
+                  <div>
+                    <dt>CFG リスケール</dt>
+                    <dd>{image.params.cfgRescale}</dd>
+                  </div>
+                  <div>
+                    <dt>ダイナミックしきい値</dt>
+                    <dd>{image.params.dynamicThresholding ? 'オン' : 'オフ'}</dd>
+                  </div>
+                </>
               )}
-              {onUseAsReference && (
-                <button type="button" className="btn btn-small" onClick={onUseAsReference}>参照に使う</button>
-              )}
-              {onInpaint && (
-                <button type="button" className="btn btn-small" onClick={onInpaint}>インペイント</button>
-              )}
-            </div>
-          )}
+            </dl>
+          </details>
           <ViewerPromptDetails image={image} getCopyContainer={() => dialog.current} />
         </div>
       </div>

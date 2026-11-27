@@ -15,8 +15,8 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  margin-top: 0.65rem;
-  padding: 0.15rem 0 0.05rem;
+  margin-top: 0;
+  padding: 0;
   border-bottom: 1px solid var(--border);
   /* スクロールしてもヘッダーの直下に残す。--header-height は App が実測して設定する */
   position: sticky;
@@ -29,6 +29,8 @@
 @media (max-width: 1099px) {
   .editor-tabs {
     top: 0;
+    margin-inline: calc(-1 * max(0.75rem, env(safe-area-inset-left))) calc(-1 * max(0.75rem, env(safe-area-inset-right)));
+    padding-inline: max(0.75rem, env(safe-area-inset-left)) max(0.75rem, env(safe-area-inset-right));
   }
 }
 
@@ -38,12 +40,20 @@
   box-shadow: 0 6px 10px -6px rgb(15 20 30 / 0.25);
 }
 
-.editor-tablist {
+.editor-tabs-scroll {
   display: flex;
+  flex: 1 1 auto;
   min-width: 0;
-  padding: 0.2rem;
+  padding: 0.15rem 0 0.2rem;
   overflow-x: auto;
   scrollbar-width: thin;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.editor-tablist {
+  display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 0.35rem;
 }

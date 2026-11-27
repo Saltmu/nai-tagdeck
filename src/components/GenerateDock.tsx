@@ -15,7 +15,6 @@ interface Props {
   collapseSignal: number;
   /** seq が変わるたびに指定タブへ切り替えてドックを開く（ギャラリー等の導線用）。 */
   openTabSignal?: DockTabSignal;
-  generating: boolean;
   /** 精密参照が ON（有効かつ画像あり）のとき true。 */
   referenceActive?: boolean;
   /** 有効な精密参照の枚数。 */
@@ -36,7 +35,6 @@ interface Props {
 export function GenerateDock({
   collapseSignal,
   openTabSignal,
-  generating,
   referenceActive = false,
   referenceCount,
   history,
@@ -259,12 +257,6 @@ export function GenerateDock({
               onClick={() => select(t.key)}
             >
               {t.label}
-              {t.key === 'generate' && generating && (
-                <>
-                  <span className="spinner spinner-small" aria-hidden="true" />
-                  <span className="visually-hidden">（生成中）</span>
-                </>
-              )}
               {t.key === 'reference' && activeReferenceCount > 0 && (
                 <>
                   <span className="dock-tab-badge" aria-hidden="true">{activeReferenceCount}</span>

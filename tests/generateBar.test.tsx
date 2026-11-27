@@ -264,3 +264,22 @@ it('shows the plan and the granted/purchased breakdown in the token settings', a
   expect(details?.textContent).toContain('18,000 Anlas（付与分 10,000／購入分 8,000）');
   expect(details?.textContent).toContain('付与分の Anlas は期間の終了時にリセットされます');
 });
+
+it('shows the spinner on the generate button instead of the dock generate tab while generating', async () => {
+  let resolveGenerate!: (images: Array<{ blob: Blob }>) => void;
+  vi.mocked(requestImages).mockImplementationOnce(
+    () => new Promise((resolve) => { resolveGenerate = resolve; }),
+  );
+  await click(generateButtons()[0]!);
+
+  const submitBtn = container.querySelector<HTMLButtonElement>('.generate-bar .btn-primary')!;
+  expect(submitBtn.disabled).toBe(true);
+  expect(submitBtn.textContent).toContain('生成中…');
+  expect(submitBtn.querySelector('.spinner-small')).not.toBeNull();
+  expect(container.querySelector('.dock-tabs .spinner-small')).toBeNull();
+
+  await act(async () => {
+    resolveGenerate([{ blob: new Blob(['x'], { type: 'image/png' }) }]);
+  });
+  expect(submitBtn.querySelector('.spinner-small')).toBeNull();
+});

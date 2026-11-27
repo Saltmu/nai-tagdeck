@@ -1,4 +1,4 @@
-import { DEFAULT_PARAMS, FREE_LIMITS, isFreeGeneration, type GenerationMode, type GenerationParams } from './novelai';
+import { DEFAULT_PARAMS, FREE_LIMITS, isValidFreeSize, type GenerationMode, type GenerationParams } from './novelai';
 
 export const GENERATION_MODES = [
   { value: 'anime', label: 'アニメ' },
@@ -49,8 +49,11 @@ export function samplerLabel(sampler: string): string {
 export const NOISE_SCHEDULES = ['karras', 'exponential', 'polyexponential'] as const;
 
 export const STEPS_MIN = 1;
+/** NovelAI Image API のステップ数上限（28 を超えると Opus プランでも Anlas を消費する）。 */
+export const STEPS_MAX = 50;
 export const SCALE_MIN = 0;
-export const SCALE_MAX = 10;
+/** NovelAI Image API で指定可能なプロンプトガイダンス（スケール）上限。 */
+export const SCALE_MAX = 100;
 export const CFG_RESCALE_MAX = 1;
 export const SEED_MAX = 4_294_967_295;
 
@@ -103,7 +106,7 @@ function clamp(n: unknown, min: number, max: number, fallback: number): number {
 }
 
 export function normalizeSteps(n: unknown): number {
-  return Math.round(clamp(n, STEPS_MIN, FREE_LIMITS.maxSteps, DEFAULT_GENERATION.steps));
+  return Math.round(clamp(n, STEPS_MIN, STEPS_MAX, DEFAULT_GENERATION.steps));
 }
 
 export function normalizeScale(n: unknown): number {
@@ -301,7 +304,8 @@ export function toParams(g: GenerationSettings, seed: number): GenerationParams 
     cfgRescale: normalizeCfgRescale(g.cfgRescale),
     dynamicThresholding: g.dynamicThresholding === true,
   };
-  // UI 側で範囲を絞っているが、念のため送信直前にも確かめる
-  if (!isFreeGeneration(params)) throw new Error('Anlas を消費する設定になっています');
+  // 送信直前の安全網：サイズは無料枠内（64 の倍数・1024×1024 相当以下）のみ許可する。
+  // ステップは API 上限（50）まで許容し、28 超は Anlas 見積もりバッジで有料表示にする。
+  if (!isValidFreeSize(params.width, params.height)) throw new Error('Anlas を消費する設定になっています');
   return params;
 }

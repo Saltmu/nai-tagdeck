@@ -448,12 +448,13 @@ describe('generation settings', () => {
   });
 
   it('範囲外や不明な値を補正する', () => {
-    expect(normalizeGeneration({ size: 'huge', steps: 50, scale: 99, sampler: 'x', seed: -5 })).toEqual({
+    expect(normalizeGeneration({ size: 'huge', steps: 80, scale: 150, sampler: 'x', seed: -5 })).toEqual({
       ...DEFAULT_GENERATION,
-      steps: 28,
-      scale: 10,
+      steps: 50,
+      scale: 100,
       seed: 0,
     });
+    expect(normalizeGeneration({ steps: 50, scale: 12.5 })).toMatchObject({ steps: 50, scale: 12.5 });
     expect(normalizeGeneration(null)).toEqual(DEFAULT_GENERATION);
     expect(normalizeGeneration({ steps: 0.4, scale: 5.55, seed: 12.9 })).toMatchObject({ steps: 1, scale: 5.6, seed: 12 });
     expect(normalizeGeneration({}).cfgRescale).toBe(0);
@@ -558,6 +559,10 @@ describe('generation settings', () => {
       .toThrow('Anlas');
     expect(() => toParams({ ...DEFAULT_GENERATION, size: 'custom', customWidth: 900, customHeight: 1152 }, 7))
       .toThrow('Anlas');
+    expect(toParams({ ...DEFAULT_GENERATION, steps: 50, scale: 25 }, 7)).toMatchObject({
+      steps: 50,
+      scale: 25,
+    });
     expect(toParams({ ...DEFAULT_GENERATION, cfgRescale: 0.2, dynamicThresholding: true }, 7)).toMatchObject({
       cfgRescale: 0.2,
       dynamicThresholding: true,
@@ -567,7 +572,7 @@ describe('generation settings', () => {
   it('diffGenerationSettings で差分計算とプリセット⇔カスタム往復を行える', () => {
     expect(diffGenerationSettings(DEFAULT_GENERATION, {})).toBeUndefined();
     expect(diffGenerationSettings(DEFAULT_GENERATION, { steps: DEFAULT_GENERATION.steps })).toBeUndefined();
-    expect(diffGenerationSettings(DEFAULT_GENERATION, { steps: 99 })).toBeUndefined();
+    expect(diffGenerationSettings({ ...DEFAULT_GENERATION, steps: 50 }, { steps: 99 })).toBeUndefined();
 
     expect(diffGenerationSettings(DEFAULT_GENERATION, { steps: 20, seed: 42, scale: 5.55 })).toEqual({
       before: { steps: DEFAULT_GENERATION.steps, seed: null, scale: DEFAULT_GENERATION.scale },
