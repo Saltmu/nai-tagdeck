@@ -119,6 +119,19 @@ describe('resolveInpaintSize', () => {
     const huge = resolveInpaintSize(3000, 2000);
     expect(huge.resized).toBe(true);
     expect(isValidFreeSize(huge.width, huge.height)).toBe(true);
+
+    // 長辺が 2048px を超える画像でも正方形へ潰れず縦横比（約 2:1 / 1:2）を保つ
+    const wide4k = resolveInpaintSize(4096, 2048);
+    expect(wide4k.resized).toBe(true);
+    expect(isValidFreeSize(wide4k.width, wide4k.height)).toBe(true);
+    expect(wide4k.width / wide4k.height).toBeGreaterThan(1.8);
+    expect(wide4k.width / wide4k.height).toBeLessThan(2.2);
+
+    const tall4k = resolveInpaintSize(2048, 4096);
+    expect(tall4k.resized).toBe(true);
+    expect(isValidFreeSize(tall4k.width, tall4k.height)).toBe(true);
+    expect(tall4k.height / tall4k.width).toBeGreaterThan(1.8);
+    expect(tall4k.height / tall4k.width).toBeLessThan(2.2);
   });
 });
 

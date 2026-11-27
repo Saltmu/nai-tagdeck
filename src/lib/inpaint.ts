@@ -2,6 +2,7 @@ import { zlibSync } from 'fflate';
 import { fitFreeSize, isValidFreeSize } from './generation';
 import {
   DEFAULT_INPAINT_STRENGTH,
+  FREE_LIMITS,
   INPAINT_STRENGTH_MAX,
   INPAINT_STRENGTH_MIN,
   INPAINT_STRENGTH_STEP,
@@ -85,7 +86,7 @@ export interface InpaintSizeResult {
 
 /**
  * ベース画像の寸法を無料枠（64 の倍数・1,048,576 px 以下）へ正規化する。
- * 既に無料枠を満たす寸法はそのまま維持する。
+ * 既に無料枠を満たす寸法はそのまま維持し、長辺が上限を超える場合も縦横比を保ったまま縮小する。
  */
 export function resolveInpaintSize(naturalWidth: number, naturalHeight: number): InpaintSizeResult {
   if (isValidFreeSize(naturalWidth, naturalHeight)) {
@@ -97,7 +98,21 @@ export function resolveInpaintSize(naturalWidth: number, naturalHeight: number):
       resized: false,
     };
   }
-  const fitted = fitFreeSize(naturalWidth, naturalHeight);
+  let targetW = naturalWidth;
+  let targetH = naturalHeight;
+  if (
+    Number.isFinite(naturalWidth) &&
+    Number.isFinite(naturalHeight) &&
+    naturalWidth > 0 &&
+    naturalHeight > 0
+  ) {
+    const sideScale = Math.min(1, FREE_LIMITS.maxSide / naturalWidth, FREE_LIMITS.maxSide / naturalHeight);
+    const pixelScale = Math.min(1, Math.sqrt(FREE_LIMITS.maxPixels / (naturalWidth * naturalHeight)));
+    const scale = Math.min(sideScale, pixelScale);
+    targetW = naturalWidth * scale;
+    targetH = naturalHeight * scale;
+  }
+  const fitted = fitFreeSize(targetW, targetH);
   return {
     width: fitted.width,
     height: fitted.height,
