@@ -118,6 +118,44 @@
   border-style: dashed;
 }
 
+/* ブラシサイズ変更中に画面中央へ表示する実寸プレビュー */
+.inpaint-brush-preview {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.inpaint-brush-preview-circle {
+  display: block;
+  border-radius: 50%;
+  border: 2px solid var(--scrim-text);
+  outline: 1px solid var(--scrim-bg);
+  box-shadow: var(--shadow-pop);
+}
+
+.inpaint-brush-preview-circle.is-eraser {
+  border-style: dashed;
+  background: transparent;
+}
+
+.inpaint-brush-preview-label {
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-pill);
+  background: var(--scrim-bg);
+  color: var(--scrim-text);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* 画像上に浮かせる操作オーバーレイ（余白は画像へのポインター操作を通す） */
 .inpaint-overlay-top {
   position: absolute;
