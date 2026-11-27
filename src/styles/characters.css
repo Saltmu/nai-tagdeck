@@ -157,6 +157,45 @@
   color: var(--text);
 }
 
+.editor-help-wrap {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.editor-help-popover {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  left: 0;
+  z-index: var(--z-editor-menu);
+  max-width: 34rem;
+  margin-left: auto;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+}
+
+.editor-help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  font-size: var(--text-sm);
+}
+
+.editor-help-close {
+  width: 28px;
+  height: 28px;
+}
+
+.editor-help-popover .hint {
+  margin: 0;
+}
+
 .section-head {
   display: flex;
   flex-wrap: wrap;

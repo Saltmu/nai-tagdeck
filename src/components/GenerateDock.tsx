@@ -1,5 +1,6 @@
-import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { type ComponentProps, type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { copyText } from '../lib/browser';
+import { HistoryControls } from './HistoryControls';
 import { CheckIcon, ChevronUpIcon, CopyIcon } from './icons';
 
 export type DockTab = 'prompt' | 'generate' | 'reference';
@@ -19,6 +20,8 @@ interface Props {
   referenceActive?: boolean;
   /** 有効な精密参照の枚数。 */
   referenceCount?: number;
+  /** ワークスペース共通の操作履歴（Undo / Redo）。 */
+  history?: ComponentProps<typeof HistoryControls>;
   error: string | null;
   onDismissError: () => void;
   promptPanel: ReactNode;
@@ -36,6 +39,7 @@ export function GenerateDock({
   generating,
   referenceActive = false,
   referenceCount,
+  history,
   error,
   onDismissError,
   promptPanel,
@@ -54,6 +58,7 @@ export function GenerateDock({
   const [open, setOpen] = useState(false);
   const [errorCopied, setErrorCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const swallowCleanupRef = useRef<(() => void) | null>(null);
   const mountedRef = useRef(true);
   const latestErrorRef = useRef(error);
   latestErrorRef.current = error;
@@ -72,6 +77,8 @@ export function GenerateDock({
     return () => {
       mountedRef.current = false;
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      swallowCleanupRef.current?.();
+      swallowCleanupRef.current = null;
     };
   }, []);
 
@@ -126,7 +133,8 @@ export function GenerateDock({
     setOpen(true);
   }
 
-  // ドックを開いているとき、ドック外の画面上部などをタップしたら閉じる
+  // ドックを開いているとき、ドック外の画面上部などをタップしたらドックを閉じるだけにし、
+  // 裏にある要素のイベント（クリック・フォーカス等）を起動させない。
   useEffect(() => {
     if (!open) return;
     const onOutsidePointerDown = (e: globalThis.PointerEvent) => {
@@ -134,10 +142,32 @@ export function GenerateDock({
       if (!target) return;
       if (dockRef.current?.contains(target)) return;
       if (target.closest('.generate-bar, .viewer, .inpaint-dialog, .app-dialog, .thumb-menu-wrap')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      swallowCleanupRef.current?.();
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const cleanup = () => {
+        document.removeEventListener('click', swallowClick, true);
+        if (timer !== null) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        if (swallowCleanupRef.current === cleanup) swallowCleanupRef.current = null;
+      };
+      const swallowClick = (ev: MouseEvent) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        cleanup();
+      };
+      document.addEventListener('click', swallowClick, true);
+      timer = setTimeout(cleanup, 400);
+      swallowCleanupRef.current = cleanup;
       setOpen(false);
     };
-    document.addEventListener('pointerdown', onOutsidePointerDown);
-    return () => document.removeEventListener('pointerdown', onOutsidePointerDown);
+    document.addEventListener('pointerdown', onOutsidePointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onOutsidePointerDown, true);
+    };
   }, [open]);
 
   const dragStart = useRef<number | null>(null);
@@ -244,6 +274,7 @@ export function GenerateDock({
             </button>
           ))}
         </div>
+        {history && <HistoryControls {...history} />}
         <button
           type="button"
           className="icon-btn dock-toggle"

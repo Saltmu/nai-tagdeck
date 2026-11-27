@@ -119,6 +119,60 @@ export function AnlasCostBadge({ estimate, id }: { estimate: AnlasEstimate; id?:
 }
 
 /**
+ * 設定画面の最上部に単独で置く V5 利用枠のインジケーターカード（Opus のときだけ表示）。
+ */
+export function V5UsageCard({ anlas }: { anlas?: AnlasState }) {
+  const subscription = anlas?.subscription;
+  const usage = subscription?.tier === 3 ? subscription.usage : null;
+  if (!anlas || !usage) return null;
+  const clamped = Math.min(100, Math.max(0, usage.percent));
+  const untilNext =
+    usage.timeUntilNextPercent !== null && usage.timeUntilNextPercent !== undefined
+      ? formatDuration(usage.timeUntilNextPercent)
+      : '';
+  const stateClass = usage.isNegative || clamped <= 5 ? ' is-over' : clamped <= 20 ? ' is-low' : '';
+
+  return (
+    <section className="card v5-usage-card" aria-labelledby="v5-usage-title">
+      <div className="card-head">
+        <h2 id="v5-usage-title" className="card-title">
+          V5 利用枠
+        </h2>
+        <div className="v5-usage-head-right">
+          <span className={`v5-usage-percent${stateClass}`}>{formatPercent(usage.percent)}%</span>
+          <button
+            type="button"
+            className="icon-btn v5-usage-refresh"
+            onClick={anlas.refresh}
+            disabled={anlas.loading}
+            aria-label="V5 利用枠を更新"
+            title="V5 利用枠を更新"
+          >
+            <RefreshIcon />
+          </button>
+        </div>
+      </div>
+      <div
+        className="v5-usage-bar"
+        role="progressbar"
+        aria-label="V5 利用枠の残量"
+        aria-valuenow={Math.round(clamped)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <span className={`v5-usage-fill${stateClass}`} style={{ width: `${clamped}%` }} />
+      </div>
+      {(usage.isNegative || untilNext) && (
+        <div className="v5-usage-meta">
+          {usage.isNegative && <span className="v5-usage-over">利用枠を超過しています</span>}
+          {untilNext && <span className="hint">次の1%回復まであと{untilNext}</span>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
  * 設定画面のトークン欄に置く詳細。プラン名、付与分・購入分の内訳、
  * Opus の V5 利用枠（Opus のときだけ）、付与分の期間終了時リセットを出す。
  */

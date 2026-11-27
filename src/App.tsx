@@ -61,7 +61,7 @@ type Tab = 'editor' | 'generate' | 'dictionary' | 'settings';
 
 const PRIMARY_TABS: Array<{ key: 'editor' | 'generate'; label: string; icon: ReactNode }> = [
   { key: 'editor', label: '編集', icon: <EditIcon /> },
-  { key: 'generate', label: '生成', icon: <SparkleIcon /> },
+  { key: 'generate', label: '画像', icon: <SparkleIcon /> },
 ];
 
 export default function App({ onResetAll }: { onResetAll: () => void }) {
@@ -473,7 +473,6 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             <Editor
               workspace={workspace}
               dispatch={dispatch}
-              history={tagUndo}
               loaded={loaded}
               dictionary={dictionary}
               syntax={settings.weightSyntax}
@@ -515,6 +514,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               generating={generator.generating}
               referenceActive={referenceImage.activeItems.length > 0}
               referenceCount={referenceImage.activeItems.length}
+              history={tagUndo}
               error={generator.error}
               onDismissError={generator.dismissError}
               promptPanel={

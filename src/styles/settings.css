@@ -96,3 +96,76 @@ textarea {
   flex: none;
 }
 
+.v5-usage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.v5-usage-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.v5-usage-percent {
+  font-size: var(--text-base);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.v5-usage-percent.is-low {
+  color: var(--weighted);
+}
+
+.v5-usage-percent.is-over {
+  color: var(--danger);
+}
+
+.v5-usage-refresh {
+  width: 30px;
+  height: 30px;
+}
+
+.v5-usage-bar {
+  display: flex;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.v5-usage-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.v5-usage-fill.is-low {
+  background: var(--weighted);
+}
+
+.v5-usage-fill.is-over {
+  background: var(--danger);
+}
+
+.v5-usage-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+}
+
+.v5-usage-meta .hint {
+  margin: 0;
+}
+
+.v5-usage-over {
+  color: var(--danger);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+

@@ -238,11 +238,17 @@ it('keeps the dock available on the editor tab and allows opening dock panels wi
   });
   expect(dock?.classList.contains('is-open')).toBe(true);
 
-  // ドック外の画面上部（編集ペインなど）をタップするとドックが閉じる
+  // ドック外の画面上部（編集ペインなど）をタップするとドックが閉じ、裏の要素のクリックは発火しない
+  const paneEditor = container.querySelector('.pane-editor')!;
+  const underlyingClick = vi.fn();
+  paneEditor.addEventListener('click', underlyingClick);
   await act(async () => {
-    container.querySelector('.pane-editor')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    paneEditor.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }));
+    paneEditor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   });
+  paneEditor.removeEventListener('click', underlyingClick);
   expect(dock?.classList.contains('is-open')).toBe(false);
+  expect(underlyingClick).not.toHaveBeenCalled();
 });
 
 it('shows the plan and the granted/purchased breakdown in the token settings', async () => {

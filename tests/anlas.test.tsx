@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AnlasBalance, AnlasCostBadge, AnlasDetails } from '../src/components/AnlasBalance';
+import { AnlasBalance, AnlasCostBadge, AnlasDetails, V5UsageCard } from '../src/components/AnlasBalance';
 import { useAnlas, type AnlasState } from '../src/hooks/useAnlas';
 import { estimateAnlasCost, formatAnlasEstimate, type AnlasEstimate } from '../src/lib/anlasEstimate';
 import { readAllAppData } from '../src/lib/db';
@@ -275,6 +275,70 @@ describe('AnlasDetails', () => {
   it('未設定のときはトークン保存後に表示される旨を出す', async () => {
     const el = await renderDetails(fakeState({ status: 'unset', subscription: null }));
     expect(el.textContent).toContain('トークンを保存すると、Anlas 残高とプランがここに表示されます。');
+  });
+});
+
+describe('V5UsageCard', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
+  it('Opus の利用枠があるとき、使用率バー・回復時間・更新ボタンを表示する', async () => {
+    const refresh = vi.fn();
+    await act(async () => root.render(<V5UsageCard anlas={fakeState({ refresh })} />));
+    const card = container.querySelector('.v5-usage-card');
+    expect(card).not.toBeNull();
+    expect(card?.textContent).toContain('23%');
+    expect(card?.textContent).toContain('次の1%回復まであと1時間30分');
+    const bar = card?.querySelector('[role="progressbar"]');
+    expect(bar?.getAttribute('aria-valuenow')).toBe('23');
+    await act(async () => {
+      (card!.querySelector('[aria-label="V5 利用枠を更新"]') as HTMLButtonElement).click();
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('残量 20% 以下で注意色、5% 以下や超過で赤色のクラスが付く', async () => {
+    await act(async () =>
+      root.render(
+        <V5UsageCard
+          anlas={fakeState({
+            subscription: { ...opusSubscription, usage: { percent: 20, isNegative: false, timeUntilNextPercent: 600 } },
+          })}
+        />,
+      ),
+    );
+    expect(container.querySelector('.v5-usage-fill')?.classList.contains('is-low')).toBe(true);
+
+    await act(async () =>
+      root.render(
+        <V5UsageCard
+          anlas={fakeState({
+            subscription: { ...opusSubscription, usage: { percent: 5, isNegative: false, timeUntilNextPercent: 600 } },
+          })}
+        />,
+      ),
+    );
+    expect(container.querySelector('.v5-usage-fill')?.classList.contains('is-over')).toBe(true);
+  });
+
+  it('Opus 以外や利用枠なしのときは表示しない', async () => {
+    await act(async () =>
+      root.render(
+        <V5UsageCard anlas={fakeState({ subscription: { ...opusSubscription, tier: 1, usage: null } })} />,
+      ),
+    );
+    expect(container.querySelector('.v5-usage-card')).toBeNull();
   });
 });
 

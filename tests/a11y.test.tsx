@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DialogProvider, useDialogs, type DialogApi } from '../src/components/Dialogs';
 import { GenerateDock } from '../src/components/GenerateDock';
+import { HistoryControls } from '../src/components/HistoryControls';
 import { SeedLock } from '../src/components/SeedLock';
 import { SizePicker } from '../src/components/SizePicker';
 import type { SizeKey } from '../src/lib/generation';
@@ -123,6 +124,7 @@ describe('GenerateDock tablist', () => {
         <GenerateDock
           collapseSignal={0}
           generating={false}
+          history={{ canUndo: false, canRedo: false, undo: () => {}, redo: () => {}, status: '' }}
           error={null}
           onDismissError={() => {}}
           promptPanel={<div>prompt</div>}
@@ -131,6 +133,9 @@ describe('GenerateDock tablist', () => {
         />,
       ),
     );
+    const tablist = container.querySelector('[role="tablist"]')!;
+    expect(tablist.querySelector('[aria-label="編集履歴"]')).toBeNull();
+    expect(container.querySelector('.dock-bar [aria-label="編集履歴"] button[aria-label="元に戻す"]')).not.toBeNull();
     const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
     expect(tabs).toHaveLength(3);
     const [tab0, tab1, tab2] = tabs as [HTMLButtonElement, HTMLButtonElement, HTMLButtonElement];
@@ -332,7 +337,6 @@ describe('Editor tablist', () => {
           <Editor
             workspace={emptyWorkspace()}
             dispatch={() => {}}
-            history={{ canUndo: false, canRedo: false, undo: () => {}, redo: () => {}, status: '' }}
             loaded
             dictionary={dictionary}
             syntax="brace"
@@ -348,8 +352,7 @@ describe('Editor tablist', () => {
     );
     const tablist = container.querySelector('[role="tablist"]')!;
     expect(tablist.querySelector('.editor-tab-add')).toBeNull();
-    expect(tablist.querySelector('[aria-label="編集履歴"]')).toBeNull();
-    expect(tablist.closest('.editor-tabs')?.querySelector('[aria-label="編集履歴"] button[aria-label="元に戻す"]')).not.toBeNull();
+    expect(tablist.closest('.editor-tabs')?.querySelector('[aria-label="編集履歴"]')).toBeNull();
     const tabs = [...tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
     expect(tabs).toHaveLength(2);
     const [t0, t1] = tabs as [HTMLButtonElement, HTMLButtonElement];
@@ -392,7 +395,6 @@ describe('Editor tablist', () => {
           <Editor
             workspace={workspace}
             dispatch={history.dispatch}
-            history={history}
             loaded
             dictionary={dictionary}
             syntax="brace"
@@ -403,6 +405,7 @@ describe('Editor tablist', () => {
             onCharacterNegativeChange={() => {}}
             shown
           />
+          <HistoryControls {...history} />
         </DialogProvider>
       );
     }
@@ -521,7 +524,6 @@ describe('Editor tablist', () => {
           <Editor
             workspace={workspace}
             dispatch={history.dispatch}
-            history={history}
             loaded
             dictionary={dictionary}
             syntax="brace"

@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DialogProvider } from '../src/components/Dialogs';
 import { Editor } from '../src/components/Editor';
+import { HistoryControls } from '../src/components/HistoryControls';
 import { useTagUndo } from '../src/hooks/useTagUndo';
 import { emptyWorkspace, workspaceReducer } from '../src/lib/workspace';
 import type { Dictionary } from '../src/hooks/useDictionary';
@@ -118,7 +119,6 @@ describe('CharacterCenterPicker', () => {
           <Editor
             workspace={workspace}
             dispatch={history.dispatch}
-            history={history}
             loaded
             dictionary={dictionary}
             syntax="brace"
@@ -130,6 +130,7 @@ describe('CharacterCenterPicker', () => {
             canvasSize={size}
             shown
           />
+          <HistoryControls {...history} />
         </DialogProvider>
       );
     }

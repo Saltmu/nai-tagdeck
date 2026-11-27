@@ -1,7 +1,6 @@
-import { useMemo, type ComponentProps, type KeyboardEvent, type MutableRefObject, type RefObject } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject, type RefObject } from 'react';
 import type { Character, TargetId } from '../types';
 import { BASE, displayedCharacterName, MAX_CHARACTERS, MAX_ENABLED_CHARACTERS, NEGATIVE } from '../lib/workspace';
-import { HistoryControls } from './HistoryControls';
 
 interface Props {
   idPrefix: string;
@@ -17,7 +16,6 @@ interface Props {
   onSelect: (target: TargetId) => void;
   onToggleCharacter: (id: string) => void;
   onAddCharacter: () => void;
-  history?: ComponentProps<typeof HistoryControls>;
 }
 
 export function EditorTabs({
@@ -34,9 +32,29 @@ export function EditorTabs({
   onSelect,
   onToggleCharacter,
   onAddCharacter,
-  history,
 }: Props) {
   const tabKeys = useMemo<TargetId[]>(() => [BASE, NEGATIVE, ...characters.map((c) => c.id)], [characters]);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const helpId = useId();
+  const helpWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!helpOpen) return;
+    const onPointerDown = (e: globalThis.PointerEvent) => {
+      const target = e.target as Node | null;
+      if (target && helpWrapRef.current?.contains(target)) return;
+      setHelpOpen(false);
+    };
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setHelpOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [helpOpen]);
 
   const onTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const index = tabKeys.indexOf(paneTarget);
@@ -132,7 +150,40 @@ export function EditorTabs({
       >
         ＋
       </button>
-      {history && <HistoryControls {...history} />}
+      <div ref={helpWrapRef} className="editor-help-wrap">
+        <button
+          type="button"
+          className="help-btn editor-tab-help"
+          aria-label="複数キャラクターの描き方の説明"
+          aria-expanded={helpOpen}
+          aria-controls={helpOpen ? helpId : undefined}
+          title="複数キャラクターの描き方"
+          onClick={() => setHelpOpen((v) => !v)}
+        >
+          ?
+        </button>
+        {helpOpen && (
+          <div id={helpId} className="editor-help-popover" role="region" aria-label="複数キャラクターの描き方">
+            <div className="editor-help-head">
+              <strong>複数キャラクターの描き方</strong>
+              <button
+                type="button"
+                className="icon-btn editor-help-close"
+                aria-label="説明を閉じる"
+                onClick={() => setHelpOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <p className="hint">
+              複数のキャラクターを描くときは、タブ右端の「＋」でキャラクターを追加し、キャラクターごとにタグを分けて登録します（V4 以降のキャラクタープロンプト）。
+              人数（2girls など）や背景・画風はベースに書き、各キャラは「被写体」の girl / boy / other ボタンで種類を選びます（人数は付けません）。
+              キャラ同士の動作はそれぞれのキャラの「ポーズ」に書き、する側に source#、される側に target#、お互いなら両方に mutual# を付けます（例: source#hug と
+              target#hug、両方に mutual#holding hands）。「ポーズ」の入力欄の上のボタンで付けられます。
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

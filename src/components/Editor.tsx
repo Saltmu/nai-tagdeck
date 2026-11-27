@@ -1,4 +1,4 @@
-import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CategoryKey, WeightSyntax, WorkTag, Workspace } from '../types';
 import type { Dictionary } from '../hooks/useDictionary';
 import {
@@ -22,7 +22,6 @@ import { NegativePane } from './NegativePane';
 import { CharacterCard } from './CharacterCard';
 import type { PeerCharacterCenter } from './CharacterCenterPicker';
 import { EditorTabs } from './EditorTabs';
-import type { HistoryControls } from './HistoryControls';
 import { PresetBar } from './PresetBar';
 import { TagFilterBar } from './TagFilterBar';
 import { RegisterTagDialog } from './RegisterTagDialog';
@@ -45,7 +44,6 @@ const QUALITY_PICKS = ['masterpiece', 'best quality', 'amazing quality', 'very a
 interface Props {
   workspace: Workspace;
   dispatch: (action: WorkspaceAction, extras?: UndoExtras) => void;
-  history?: ComponentProps<typeof HistoryControls>;
   loaded: boolean;
   dictionary: Dictionary;
   syntax: WeightSyntax;
@@ -72,7 +70,6 @@ interface Props {
 export function Editor({
   workspace,
   dispatch,
-  history,
   loaded,
   dictionary,
   syntax,
@@ -261,7 +258,6 @@ export function Editor({
         onSelect={select}
         onToggleCharacter={(characterId) => dispatch({ type: 'toggleCharacter', id: characterId })}
         onAddCharacter={() => dispatch({ type: 'addCharacter' })}
-        history={history}
       />
 
       <div id={panelId} role="tabpanel" aria-labelledby={`${id}-tab-${paneTarget}`}>
@@ -347,13 +343,6 @@ export function Editor({
           </div>
         )}
       </div>
-
-      <p className="hint">
-        複数のキャラクターを描くときは、タブ右端の「＋」でキャラクターを追加し、キャラクターごとにタグを分けて登録します（V4 以降のキャラクタープロンプト）。
-        人数（2girls など）や背景・画風はベースに書き、各キャラは「被写体」の girl / boy / other ボタンで種類を選びます（人数は付けません）。
-        キャラ同士の動作はそれぞれのキャラの「ポーズ」に書き、する側に source#、される側に target#、お互いなら両方に mutual# を付けます（例: source#hug と
-        target#hug、両方に mutual#holding hands）。「ポーズ」の入力欄の上のボタンで付けられます。
-      </p>
 
       <p className="hint">
         保存 {characters.length}/{MAX_CHARACTERS} · 生成対象 {enabledCount}/{MAX_ENABLED_CHARACTERS}

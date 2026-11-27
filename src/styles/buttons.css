@@ -38,6 +38,7 @@
   color: var(--danger);
 }
 
+.card.danger-zone,
 .danger-zone,
 .danger-confirm {
   border: 1px solid var(--danger);

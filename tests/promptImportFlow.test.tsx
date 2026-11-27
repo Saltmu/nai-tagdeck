@@ -112,7 +112,7 @@ beforeEach(async () => {
   document.body.append(container);
   root = createRoot(container);
   await act(async () => root.render(<DialogProvider><App onResetAll={() => {}} /></DialogProvider>));
-  await click(button('生成'));
+  await click(container.querySelector<HTMLButtonElement>('.tab-generate')!);
 });
 
 afterEach(async () => {
@@ -306,7 +306,7 @@ it('falls back to stored history when a viewer image has no PNG metadata', async
   await click(button('existing を削除'));
   expect(preview()).toBe('ONのタグがありません');
 
-  await click(button('生成'));
+  await click(container.querySelector<HTMLButtonElement>('.tab-generate')!);
   await click(container.querySelector<HTMLButtonElement>('.thumb-btn')!);
   await waitForMount('.viewer');
   await click(button('プロンプトを読み込む', container.querySelector('.viewer')!));

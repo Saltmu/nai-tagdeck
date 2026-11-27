@@ -78,12 +78,25 @@
   line-height: 1;
 }
 
-/* 320〜375px 幅で「プロンプト / 生成（スピナー付） / 参照画像」の 3 タブが折り返し・溢れしないよう余白を詰める */
+/* 320〜420px 幅で「プロンプト / 生成 / 参照画像」＋ Undo/Redo ＋ 開閉ボタンが 1 行に収まるよう余白を詰める */
 @media (max-width: 420px) {
+  .dock-bar {
+    gap: 0.15rem;
+    padding-inline: 0.35rem;
+  }
+
+  .dock-tabs {
+    gap: 0.15rem;
+  }
+
   .dock-tab {
-    gap: 0.25rem;
-    padding: 0.4rem 0.5rem;
-    font-size: var(--text-sm);
+    gap: 0.2rem;
+    padding: 0.35rem 0.4rem;
+    font-size: var(--text-caption);
+  }
+
+  .dock-bar .icon-btn {
+    width: 32px;
   }
 }
 
@@ -119,8 +132,8 @@
 .dock-scroll {
   flex: 1 1 auto;
   min-height: 0;
-  height: min(55dvh, 32rem);
-  max-height: min(55dvh, 32rem);
+  height: min(61dvh, 35rem);
+  max-height: min(61dvh, 35rem);
   overflow: auto;
   overscroll-behavior: contain;
   padding: 0 0.75rem 0.75rem;
@@ -221,7 +234,7 @@
   }
 
   .dock-scroll {
-    height: min(52dvh, 32rem);
-    max-height: min(52dvh, 32rem);
+    height: min(57dvh, 35rem);
+    max-height: min(57dvh, 35rem);
   }
 }

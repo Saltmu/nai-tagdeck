@@ -1,5 +1,6 @@
 import type { TokenState } from '../hooks/useToken';
 import type { AnlasState } from '../hooks/useAnlas';
+import { V5UsageCard } from './AnlasBalance';
 import { TokenSettings } from './TokenSettings';
 import { BackupCard } from './BackupCard';
 import type { Backup, BackupImportMode } from '../lib/backup';
@@ -50,6 +51,7 @@ export function SettingsView({
 }: Props) {
   return (
     <div className="settings">
+      <V5UsageCard anlas={anlas} />
       {onOpenDictionary && (
         <section className="card" aria-labelledby="dictionary-nav-title">
           <div className="settings-nav-row">
