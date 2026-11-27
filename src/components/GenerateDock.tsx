@@ -125,6 +125,21 @@ export function GenerateDock({
     setTab(openTabSignal.tab);
     setOpen(true);
   }
+
+  // ドックを開いているとき、ドック外の画面上部などをタップしたら閉じる
+  useEffect(() => {
+    if (!open) return;
+    const onOutsidePointerDown = (e: globalThis.PointerEvent) => {
+      const target = e.target as Element | null;
+      if (!target) return;
+      if (dockRef.current?.contains(target)) return;
+      if (target.closest('.generate-bar, .viewer, .inpaint-dialog, .app-dialog, .thumb-menu-wrap')) return;
+      setOpen(false);
+    };
+    document.addEventListener('pointerdown', onOutsidePointerDown);
+    return () => document.removeEventListener('pointerdown', onOutsidePointerDown);
+  }, [open]);
+
   const dragStart = useRef<number | null>(null);
 
   // バーの空いた所のタップ・上スワイプで開き、下スワイプで閉じる

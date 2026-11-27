@@ -36,7 +36,8 @@
 
 /* ヘッダー内のタブ。ラベルは狭い画面でも出す（生成ボタンをドックに移して空いた分） */
 .tabbar {
-  flex: 1 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   justify-content: center;
   gap: 0.25rem;

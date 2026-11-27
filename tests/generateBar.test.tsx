@@ -231,6 +231,18 @@ it('keeps the dock available on the editor tab and allows opening dock panels wi
   await switchDockTab('プロンプト');
   expect(dock?.classList.contains('is-open')).toBe(true);
   expect(container.querySelector('.workbench')?.getAttribute('data-tab')).toBe('editor');
+
+  // 生成バー内のタップではドックは閉じない
+  await act(async () => {
+    container.querySelector('.generate-bar')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  });
+  expect(dock?.classList.contains('is-open')).toBe(true);
+
+  // ドック外の画面上部（編集ペインなど）をタップするとドックが閉じる
+  await act(async () => {
+    container.querySelector('.pane-editor')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  });
+  expect(dock?.classList.contains('is-open')).toBe(false);
 });
 
 it('shows the plan and the granted/purchased breakdown in the token settings', async () => {
