@@ -507,7 +507,6 @@ describe('GenerateDock 3タブキーボード操作', () => {
       root.render(
         <GenerateDock
           collapseSignal={0}
-          generating={false}
           referenceActive
           referenceCount={2}
           error={null}

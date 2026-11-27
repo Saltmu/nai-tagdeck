@@ -15,7 +15,6 @@ interface Props {
   collapseSignal: number;
   /** seq が変わるたびに指定タブへ切り替えてドックを開く（ギャラリー等の導線用）。 */
   openTabSignal?: DockTabSignal;
-  generating: boolean;
   /** 精密参照が ON（有効かつ画像あり）のとき true。 */
   referenceActive?: boolean;
   /** 有効な精密参照の枚数。 */

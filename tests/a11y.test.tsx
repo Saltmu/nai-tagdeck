@@ -123,7 +123,6 @@ describe('GenerateDock tablist', () => {
       root.render(
         <GenerateDock
           collapseSignal={0}
-          generating={false}
           history={{ canUndo: false, canRedo: false, undo: () => {}, redo: () => {}, status: '' }}
           error={null}
           onDismissError={() => {}}
@@ -186,7 +185,6 @@ describe('GenerateDock tablist', () => {
       root.render(
         <GenerateDock
           collapseSignal={0}
-          generating={false}
           error="リクエストの内容が受け付けられませんでした（bad input）"
           onDismissError={() => {}}
           promptPanel={<div>prompt</div>}
