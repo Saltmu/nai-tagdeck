@@ -11,7 +11,55 @@
 }
 
 .free-note {
-  margin: 0.35rem 0 0;
+  margin: 0;
+}
+
+.size-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.size-free-chip {
+  font-size: var(--text-xs);
+}
+
+.size-help-btn {
+  width: 20px;
+  height: 20px;
+}
+
+.free-note-popover {
+  margin: 0.25rem 0 0.35rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+}
+
+.free-note-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.free-note-close {
+  width: 24px;
+  height: 24px;
+}
+
+.gen-divider {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 0.2rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
 }
 
 .gen-grid {
@@ -126,11 +174,11 @@
   color: var(--accent);
 }
 
-/* ステップ・スケール: 数値入力ではなくフェーダー（本家と同じ操作感） */
+/* ステップ・スケール: フェーダー＋数値タップで直接入力＋既定値へ戻すボタン */
 .fader-row {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
 }
 
 .fader-row input[type='range'] {
@@ -139,14 +187,46 @@
   accent-color: var(--accent);
 }
 
-.fader-row output {
-  min-width: 2.5rem;
+.fader-value {
+  flex: none;
+  min-width: 3.4rem;
+  min-height: 34px;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
   color: var(--text);
   /* 親の .field が 0.8rem のため、継承ではなく本文相当のトークンで明示する */
   font-size: var(--text-base);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: right;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.fader-value:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.fader-number {
+  flex: none;
+  width: 4.5rem;
+  min-height: 34px;
+  padding: 0.2rem 0.45rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fader-reset {
+  flex: none;
+  white-space: nowrap;
+}
+
+.steps-paid-note {
+  margin: 0.2rem 0 0;
+  color: var(--weighted);
 }
 
 .custom-size {

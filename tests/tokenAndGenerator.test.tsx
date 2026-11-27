@@ -288,7 +288,7 @@ describe('useGenerator', () => {
         settings: {
           ...DEFAULT_GENERATION,
           mode: 'furry',
-          steps: 50,
+          steps: 80,
           scale: 5.55,
           sampler: 'k_euler',
           noiseSchedule: 'exponential',
@@ -313,7 +313,7 @@ describe('useGenerator', () => {
       ],
       params: {
         mode: 'furry',
-        steps: 28,
+        steps: 50,
         scale: 5.6,
         sampler: 'k_euler',
         noiseSchedule: 'exponential',

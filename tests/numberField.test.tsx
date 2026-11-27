@@ -8,13 +8,13 @@ import {
   SCALE_MAX,
   SCALE_MIN,
   SEED_MAX,
+  STEPS_MAX,
   STEPS_MIN,
   normalizeCfgRescale,
   normalizeScale,
   normalizeSeed,
   normalizeSteps,
 } from '../src/lib/generation';
-import { FREE_LIMITS } from '../src/lib/novelai';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -69,12 +69,12 @@ async function enter() {
 }
 
 function StepsField() {
-  const [steps, setSteps] = useState<number>(FREE_LIMITS.maxSteps);
+  const [steps, setSteps] = useState<number>(STEPS_MAX);
   return (
     <NumberField
       value={steps}
       min={STEPS_MIN}
-      max={FREE_LIMITS.maxSteps}
+      max={STEPS_MAX}
       step={1}
       onChange={(value) => setSteps(normalizeSteps(value ?? steps))}
     />
@@ -137,17 +137,17 @@ function CenterField() {
 
 it('restores the clamped steps after blur and Enter when the value is above the maximum', async () => {
   await act(async () => root.render(<StepsField />));
-  expect(input().value).toBe('28');
-
-  await type('50');
   expect(input().value).toBe('50');
+
+  await type('80');
+  expect(input().value).toBe('80');
   await blur();
-  expect(input().value).toBe('28');
+  expect(input().value).toBe('50');
 
   await focus();
-  await type('50');
+  await type('80');
   await enter();
-  expect(input().value).toBe('28');
+  expect(input().value).toBe('50');
   expect(document.activeElement).toBe(input());
 });
 
@@ -192,14 +192,14 @@ it('keeps an in-progress edit until commit, then shows a value that actually cha
 
 it('leaves an in-progress edit in place when the parent value changes, and restores invalid or empty text on commit', async () => {
   function Field() {
-    const [steps, setSteps] = useState<number>(FREE_LIMITS.maxSteps);
+    const [steps, setSteps] = useState<number>(STEPS_MAX);
     return (
       <>
         <button type="button" onClick={() => setSteps(10)}>外部</button>
         <NumberField
           value={steps}
           min={STEPS_MIN}
-          max={FREE_LIMITS.maxSteps}
+          max={STEPS_MAX}
           step={1}
           onChange={(value) => setSteps(normalizeSteps(value ?? steps))}
         />

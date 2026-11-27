@@ -109,6 +109,17 @@ describe('ImageViewer prompts and parameters', () => {
       },
     }));
 
+    const side = container.querySelector('.viewer-side')!;
+    const sideChildren = [...side.children];
+    const toolbarIdx = sideChildren.findIndex((el) => el.classList.contains('viewer-toolbar'));
+    const actionsIdx = sideChildren.findIndex((el) => el.classList.contains('viewer-actions'));
+    const paramsEl = side.querySelector<HTMLDetailsElement>('details.viewer-params')!;
+    const paramsIdx = sideChildren.indexOf(paramsEl);
+    expect(toolbarIdx).toBe(0);
+    expect(actionsIdx).toBe(1);
+    expect(paramsIdx).toBe(2);
+    expect(paramsEl.open).toBe(false);
+
     const text = container.textContent ?? '';
     expect(text).toContain('ケモノ');
     expect(text).toContain('28');

@@ -104,10 +104,15 @@
   font-variant-numeric: tabular-nums;
 }
 
+.viewer-params summary,
 .viewer-prompt summary {
   color: var(--muted);
   font-size: var(--text-sm);
   cursor: pointer;
+}
+
+.viewer-params .viewer-meta {
+  margin-top: 0.4rem;
 }
 
 .viewer-seed {

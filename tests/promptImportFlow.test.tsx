@@ -24,7 +24,7 @@ const dialogMethods = ['showModal', 'close'] as const;
 const originalDialogMethods = dialogMethods.map((name) => Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, name));
 const imageBytes = pngFixture({
   v4_prompt: caption('blazer, 1.2::custom tag::, standing'),
-  width: 1024, height: 1024, seed: 42, steps: 50,
+  width: 1024, height: 1024, seed: 42, steps: 80,
 });
 
 function imageFile(bytes = imageBytes, name = 'image.png'): File {

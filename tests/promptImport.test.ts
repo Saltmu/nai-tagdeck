@@ -63,7 +63,7 @@ describe('NovelAI PNG import', () => {
     const result = await read({
       v4_prompt: caption('4::hat::, 1.234::shirt::', ['girl', 'boy']),
       v4_negative_prompt: caption('', ['lowres', '']),
-      width: 1000, height: 1000, seed: 123, steps: 50, scale: 12, noise_schedule: 'karras',
+      width: 1000, height: 1000, seed: 123, steps: 80, scale: 120, noise_schedule: 'karras',
     });
     expect(result.characterNegative).toBeUndefined();
     expect(result.characters.map((c) => c.negative)).toEqual(['lowres', '']);
@@ -279,9 +279,9 @@ describe('NovelAI PNG import', () => {
     expect((await read({ prompt: 'a', scale: 5.01 })).generation.values.scale).toBe(5);
     expect((await read({ prompt: 'a', scale: 5.26 })).generation.values.scale).toBe(5.3);
     expect((await read({ prompt: 'a', scale: 0 })).generation.values.scale).toBe(0);
-    expect((await read({ prompt: 'a', scale: 10 })).generation.values.scale).toBe(10);
+    expect((await read({ prompt: 'a', scale: 100 })).generation.values.scale).toBe(100);
     expect((await read({ prompt: 'a', scale: -0.1 })).generation.skipped).toContain('ガイダンス');
-    expect((await read({ prompt: 'a', scale: 10.1 })).generation.skipped).toContain('ガイダンス');
+    expect((await read({ prompt: 'a', scale: 100.1 })).generation.skipped).toContain('ガイダンス');
   });
 });
 

@@ -3,6 +3,7 @@ import type { TokenState } from '../hooks/useToken';
 import {
   CFG_RESCALE_MAX,
   CUSTOM_SIZE_SUGGESTIONS,
+  DEFAULT_GENERATION,
   GENERATION_MODES,
   NOISE_SCHEDULES,
   SAMPLERS,
@@ -10,6 +11,8 @@ import {
   adjustCustomHeight,
   adjustCustomWidth,
   modeLabel,
+  normalizeScale,
+  normalizeSteps,
   resolveSize,
   samplerLabel,
   sizeChangePatch,
@@ -17,6 +20,7 @@ import {
   SCALE_MAX,
   SCALE_MIN,
   SEED_MAX,
+  STEPS_MAX,
   STEPS_MIN,
   type GenerationSettings,
   type SizeKey,
@@ -52,11 +56,34 @@ export function GeneratePanel({
   onOpenSettings,
 }: Props) {
   const id = useId();
+  const freeHelpId = useId();
   const [customHint, setCustomHint] = useState('');
+  const [freeHelpOpen, setFreeHelpOpen] = useState(false);
+  const [editingField, setEditingField] = useState<'steps' | 'scale' | null>(null);
+  const freeHelpBtnRef = useRef<HTMLButtonElement>(null);
+  const freeHelpPopoverRef = useRef<HTMLDivElement>(null);
   const customSize = resolveSize(generation);
   const customPixels = customSize.width * customSize.height;
   const sizeRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const sizeIndex = SIZE_ORDER.indexOf(generation.size);
+
+  useEffect(() => {
+    if (!freeHelpOpen) return;
+    const onPointerDown = (e: globalThis.PointerEvent) => {
+      const target = e.target as Node | null;
+      if (target && (freeHelpBtnRef.current?.contains(target) || freeHelpPopoverRef.current?.contains(target))) return;
+      setFreeHelpOpen(false);
+    };
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setFreeHelpOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [freeHelpOpen]);
 
   /** サイズ変更。フッターのピクトグラムと同一の状態を操作する。 */
   const handleSizeChange = (next: SizeKey) => {
@@ -103,11 +130,6 @@ export function GeneratePanel({
 
   return (
     <div className="generate">
-      <span className="chip">V5 / Anlas 消費なしの範囲</span>
-      <p className="hint free-note">
-        この範囲は Opus プランで Anlas を消費しない条件です（{FREE_LIMITS.maxSteps} steps 以下、1024×1024 相当以下、1 枚）。
-        Tablet / Scroll プランでは同じ設定でも Anlas を消費します。
-      </p>
       {!token.token && (
         <p className="notice">
           NovelAI のトークンが未設定です。
@@ -135,9 +157,50 @@ export function GeneratePanel({
             ))}
           </div>
         </div>
+        <hr className="gen-divider" />
         {/* サイズ指定は常時表示する。ピクトグラムを押さないと出てこない作りにしない。 */}
         <div className="field field-wide">
-          <span id={`${id}-size-label`}>サイズ</span>
+          <div className="size-header">
+            <span id={`${id}-size-label`}>サイズ</span>
+            <span className="chip size-free-chip">V5 / Anlas 消費なしの範囲</span>
+            <button
+              ref={freeHelpBtnRef}
+              type="button"
+              className="help-btn size-help-btn"
+              aria-label="Anlas 消費なしの範囲の説明"
+              aria-expanded={freeHelpOpen}
+              aria-controls={freeHelpOpen ? freeHelpId : undefined}
+              title="Anlas 消費なしの範囲の説明"
+              onClick={() => setFreeHelpOpen((v) => !v)}
+            >
+              ?
+            </button>
+          </div>
+          {freeHelpOpen && (
+            <div
+              ref={freeHelpPopoverRef}
+              id={freeHelpId}
+              className="free-note-popover"
+              role="region"
+              aria-label="Anlas 消費なしの範囲の説明"
+            >
+              <div className="free-note-head">
+                <strong>Anlas 消費なしの範囲</strong>
+                <button
+                  type="button"
+                  className="icon-btn free-note-close"
+                  aria-label="説明を閉じる"
+                  onClick={() => setFreeHelpOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="hint free-note">
+                この範囲は Opus プランで Anlas を消費しない条件です（{FREE_LIMITS.maxSteps} steps 以下、1024×1024 相当以下、1 枚）。
+                Tablet / Scroll プランでは同じ設定でも Anlas を消費します。
+              </p>
+            </div>
+          )}
           <div className="size-groups" role="radiogroup" aria-labelledby={`${id}-size-label`} onKeyDown={onSizeKeyDown}>
             {SIZE_GROUPS.map((group) => (
               <div key={group.title} className="size-group" role="group" aria-label={group.title}>
@@ -227,23 +290,63 @@ export function GeneratePanel({
             </p>
           </div>
         )}
-        <div className="field">
-          <label htmlFor={`${id}-steps`}>ステップ（〜{FREE_LIMITS.maxSteps}）</label>
+        <hr className="gen-divider" />
+        <div className="field field-wide">
+          <label htmlFor={`${id}-steps`}>ステップ（{STEPS_MIN}〜{STEPS_MAX}）</label>
           <div className="fader-row">
             <input
               id={`${id}-steps`}
               type="range"
               min={STEPS_MIN}
-              max={FREE_LIMITS.maxSteps}
+              max={STEPS_MAX}
               step={1}
               value={generation.steps}
               onChange={(e) => onGenerationChange({ steps: Math.round(Number(e.target.value)) })}
             />
-            <output htmlFor={`${id}-steps`}>{generation.steps}</output>
+            {editingField === 'steps' ? (
+              <NumberField
+                className="fader-number"
+                ariaLabel="ステップを直接入力"
+                value={generation.steps}
+                min={STEPS_MIN}
+                max={STEPS_MAX}
+                step={1}
+                autoFocus
+                onChange={(v) => {
+                  if (v !== null) onGenerationChange({ steps: normalizeSteps(v) });
+                }}
+                onDone={() => setEditingField(null)}
+              />
+            ) : (
+              <button
+                type="button"
+                className="fader-value"
+                aria-label={`ステップ ${generation.steps}（タップして直接入力）`}
+                title="タップして直接入力"
+                onClick={() => setEditingField('steps')}
+              >
+                {generation.steps}
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-small fader-reset"
+              disabled={generation.steps === DEFAULT_GENERATION.steps}
+              aria-label={`ステップを既定値（${DEFAULT_GENERATION.steps}）に戻す`}
+              title={`既定値（${DEFAULT_GENERATION.steps}）に戻す`}
+              onClick={() => onGenerationChange({ steps: DEFAULT_GENERATION.steps })}
+            >
+              戻す
+            </button>
           </div>
+          {generation.steps > FREE_LIMITS.maxSteps && (
+            <p className="hint steps-paid-note">
+              {FREE_LIMITS.maxSteps} steps を超えると Opus プランでも Anlas を消費します。
+            </p>
+          )}
         </div>
-        <div className="field">
-          <label htmlFor={`${id}-scale`}>スケール</label>
+        <div className="field field-wide">
+          <label htmlFor={`${id}-scale`}>スケール（{SCALE_MIN}〜{SCALE_MAX}）</label>
           <div className="fader-row">
             <input
               id={`${id}-scale`}
@@ -254,9 +357,44 @@ export function GeneratePanel({
               value={generation.scale}
               onChange={(e) => onGenerationChange({ scale: Math.round(Number(e.target.value) * 10) / 10 })}
             />
-            <output htmlFor={`${id}-scale`}>{generation.scale.toFixed(1)}</output>
+            {editingField === 'scale' ? (
+              <NumberField
+                className="fader-number"
+                ariaLabel="スケールを直接入力"
+                value={generation.scale}
+                min={SCALE_MIN}
+                max={SCALE_MAX}
+                step={0.1}
+                autoFocus
+                onChange={(v) => {
+                  if (v !== null) onGenerationChange({ scale: normalizeScale(v) });
+                }}
+                onDone={() => setEditingField(null)}
+              />
+            ) : (
+              <button
+                type="button"
+                className="fader-value"
+                aria-label={`スケール ${generation.scale.toFixed(1)}（タップして直接入力）`}
+                title="タップして直接入力"
+                onClick={() => setEditingField('scale')}
+              >
+                {generation.scale.toFixed(1)}
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-small fader-reset"
+              disabled={generation.scale === DEFAULT_GENERATION.scale}
+              aria-label={`スケールを既定値（${DEFAULT_GENERATION.scale.toFixed(1)}）に戻す`}
+              title={`既定値（${DEFAULT_GENERATION.scale.toFixed(1)}）に戻す`}
+              onClick={() => onGenerationChange({ scale: DEFAULT_GENERATION.scale })}
+            >
+              戻す
+            </button>
           </div>
         </div>
+        <hr className="gen-divider" />
         <label className="field" htmlFor={`${id}-sampler`}>
           <span>サンプラー</span>
           <select
@@ -285,6 +423,7 @@ export function GeneratePanel({
             ))}
           </select>
         </label>
+        <hr className="gen-divider" />
         <div className="field field-wide">
           <label htmlFor={`${id}-seed`}>シード（空欄でランダム）</label>
           <div className="seed-row">

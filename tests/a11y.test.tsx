@@ -352,6 +352,14 @@ describe('Editor tablist', () => {
     );
     const tablist = container.querySelector('[role="tablist"]')!;
     expect(tablist.querySelector('.editor-tab-add')).toBeNull();
+    // ＋ と ? はタブ一覧と同じスクロール枠内の末尾に並ぶ（role="tablist" 外に置いて ARIA 構造を保つ）
+    const tabsScroll = tablist.parentElement!;
+    expect(tabsScroll.classList.contains('editor-tabs-scroll')).toBe(true);
+    expect([...tabsScroll.children].map((el) => el.className)).toEqual([
+      'editor-tablist',
+      'editor-tab editor-tab-add',
+      'help-btn editor-tab-help',
+    ]);
     expect(tablist.closest('.editor-tabs')?.querySelector('[aria-label="編集履歴"]')).toBeNull();
     const tabs = [...tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
     expect(tabs).toHaveLength(2);

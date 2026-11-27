@@ -55,7 +55,7 @@ async function commitNumber(labelText: string, value: string) {
   });
 }
 
-it('shows the Opus free-tier conditions in the page and edits the advanced settings', async () => {
+it('shows the Opus free-tier conditions from the size help badge and edits the advanced settings', async () => {
   const onGenerationChange = vi.fn();
   await act(async () => {
     root.render(
@@ -68,12 +68,25 @@ it('shows the Opus free-tier conditions in the page and edits the advanced setti
     );
   });
 
+  // サイズ見出しの横にチップと ? バッジが並び、説明文は初期状態では閉じている
+  const sizeHeader = container.querySelector('.size-header');
+  expect(sizeHeader?.querySelector('.size-free-chip')?.textContent).toBe('V5 / Anlas 消費なしの範囲');
+  expect(sizeHeader?.querySelector('.chip')?.getAttribute('title')).toBeNull();
+  const helpBtn = sizeHeader?.querySelector<HTMLButtonElement>('.size-help-btn');
+  expect(helpBtn).not.toBeNull();
+  expect(helpBtn?.getAttribute('aria-expanded')).toBe('false');
+  expect(container.querySelector('.free-note')).toBeNull();
+
+  await act(async () => helpBtn!.click());
+  expect(helpBtn?.getAttribute('aria-expanded')).toBe('true');
   const note = container.querySelector('.free-note');
   expect(note?.textContent).toContain('Opus プラン');
   expect(note?.textContent).toContain('28 steps 以下');
   expect(note?.textContent).toContain('1024×1024 相当以下');
   expect(note?.textContent).toContain('Tablet / Scroll');
-  expect(container.querySelector('.chip')?.getAttribute('title')).toBeNull();
+
+  await act(async () => container.querySelector<HTMLButtonElement>('.free-note-close')!.click());
+  expect(container.querySelector('.free-note')).toBeNull();
 
   const details = container.querySelector('details');
   expect(details?.open).toBe(false);
@@ -188,21 +201,24 @@ it('puts mode buttons first, groups size buttons by orientation, and uses faders
 
   // サイズのセレクトボックスは廃止され、パネル内のセレクトはサンプラーとノイズだけ
   expect(container.querySelectorAll('.generate select')).toHaveLength(2);
-  // 並びはモード → サイズ指定 → ステップ・スケールのフェーダー
+  // 並びはモード → 水平線 → サイズ指定 → 水平線 → ステップ・スケールのフェーダー
   const grid = container.querySelector('.gen-grid')!;
   const order = (el: Element | null) => (el ? [...grid.children].indexOf(el) : -1);
   const mode = container.querySelector('.mode-toggle')!.closest('.field')!;
   const size = container.querySelector('.size-groups')!.closest('.field')!;
+  const dividers = [...container.querySelectorAll('hr.gen-divider')];
   const steps = container.querySelector<HTMLInputElement>('input[type="range"][id$="-steps"]');
   const scale = container.querySelector<HTMLInputElement>('input[type="range"][id$="-scale"]');
+  expect(dividers.length).toBeGreaterThanOrEqual(4);
   expect(order(mode)).toBe(0);
-  expect(order(size)).toBe(1);
+  expect(order(dividers[0]!)).toBe(1);
+  expect(order(size)).toBe(2);
   expect(steps).not.toBeNull();
   expect(scale).not.toBeNull();
   expect(steps!.min).toBe('1');
-  expect(steps!.max).toBe('28');
+  expect(steps!.max).toBe('50');
   expect(scale!.min).toBe('0');
-  expect(scale!.max).toBe('10');
+  expect(scale!.max).toBe('100');
 
   // モードはボタン式で、アニメ／ケモノを切り替えられる
   const modeButtons = [...container.querySelectorAll<HTMLButtonElement>('.mode-toggle .mode-btn')];
@@ -228,13 +244,73 @@ it('puts mode buttons first, groups size buttons by orientation, and uses faders
   await act(async () => panelSizeButton('縦長 768×1344').click());
   expect(onGenerationChange).toHaveBeenCalledWith({ size: 'tall' });
 
-  // ステップとスケールはフェーダーで、現在値が横に表示される
-  await setRange('ステップ', '12');
-  expect(onGenerationChange).toHaveBeenCalledWith({ steps: 12 });
-  await setRange('スケール', '7.5');
-  expect(onGenerationChange).toHaveBeenCalledWith({ scale: 7.5 });
-  const stepsOutput = container.querySelector('output[for$="-steps"], .fader-row output');
-  expect(stepsOutput?.textContent).toBe(String(DEFAULT_GENERATION.steps));
+  // ステップとスケールはフェーダーで、現在値ボタンが横に表示される
+  await setRange('ステップ', '40');
+  expect(onGenerationChange).toHaveBeenCalledWith({ steps: 40 });
+  await setRange('スケール', '15.5');
+  expect(onGenerationChange).toHaveBeenCalledWith({ scale: 15.5 });
+  const valueButtons = [...container.querySelectorAll<HTMLButtonElement>('.fader-row .fader-value')];
+  expect(valueButtons[0]?.textContent).toBe(String(DEFAULT_GENERATION.steps));
+  expect(valueButtons[1]?.textContent).toBe(DEFAULT_GENERATION.scale.toFixed(1));
+  const resetButtons = [...container.querySelectorAll<HTMLButtonElement>('.fader-row .fader-reset')];
+  expect(resetButtons).toHaveLength(2);
+  expect(resetButtons[0]!.disabled).toBe(true);
+  expect(resetButtons[1]!.disabled).toBe(true);
+});
+
+it('edits steps and scale directly by tapping the value and resets them to defaults', async () => {
+  function Harness() {
+    const [generation, setGeneration] = useState<GenerationSettings>(DEFAULT_GENERATION);
+    return (
+      <GeneratePanel
+        generation={generation}
+        onGenerationChange={(patch) => setGeneration((prev) => normalizeGeneration({ ...prev, ...patch }))}
+        token={token}
+        onOpenSettings={() => {}}
+      />
+    );
+  }
+  await act(async () => root.render(<Harness />));
+
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+
+  // ステップの数値をタップして直接入力（42）→ 28 超の注意が出て、戻すボタンで 28 に戻る
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label*="ステップ"]')!.click());
+  const stepsInput = container.querySelector<HTMLInputElement>('input[aria-label="ステップを直接入力"]')!;
+  expect(stepsInput).not.toBeNull();
+  await act(async () => {
+    setter?.call(stepsInput, '42');
+    stepsInput.dispatchEvent(new InputEvent('input', { bubbles: true, data: '42' }));
+  });
+  await act(async () => {
+    stepsInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+  expect(container.querySelector('.steps-paid-note')?.textContent).toContain('28 steps を超えると');
+  expect(container.querySelectorAll<HTMLButtonElement>('.fader-value')[0]?.textContent).toBe('42');
+
+  const stepsReset = container.querySelector<HTMLButtonElement>('button[aria-label^="ステップを既定値"]')!;
+  expect(stepsReset.disabled).toBe(false);
+  await act(async () => stepsReset.click());
+  expect(container.querySelectorAll<HTMLButtonElement>('.fader-value')[0]?.textContent).toBe('28');
+  expect(container.querySelector('.steps-paid-note')).toBeNull();
+
+  // スケールの数値をタップして直接入力（18.5）→ 戻すボタンで 5.0 に戻る
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label*="スケール"]')!.click());
+  const scaleInput = container.querySelector<HTMLInputElement>('input[aria-label="スケールを直接入力"]')!;
+  expect(scaleInput).not.toBeNull();
+  await act(async () => {
+    setter?.call(scaleInput, '18.5');
+    scaleInput.dispatchEvent(new InputEvent('input', { bubbles: true, data: '18.5' }));
+  });
+  await act(async () => {
+    scaleInput.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+  });
+  expect(container.querySelectorAll<HTMLButtonElement>('.fader-value')[1]?.textContent).toBe('18.5');
+
+  const scaleReset = container.querySelector<HTMLButtonElement>('button[aria-label^="スケールを既定値"]')!;
+  expect(scaleReset.disabled).toBe(false);
+  await act(async () => scaleReset.click());
+  expect(container.querySelectorAll<HTMLButtonElement>('.fader-value')[1]?.textContent).toBe('5.0');
 });
 
 it('turns per-character negative and center on from the character card', async () => {
