@@ -1,6 +1,13 @@
 /* ---- phase 3: presets / weight / sort ---- */
 .preset-bar {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+@media (max-width: 1099px) {
+  .preset-bar {
+    padding-top: 0.5rem;
+    margin-bottom: 0.2rem;
+  }
 }
 
 .preset-row {
