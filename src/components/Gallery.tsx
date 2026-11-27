@@ -29,6 +29,7 @@ interface Props {
   onPickPng?: () => void;
   onReadPng: (source: PromptSource) => void;
   onUseAsReference?: (image: GeneratedImage) => void;
+  onInpaint?: (image: GeneratedImage) => void;
 }
 
 /** 先頭（最新）の1枚は全幅で大きく見せる。その幅の上限を縦横比から決めるため --ar を渡す。 */
@@ -54,6 +55,7 @@ export function Gallery({
   onPickPng,
   onReadPng,
   onUseAsReference,
+  onInpaint,
 }: Props) {
   const dialogs = useDialogs();
   const id = useId();
@@ -428,7 +430,7 @@ export function Gallery({
                   >
                     <DownloadIcon />
                   </button>
-                  {!compareMode && onUseAsReference && (
+                  {!compareMode && (onUseAsReference || onInpaint) && (
                     <div className="thumb-menu-wrap" ref={menuOpen ? openMenuWrapRef : undefined}>
                       <button
                         ref={(el) => { moreButtonRefs.current[img.id] = el; }}
@@ -450,18 +452,34 @@ export function Gallery({
                           role="menu"
                           aria-label={`生成画像 ${displayNumber}の操作`}
                         >
-                          <button
-                            type="button"
-                            className="thumb-menu-item"
-                            role="menuitem"
-                            autoFocus
-                            onClick={() => {
-                              setMenuOpenId(null);
-                              onUseAsReference(img);
-                            }}
-                          >
-                            参照に使う
-                          </button>
+                          {onUseAsReference && (
+                            <button
+                              type="button"
+                              className="thumb-menu-item"
+                              role="menuitem"
+                              autoFocus
+                              onClick={() => {
+                                setMenuOpenId(null);
+                                onUseAsReference(img);
+                              }}
+                            >
+                              参照に使う
+                            </button>
+                          )}
+                          {onInpaint && (
+                            <button
+                              type="button"
+                              className="thumb-menu-item"
+                              role="menuitem"
+                              autoFocus={!onUseAsReference}
+                              onClick={() => {
+                                setMenuOpenId(null);
+                                onInpaint(img);
+                              }}
+                            >
+                              インペイント
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -500,6 +518,14 @@ export function Gallery({
                   ? () => {
                       setOpenId(null);
                       onUseAsReference(openImage);
+                    }
+                  : undefined
+              }
+              onInpaint={
+                onInpaint
+                  ? () => {
+                      setOpenId(null);
+                      onInpaint(openImage);
                     }
                   : undefined
               }

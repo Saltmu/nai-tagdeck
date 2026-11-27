@@ -20,6 +20,7 @@ import { useAnlas } from './hooks/useAnlas';
 import { useTagUndo, type UndoExtrasSync } from './hooks/useTagUndo';
 import { useImages, type GeneratedImage } from './hooks/useImages';
 import { useGenerator } from './hooks/useGenerator';
+import { useInpaintSession } from './hooks/useInpaintSession';
 import { useReferenceImage } from './hooks/useReferenceImage';
 import { usePresets } from './hooks/usePresets';
 import { useBackupTransfer } from './hooks/useBackupTransfer';
@@ -31,6 +32,7 @@ import { useDialogs } from './components/Dialogs';
 import { isEmptyWorkspace } from './lib/presets';
 import { isDefaultSettings } from './lib/settings';
 import { isDefaultGeneration, resolveSize } from './lib/generation';
+import type { InpaintInput } from './lib/novelai';
 import { buildCategoryPrompt, buildCharacterPrompts, buildPrompt } from './lib/prompt';
 import { SwUpdateNotice } from './components/SwUpdateNotice';
 import { TabSyncNotice } from './components/TabSyncNotice';
@@ -45,6 +47,7 @@ import type { ThemePreference, WeightSyntax } from './types';
 const DictionaryView = lazy(() => import('./components/DictionaryView').then((m) => ({ default: m.DictionaryView })));
 const SettingsView = lazy(() => import('./components/SettingsView').then((m) => ({ default: m.SettingsView })));
 const PromptImportDialog = lazy(() => import('./components/PromptImportDialog').then((m) => ({ default: m.PromptImportDialog })));
+const InpaintDialog = lazy(() => import('./components/InpaintDialog').then((m) => ({ default: m.InpaintDialog })));
 
 function ScreenLoadingFallback() {
   return (
@@ -115,6 +118,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   );
   const imageStore = useImages({ onEvict });
   const referenceImage = useReferenceImage();
+  const inpaint = useInpaintSession();
   const generator = useGenerator(imageStore.add, () => anlas.refresh());
   const [tab, setTab] = useState<Tab>('editor');
   useWindowScrollMemory(tab);
@@ -122,7 +126,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
   const [dockCollapse, setDockCollapse] = useState(0);
   const [dockOpenTab, setDockOpenTab] = useState<DockTabSignal>({ tab: 'prompt', seq: 0 });
   const hideDockOnImageClick = (e: MouseEvent<HTMLDivElement>) => {
-    if ((e.target as Element).closest('.dock, .generate-bar, .viewer, .thumb-menu-wrap')) return;
+    if ((e.target as Element).closest('.dock, .generate-bar, .viewer, .inpaint-dialog, .thumb-menu-wrap')) return;
     if (window.matchMedia?.('(min-width: 1100px)').matches) setDockCollapse((n) => n + 1);
   };
   const settingsRef = useRef(settings);
@@ -248,6 +252,89 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     },
     [referenceImage.addFromBlob, openReferenceTab, show],
   );
+  const ensurePreciseReferenceOffForInpaint = useCallback(async (): Promise<boolean> => {
+    if (referenceImage.activeItems.length === 0) return true;
+    const ok = await dialogs.confirm(
+      'インペイントでは精密参照を使えません。精密参照を一時 OFF にして開きますか？',
+      { okLabel: '一時 OFF にして開く' },
+    );
+    if (!ok) return false;
+    referenceImage.disableAll();
+    show('精密参照を一時 OFF にしました');
+    return true;
+  }, [referenceImage.activeItems.length, referenceImage.disableAll, dialogs, show]);
+
+  const handleStartInpaintFromImage = useCallback(
+    async (image: GeneratedImage) => {
+      if (!(await ensurePreciseReferenceOffForInpaint())) return;
+      const ok = await inpaint.startFromBlob(image.blob, `生成画像（シード ${image.seed}）`, {
+        width: image.width,
+        height: image.height,
+      });
+      if (!ok) show('インペイント用の画像を読み込めませんでした');
+    },
+    [ensurePreciseReferenceOffForInpaint, inpaint.startFromBlob, show],
+  );
+
+  const handleStartInpaintFromFile = useCallback(
+    async (file: File) => {
+      if (!(await ensurePreciseReferenceOffForInpaint())) return;
+      const ok = await inpaint.startFromFile(file);
+      if (!ok) show('インペイント用の画像を読み込めませんでした');
+    },
+    [ensurePreciseReferenceOffForInpaint, inpaint.startFromFile, show],
+  );
+
+  const handleResumeInpaint = useCallback(async () => {
+    if (!(await ensurePreciseReferenceOffForInpaint())) return;
+    inpaint.resume();
+  }, [ensurePreciseReferenceOffForInpaint, inpaint.resume]);
+
+  const handleDiscardInpaint = useCallback(async () => {
+    const ok = await dialogs.confirm(
+      'インペイントの一時保持データ（ベース画像とマスク）を完全に破棄しますか？',
+      { okLabel: '破棄', danger: true },
+    );
+    if (!ok) return;
+    inpaint.discard();
+    show('インペイントの一時保持データを破棄しました');
+  }, [dialogs, inpaint.discard, show]);
+
+  const handleEditTagsFromInpaint = useCallback(() => {
+    inpaint.close();
+    setTab('editor');
+    show('マスクを一時保持しました。タグを編集後、「参照画像」タブから再開できます', 4500);
+  }, [inpaint.close, show]);
+
+  const handleExecuteInpaint = useCallback(
+    async (inpaintInput: InpaintInput): Promise<boolean> => {
+      if (!token.token) {
+        show('トークンが未設定です。設定タブで入力してください', 3500);
+        return false;
+      }
+      let succeeded = false;
+      await generator.generate({
+        token: token.token,
+        prompt: basePrompt,
+        negative: negativePrompt,
+        characters: characterPrompts.map((c) => ({
+          prompt: c.prompt,
+          negative: c.negative !== undefined ? c.negative : settings.characterNegativePrompt,
+          ...(c.center ? { center: c.center } : {}),
+        })),
+        settings: generation,
+        inpaint: inpaintInput,
+        onComplete: () => {
+          succeeded = true;
+          if (window.matchMedia?.('(max-width: 1099px)').matches) setTab('generate');
+          show('インペイント画像を生成しました');
+        },
+      });
+      return succeeded;
+    },
+    [token.token, generator.generate, basePrompt, negativePrompt, characterPrompts, settings.characterNegativePrompt, generation, show],
+  );
+
   const { blocker, startGenerate } = useGenerationControls({
     generator,
     token: token.token,
@@ -259,7 +346,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
     activeReferences: referenceImage.activeItems,
     show,
     onOpenSettings: openSettings,
-    shortcutsDisabled: tabSync.busy,
+    shortcutsDisabled: tabSync.busy || inpaint.open,
   });
   const latest = imageStore.images[0];
   const { unseenId, dismiss } = useLatestImageNotice(latest?.id, tab === 'generate');
@@ -389,7 +476,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
             <Gallery
               images={imageStore.images}
               generating={generator.generating}
-              pendingSize={resolveSize(generation)}
+              pendingSize={inpaint.open && inpaint.session ? { width: inpaint.session.width, height: inpaint.session.height } : resolveSize(generation)}
               evictedCount={imageStore.evictedCount}
               onDismissEviction={imageStore.dismissEviction}
               onRemove={imageStore.remove}
@@ -400,6 +487,7 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               onPickPng={promptImport.pickPng}
               onReadPng={promptImport.openPromptImport}
               onUseAsReference={handleUseAsReference}
+              onInpaint={(img) => { void handleStartInpaintFromImage(img); }}
             />
             {/* プロンプト・生成設定・参照画像は下部のドックにまとめ、画像を広く見せる */}
             <GenerateDock
@@ -430,7 +518,15 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
                   onOpenSettings={openSettings}
                 />
               }
-              referencePanel={<ReferencePanel reference={referenceImage} />}
+              referencePanel={
+                <ReferencePanel
+                  reference={referenceImage}
+                  inpaint={inpaint}
+                  onStartInpaintFile={(file) => { void handleStartInpaintFromFile(file); }}
+                  onResumeInpaint={() => { void handleResumeInpaint(); }}
+                  onDiscardInpaint={() => { void handleDiscardInpaint(); }}
+                />
+              }
             />
             {/* 生成ボタンとサイズは、編集タブでも常に下部に置くバーへ移した */}
             <GenerateBar
@@ -497,6 +593,38 @@ export default function App({ onResetAll }: { onResetAll: () => void }) {
               entries={dictionary.entries}
               onCancel={promptImport.closePromptImport}
               onApply={promptImport.applyPrompt}
+            />
+          </Suspense>
+        </ChunkErrorBoundary>
+      )}
+      {inpaint.open && inpaint.session && (
+        <ChunkErrorBoundary>
+          <Suspense fallback={null}>
+            <InpaintDialog
+              session={inpaint.session}
+              token={token.token}
+              basePrompt={basePrompt}
+              characterPrompts={characterPrompts}
+              negativePrompt={negativePrompt}
+              generation={generation}
+              generator={generator}
+              anlas={anlas}
+              onClose={inpaint.close}
+              onEditTags={handleEditTagsFromInpaint}
+              onDiscard={() => {
+                inpaint.discard();
+                show('インペイントの一時保持データを破棄しました');
+              }}
+              onPushStroke={inpaint.pushStroke}
+              onUndoMask={inpaint.undoMask}
+              onRedoMask={inpaint.redoMask}
+              onClearMask={inpaint.clearMask}
+              onStrengthChange={inpaint.setStrength}
+              onAddOriginalImageChange={inpaint.setAddOriginalImage}
+              onBrushRadiusChange={inpaint.setBrushRadius}
+              onMaskColorChange={inpaint.setMaskColor}
+              onMaskOpacityChange={inpaint.setMaskOpacity}
+              onExecute={handleExecuteInpaint}
             />
           </Suspense>
         </ChunkErrorBoundary>

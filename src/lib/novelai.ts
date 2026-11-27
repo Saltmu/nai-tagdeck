@@ -9,6 +9,7 @@ import { validateToken } from './token';
 
 export const GENERATE_URL = 'https://image.novelai.net/ai/generate-image';
 export const NAI_MODEL = 'nai-diffusion-5-full';
+export const NAI_INPAINT_MODEL = 'nai-diffusion-5-full-inpainting';
 export const REQUEST_TIMEOUT_MS = 120_000;
 
 /** Anlas 残高の取得先。旧ホスト `api.novelai.net` は 400 になるため使わない。 */
@@ -105,12 +106,35 @@ export const PRECISE_REFERENCE_STRENGTH_MAX = 5;
 export const PRECISE_REFERENCE_STRENGTH_STEP = 0.05;
 export const DEFAULT_PRECISE_REFERENCE_STRENGTH = 1;
 
+export const INPAINT_STRENGTH_MIN = 0.01;
+export const INPAINT_STRENGTH_MAX = 1;
+export const INPAINT_STRENGTH_STEP = 0.01;
+/** #172 で実測した公式 Web UI のインペイント強度（`inpaintImg2ImgStrength`）既定値。 */
+export const DEFAULT_INPAINT_STRENGTH = 1;
+
+// #172 で実測した公式 Web UI のインペイント固定パラメータ
+const INPAINT_BASE_STRENGTH = 0.7;
+const INPAINT_NOISE = 0;
+
 export interface PreciseReferenceInput {
   /** raw base64（data URL 接頭辞なし）。 */
   imageBase64: string;
   type: PreciseReferenceType;
   /** 0.1〜5.0。0 は不可とし、無効化は UI 側の enabled で行う。 */
   strength: number;
+}
+
+export interface InpaintInput {
+  /** 64 の倍数・無料枠内へ正規化済みのベース画像（raw base64）。 */
+  imageBase64: string;
+  /** 2 値化済みのマスク画像（raw base64）。 */
+  maskBase64: string;
+  /** 正規化後のベース画像寸法（generation.size より優先して parameters.width/height に使う）。 */
+  width: number;
+  height: number;
+  /** 0.01〜1.0（#172 の実測に合わせ `inpaintImg2ImgStrength` に送る）。 */
+  strength: number;
+  addOriginalImage: boolean;
 }
 
 export interface GenerateInput {
@@ -120,6 +144,7 @@ export interface GenerateInput {
   params: GenerationParams;
   mode?: GenerationMode;
   references?: readonly PreciseReferenceInput[];
+  inpaint?: InpaintInput;
 }
 
 type Point = { x: number; y: number };
@@ -132,7 +157,7 @@ interface V4Caption {
 export interface GenerateRequest {
   input: string;
   model: string;
-  action: 'generate';
+  action: 'generate' | 'infill';
   use_new_shared_trial: boolean;
   parameters: Record<string, unknown> & {
     characterPrompts: Array<{ prompt: string; uc: string; center: Point; enabled: boolean }>;
@@ -161,6 +186,12 @@ function clampReferenceStrength(strength: number): number {
   return Math.min(PRECISE_REFERENCE_STRENGTH_MAX, Math.max(PRECISE_REFERENCE_STRENGTH_MIN, strength));
 }
 
+function clampInpaintStrength(strength: number): number {
+  if (!Number.isFinite(strength)) return DEFAULT_INPAINT_STRENGTH;
+  const clamped = Math.min(INPAINT_STRENGTH_MAX, Math.max(INPAINT_STRENGTH_MIN, strength));
+  return Math.round(clamped * 100) / 100;
+}
+
 /**
  * 公式UIは品質タグと UC プリセットの文面をクライアント側で展開してから送るので、
  * こちらも展開済みの文字列を渡す（品質タグはタグ編集画面で、ネガティブは設定で持つ）。
@@ -173,7 +204,12 @@ export function buildGenerateRequest({
   params,
   mode = 'anime',
   references,
+  inpaint,
 }: GenerateInput): GenerateRequest {
+  if (inpaint && references && references.length > 0) {
+    throw new NovelAIError(0, 'インペイントと精密参照は同時に使用できません');
+  }
+
   // V5 のモード切替は専用 API パラメータではなく、ベースプロンプト先頭のタグで指定する。
   const basePrompt = mode === 'furry' ? prefixFurryDataset(prompt) : prompt;
   const useCoords = characters.some((c) => c.center !== undefined);
@@ -183,7 +219,7 @@ export function buildGenerateRequest({
     char_captions: chars.map((c) => ({ char_caption: text(c), centers: [pointOf(c)] })),
   });
   const referenceParams =
-    references && references.length > 0
+    !inpaint && references && references.length > 0
       ? {
           director_reference_images: references.map((r) => r.imageBase64.replace(/^data:[^,]*,/, '')),
           director_reference_descriptions: references.map((r) => ({
@@ -196,15 +232,35 @@ export function buildGenerateRequest({
         }
       : {};
 
+  let inpaintParams: Record<string, unknown> = {};
+  if (inpaint) {
+    if (!isValidFreeSize(inpaint.width, inpaint.height)) {
+      throw new NovelAIError(0, 'インペイントの画像サイズが無料枠の条件を満たしていません');
+    }
+    const imageBase64 = inpaint.imageBase64.replace(/^data:[^,]*,/, '').trim();
+    const maskBase64 = inpaint.maskBase64.replace(/^data:[^,]*,/, '').trim();
+    if (!imageBase64 || !maskBase64) {
+      throw new NovelAIError(0, 'インペイントの画像またはマスクが不正です');
+    }
+    inpaintParams = {
+      strength: INPAINT_BASE_STRENGTH,
+      noise: INPAINT_NOISE,
+      inpaintImg2ImgStrength: clampInpaintStrength(inpaint.strength),
+      extra_noise_seed: params.seed > 0 ? params.seed - 1 : 0,
+      image: imageBase64,
+      mask: maskBase64,
+    };
+  }
+
   return {
     input: basePrompt,
-    model: NAI_MODEL,
-    action: 'generate',
+    model: inpaint ? NAI_INPAINT_MODEL : NAI_MODEL,
+    action: inpaint ? 'infill' : 'generate',
     use_new_shared_trial: true,
     parameters: {
       params_version: 4,
-      width: params.width,
-      height: params.height,
+      width: inpaint ? inpaint.width : params.width,
+      height: inpaint ? inpaint.height : params.height,
       scale: params.scale,
       sampler: params.sampler,
       steps: params.steps,
@@ -215,7 +271,7 @@ export function buildGenerateRequest({
       dynamic_thresholding: params.dynamicThresholding,
       controlnet_strength: 1,
       legacy: false,
-      add_original_image: true,
+      add_original_image: inpaint ? inpaint.addOriginalImage : true,
       cfg_rescale: params.cfgRescale,
       legacy_v3_extend: false,
       use_coords: useCoords,
@@ -243,6 +299,7 @@ export function buildGenerateRequest({
       },
       negative_prompt: negative,
       ...referenceParams,
+      ...inpaintParams,
     },
   };
 }
@@ -528,9 +585,39 @@ function attachMultipartReferenceImages(form: FormData, body: GenerateRequest): 
   };
 }
 
+function attachMultipartInpaintImages(form: FormData, body: GenerateRequest): GenerateRequest {
+  if (body.action !== 'infill') return body;
+  const rawRefs = body.parameters?.director_reference_images;
+  if (Array.isArray(rawRefs) && rawRefs.length > 0) {
+    throw new NovelAIError(0, 'インペイントと精密参照は同時に使用できません');
+  }
+  const rawImage = body.parameters?.image;
+  const rawMask = body.parameters?.mask;
+  if (typeof rawImage !== 'string' || !rawImage.trim() || typeof rawMask !== 'string' || !rawMask.trim()) {
+    throw new NovelAIError(0, 'インペイントの送信データが不正です');
+  }
+
+  const imageBytes = base64ToBytes(rawImage, 'インペイントのベース画像を読み取れませんでした');
+  const maskBytes = base64ToBytes(rawMask, 'インペイントのマスク画像を読み取れませんでした');
+  const imageMime = sniffImageType(imageBytes) ?? 'image/png';
+  const maskMime = sniffImageType(maskBytes) ?? 'image/png';
+
+  form.append('image', new Blob([imageBytes as BlobPart], { type: imageMime }), 'blob');
+  form.append('mask', new Blob([maskBytes as BlobPart], { type: maskMime }), 'blob');
+
+  return {
+    ...body,
+    parameters: {
+      ...body.parameters,
+      image: 'image',
+      mask: 'mask',
+    },
+  };
+}
+
 /**
  * 公式 Web UI と同じく multipart/form-data の `request` パートに JSON を入れて送る。
- * 精密参照の画像データは `director_ref_N` パートとして添付し、JSON 側にはパート名を入れる。
+ * 精密参照は `director_ref_N`、インペイントは `image` / `mask` パートとして添付し、JSON 側にはパート名を入れる。
  * トークンは Authorization ヘッダーにだけ載せ、URL には入れない。
  */
 export async function requestImages(
@@ -544,7 +631,10 @@ export async function requestImages(
 
   const correlationId = createCorrelationId();
   const form = new FormData();
-  const payload = attachMultipartReferenceImages(form, body);
+  const payload =
+    body.action === 'infill'
+      ? attachMultipartInpaintImages(form, body)
+      : attachMultipartReferenceImages(form, body);
   form.append('request', new Blob([JSON.stringify(payload)], { type: 'application/json' }), 'blob');
 
   const { signal: requestSignal, cleanup } = createRequestSignal(signal, timeoutMs);

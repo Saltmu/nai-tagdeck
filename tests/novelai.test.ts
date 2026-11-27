@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_PARAMS,
+  NAI_INPAINT_MODEL,
   NAI_MODEL,
   NovelAIError,
   SUBSCRIPTION_URL,
@@ -203,6 +204,104 @@ describe('buildGenerateRequest (V5)', () => {
       ],
     });
     expect(clampedReq.parameters.director_reference_strength_values).toEqual([0.1, 5]);
+  });
+
+  it('inpaint 指定時に専用モデル・action: infill・ベース画像寸法・#172 実測フィールドを出力する', () => {
+    const req = buildGenerateRequest({
+      prompt: '1girl, gold button',
+      negative: 'lowres',
+      characters: [{ prompt: 'girl, school uniform', negative: 'blurry', center: { x: 0.4, y: 0.6 } }],
+      params: { ...params, width: 832, height: 1216, seed: 860023 },
+      mode: 'furry',
+      inpaint: {
+        imageBase64: 'data:image/png;base64,IMGBASE64',
+        maskBase64: 'data:image/png;base64,MASKBASE64',
+        width: 512,
+        height: 512,
+        strength: 0.42,
+        addOriginalImage: false,
+      },
+    });
+
+    expect(req.model).toBe(NAI_INPAINT_MODEL);
+    expect(req.model).toBe('nai-diffusion-5-full-inpainting');
+    expect(req.action).toBe('infill');
+    expect(req.input).toBe('fur dataset, 1girl, gold button');
+    expect(req.parameters.v4_prompt.caption.base_caption).toBe('fur dataset, 1girl, gold button');
+    expect(req.parameters.v4_prompt.caption.char_captions).toEqual([
+      { char_caption: 'girl, school uniform', centers: [{ x: 0.4, y: 0.6 }] },
+    ]);
+    expect(req.parameters).toMatchObject({
+      width: 512,
+      height: 512,
+      strength: 0.7,
+      noise: 0,
+      inpaintImg2ImgStrength: 0.42,
+      add_original_image: false,
+      seed: 860023,
+      extra_noise_seed: 860022,
+      image: 'IMGBASE64',
+      mask: 'MASKBASE64',
+    });
+    expect(req.parameters).not.toHaveProperty('director_reference_images');
+    expect(req.parameters).not.toHaveProperty('img2img');
+
+    // addOriginalImage: true と強さクランプ・seed 0 境界
+    const clamped = buildGenerateRequest({
+      prompt: '1girl',
+      negative: '',
+      characters: [],
+      params: { ...params, seed: 0 },
+      inpaint: {
+        imageBase64: 'IMG',
+        maskBase64: 'MASK',
+        width: 1024,
+        height: 1024,
+        strength: 0,
+        addOriginalImage: true,
+      },
+    });
+    expect(clamped.parameters.inpaintImg2ImgStrength).toBe(0.01);
+    expect(clamped.parameters.add_original_image).toBe(true);
+    expect(clamped.parameters.extra_noise_seed).toBe(0);
+
+    // 非無料枠サイズは防御的に拒否
+    expect(() =>
+      buildGenerateRequest({
+        prompt: '1girl',
+        negative: '',
+        characters: [],
+        params,
+        inpaint: {
+          imageBase64: 'IMG',
+          maskBase64: 'MASK',
+          width: 1200,
+          height: 900,
+          strength: 1,
+          addOriginalImage: false,
+        },
+      }),
+    ).toThrow(NovelAIError);
+  });
+
+  it('references と inpaint の同時指定を防御的に拒否する', () => {
+    expect(() =>
+      buildGenerateRequest({
+        prompt: '1girl',
+        negative: '',
+        characters: [],
+        params,
+        references: [{ imageBase64: 'REF', type: 'character', strength: 1 }],
+        inpaint: {
+          imageBase64: 'IMG',
+          maskBase64: 'MASK',
+          width: 512,
+          height: 512,
+          strength: 1,
+          addOriginalImage: false,
+        },
+      }),
+    ).toThrow('同時に使用できません');
   });
 });
 

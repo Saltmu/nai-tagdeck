@@ -67,7 +67,13 @@
   }
 
   .gen-ref-disable,
-  .thumb-menu-item {
+  .thumb-menu-item,
+  .inpaint-tool-btn {
     min-height: 44px;
+  }
+
+  .inpaint-color-btn {
+    width: 44px;
+    height: 44px;
   }
 }

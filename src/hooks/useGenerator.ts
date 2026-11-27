@@ -5,9 +5,11 @@ import {
   randomSeed,
   requestImages,
   type GenerateRequest,
+  type InpaintInput,
   type PreciseReferenceInput,
 } from '../lib/novelai';
 import { toParams, type GenerationSettings } from '../lib/generation';
+import { InpaintImageError } from '../lib/inpaint';
 import { promptSelectsFurry } from '../lib/prompt';
 import {
   prepareReferenceImageBase64,
@@ -23,6 +25,9 @@ export interface GenerateArgs {
   characters: Array<{ prompt: string; negative: string; center?: { x: number; y: number } }>;
   settings: GenerationSettings;
   references?: readonly PreciseReferenceItem[];
+  inpaint?: InpaintInput;
+  /** この生成リクエストが成功したときだけ呼ぶ。 */
+  onComplete?: () => void;
 }
 
 export interface Generator {
@@ -68,7 +73,7 @@ export function useGenerator(
   useEffect(() => () => controller.current?.abort(), []);
 
   const generate = useCallback(
-    async ({ token, prompt, negative, characters, settings, references }: GenerateArgs) => {
+    async ({ token, prompt, negative, characters, settings, references, inpaint, onComplete }: GenerateArgs) => {
       if (controller.current) return; // 同時に1件まで
       const ctrl = new AbortController();
       controller.current = ctrl;
@@ -78,7 +83,8 @@ export function useGenerator(
         const seed = settings.seed ?? randomSeed();
         const params = toParams(settings, seed);
         const preparedReferences: PreciseReferenceInput[] = [];
-        if (references && references.length > 0) {
+        // インペイント時は精密参照と排他（リクエストに含めない）
+        if (!inpaint && references && references.length > 0) {
           for (const ref of references) {
             if (!ref.enabled) continue;
             const imageBase64 = await prepareReferenceImageBase64(ref.blob);
@@ -96,19 +102,22 @@ export function useGenerator(
           characters,
           params,
           mode: settings.mode,
-          references: preparedReferences.length > 0 ? preparedReferences : undefined,
+          references: !inpaint && preparedReferences.length > 0 ? preparedReferences : undefined,
+          inpaint,
         });
         const results = await requestImages(token, body, ctrl.signal);
         if (ctrl.signal.aborted) return;
         const negativePrompt = typeof body.parameters.negative_prompt === 'string' ? body.parameters.negative_prompt : negative;
         const characterDetails = recordedCharacters(body);
         const imageParams = recordedParams(body.input, params);
+        const resultWidth = inpaint ? inpaint.width : params.width;
+        const resultHeight = inpaint ? inpaint.height : params.height;
         onImages(
           results.map((r) => ({
             blob: r.blob,
             seed: r.seed ?? seed,
-            width: params.width,
-            height: params.height,
+            width: resultWidth,
+            height: resultHeight,
             prompt: body.input,
             characterPrompts: characterDetails.map((c) => c.prompt),
             negativePrompt,
@@ -118,9 +127,12 @@ export function useGenerator(
           })),
         );
         onSuccessRef.current?.();
+        onComplete?.();
       } catch (e) {
         if (!ctrl.signal.aborted) {
-          setError(e instanceof ReferenceImageError ? e.message : describeError(e));
+          setError(
+            e instanceof ReferenceImageError || e instanceof InpaintImageError ? e.message : describeError(e),
+          );
         }
       } finally {
         controller.current = null;

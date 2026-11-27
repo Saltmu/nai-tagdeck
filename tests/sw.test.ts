@@ -238,6 +238,7 @@ describe('Vite build swPlugin integration', () => {
       ['SettingsView-', 'バックアップを読み込む'],
       ['PromptImportDialog-', 'PNG の生成情報を読み込んでいます'],
       ['ImageViewer-', '画像の拡大表示'],
+      ['InpaintDialog-', 'マスク描画キャンバス'],
       ['imageZip-', 'application/zip'],
     ];
     for (const [prefix, marker] of splitChunks) {
