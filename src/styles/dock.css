@@ -1,6 +1,8 @@
 /* ---- dock: プロンプト / 生成 ---- */
 /* 画像を主役にし、プロンプトと生成設定は下に浮かせたタブ付きのドックへ入れる */
 .dock {
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -8,12 +10,14 @@
 }
 
 .dock > .gen-error {
+  flex: none;
   margin: 0.5rem 0.5rem 0;
   max-height: min(30dvh, 12rem);
   overflow: auto;
 }
 
 .dock-bar {
+  flex: none;
   touch-action: none;
   display: flex;
   align-items: center;
@@ -94,6 +98,8 @@
 
 /* 開閉は行の高さ（0fr → 1fr）でアニメーションさせる */
 .dock-body {
+  flex: 0 1 auto;
+  min-height: 0;
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows 0.25s ease;
@@ -106,9 +112,13 @@
 .dock-clip {
   min-height: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .dock-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: min(70dvh, 42rem);
   overflow: auto;
   overscroll-behavior: contain;
@@ -136,6 +146,8 @@
     right: 0;
     bottom: var(--generate-bar-height, 0px);
     z-index: var(--z-dock);
+    /* 固定ヘッダーと下部生成バーの間の領域に収め、ドック上端（タブ・閉じるボタン）が画面外へはみ出さないようにする */
+    max-height: calc(100dvh - var(--header-height) - var(--generate-bar-height, 0px) - 0.5rem);
     padding-bottom: env(safe-area-inset-bottom);
     border-bottom: 0;
     /* ボトムシート上角の構造固有角丸 */
@@ -204,6 +216,7 @@
 
   .pane-generate > .dock {
     flex: none;
+    max-height: calc(100% - var(--generate-bar-height, 0px) - 3rem);
   }
 
   .dock-scroll {
