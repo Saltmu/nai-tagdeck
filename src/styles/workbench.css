@@ -15,6 +15,10 @@
   }
 }
 
+.workbench-splitter {
+  display: none;
+}
+
 .workbench[data-tab='editor'] .pane-generate,
 .workbench[data-tab='generate'] .pane-editor {
   display: none;
