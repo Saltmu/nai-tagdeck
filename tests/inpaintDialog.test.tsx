@@ -535,7 +535,8 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
       expect(preview.querySelector('.inpaint-brush-preview-label')?.textContent).toBe('96px');
 
       await act(async () => {
-        brushSlider.dispatchEvent(makePointerEvent('pointerup', { pointerId: 1, clientX: 50, clientY: 50, pointerType: 'touch' }));
+        // スライダー外で指を離したケース（window の pointerup）でも自動で閉じる
+        window.dispatchEvent(makePointerEvent('pointerup', { pointerId: 1, clientX: 300, clientY: 10, pointerType: 'mouse' }));
         vi.advanceTimersByTime(500);
       });
       expect(dialog.querySelector('.inpaint-brush-preview')).toBeNull();
@@ -576,5 +577,14 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
     });
     expect(buttonByText('元に戻す', dialog).disabled).toBe(true);
     expect(buttonByText('確定', dialog).disabled).toBe(true);
+
+    // 5) 画像の左外から右外へ一気に横切るドラッグは線分が画像と交差するため保持される
+    await act(async () => {
+      stage.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 1, clientX: 10, clientY: 200 }));
+      stage.dispatchEvent(makePointerEvent('pointermove', { pointerId: 1, clientX: 450, clientY: 200 }));
+      stage.dispatchEvent(makePointerEvent('pointerup', { pointerId: 1, clientX: 450, clientY: 200 }));
+    });
+    expect(buttonByText('元に戻す', dialog).disabled).toBe(false);
+    expect(buttonByText('確定', dialog).disabled).toBe(false);
   });
 });

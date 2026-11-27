@@ -82,10 +82,9 @@ const TOOLS: ReadonlyArray<{ value: InpaintTool; label: string; renderIcon: () =
 ];
 
 function strokeIntersectsImage(stroke: MaskStroke, imageW: number, imageH: number): boolean {
-  const r = stroke.radius;
-  return stroke.points.some(
-    (p) => p.x >= -r && p.x <= imageW + r && p.y >= -r && p.y <= imageH + r,
-  );
+  // ラスタライザと同じ線分・8×8 ブロック判定を使うことで、高速ドラッグで画像外から画像外へ
+  // 横切るストロークも漏れなく保持し、1 ブロックにも触れない無影響ストロークだけを除外する。
+  return !isMaskEmpty([{ ...stroke, tool: 'brush' }], imageW, imageH);
 }
 
 function clampView(
@@ -162,6 +161,7 @@ export function InpaintDialog({
   const colorRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const brushSliderActiveRef = useRef(false);
   const brushPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const brushSliderCleanupRef = useRef<(() => void) | null>(null);
 
   const clearBrushPreviewTimer = useCallback(() => {
     if (brushPreviewTimerRef.current !== null) {
@@ -181,7 +181,38 @@ export function InpaintDialog({
     [clearBrushPreviewTimer],
   );
 
-  useEffect(() => () => clearBrushPreviewTimer(), [clearBrushPreviewTimer]);
+  const finishBrushSliderDrag = useCallback(
+    (delayMs = 450) => {
+      brushSliderCleanupRef.current?.();
+      brushSliderCleanupRef.current = null;
+      brushSliderActiveRef.current = false;
+      scheduleHideBrushPreview(delayMs);
+    },
+    [scheduleHideBrushPreview],
+  );
+
+  const startBrushSliderDrag = useCallback(() => {
+    brushSliderCleanupRef.current?.();
+    brushSliderActiveRef.current = true;
+    clearBrushPreviewTimer();
+    setBrushPreviewVisible(true);
+    const onWindowPointerEnd = () => finishBrushSliderDrag();
+    window.addEventListener('pointerup', onWindowPointerEnd, true);
+    window.addEventListener('pointercancel', onWindowPointerEnd, true);
+    brushSliderCleanupRef.current = () => {
+      window.removeEventListener('pointerup', onWindowPointerEnd, true);
+      window.removeEventListener('pointercancel', onWindowPointerEnd, true);
+    };
+  }, [clearBrushPreviewTimer, finishBrushSliderDrag]);
+
+  useEffect(
+    () => () => {
+      brushSliderCleanupRef.current?.();
+      brushSliderCleanupRef.current = null;
+      clearBrushPreviewTimer();
+    },
+    [clearBrushPreviewTimer],
+  );
 
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -852,23 +883,10 @@ export function InpaintDialog({
                   max={INPAINT_BRUSH_MAX}
                   step={INPAINT_BRUSH_STEP}
                   value={session.brushRadius}
-                  onPointerDown={() => {
-                    brushSliderActiveRef.current = true;
-                    clearBrushPreviewTimer();
-                    setBrushPreviewVisible(true);
-                  }}
-                  onPointerUp={() => {
-                    brushSliderActiveRef.current = false;
-                    scheduleHideBrushPreview();
-                  }}
-                  onPointerCancel={() => {
-                    brushSliderActiveRef.current = false;
-                    scheduleHideBrushPreview();
-                  }}
-                  onBlur={() => {
-                    brushSliderActiveRef.current = false;
-                    scheduleHideBrushPreview(200);
-                  }}
+                  onPointerDown={startBrushSliderDrag}
+                  onPointerUp={() => finishBrushSliderDrag()}
+                  onPointerCancel={() => finishBrushSliderDrag()}
+                  onBlur={() => finishBrushSliderDrag(200)}
                   onChange={(e) => {
                     onBrushRadiusChange(Number(e.target.value));
                     setBrushPreviewVisible(true);
