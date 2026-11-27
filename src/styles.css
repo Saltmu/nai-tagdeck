@@ -24,6 +24,7 @@
 @import './styles/gallery.css';
 @import './styles/dialog.css';
 @import './styles/viewer.css';
+@import './styles/inpaint.css';
 @import './styles/token.css';
 @import './styles/presets.css';
 @import './styles/seed-lock.css';

@@ -1,6 +1,8 @@
 import { type ChangeEvent, type KeyboardEvent, useId, useRef } from 'react';
+import type { InpaintSessionStore } from '../hooks/useInpaintSession';
 import type { ReferenceImageStore } from '../hooks/useReferenceImage';
 import { PRECISE_REFERENCE_ANLAS } from '../lib/anlasEstimate';
+import { isMaskEmpty } from '../lib/inpaint';
 import {
   PRECISE_REFERENCE_STRENGTH_MAX,
   PRECISE_REFERENCE_STRENGTH_MIN,
@@ -10,18 +12,33 @@ import { MAX_PRECISE_REFERENCES, PRECISE_REFERENCE_TYPES } from '../lib/referenc
 
 interface Props {
   reference: ReferenceImageStore;
+  inpaint?: InpaintSessionStore;
+  onStartInpaintFile?: (file: File) => void;
+  onResumeInpaint?: () => void;
+  onDiscardInpaint?: () => void;
 }
 
-export function ReferencePanel({ reference }: Props) {
+export function ReferencePanel({
+  reference,
+  inpaint,
+  onStartInpaintFile,
+  onResumeInpaint,
+  onDiscardInpaint,
+}: Props) {
   const id = useId();
   const addInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
+  const inpaintInputRef = useRef<HTMLInputElement>(null);
   const replacingIdRef = useRef<string | null>(null);
   const typeRefs = useRef<Record<string, Array<HTMLButtonElement | null>>>({});
 
   const activeCount = reference.activeItems.length;
   const totalAnlas = activeCount * PRECISE_REFERENCE_ANLAS;
   const atLimit = reference.items.length >= MAX_PRECISE_REFERENCES;
+  const inpaintSession = inpaint?.session ?? null;
+  const inpaintHasMask = inpaintSession
+    ? !isMaskEmpty(inpaintSession.maskHistory, inpaintSession.width, inpaintSession.height)
+    : false;
 
   const onAddFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
@@ -37,6 +54,14 @@ export function ReferencePanel({ reference }: Props) {
     replacingIdRef.current = null;
     if (!file || !targetId) return;
     void reference.replaceFromFile(targetId, file);
+  };
+
+  const onInpaintFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (onStartInpaintFile) onStartInpaintFile(file);
+    else if (inpaint) void inpaint.startFromFile(file);
   };
 
   const onTypeKeyDown = (itemId: string, currentType: string, e: KeyboardEvent<HTMLDivElement>) => {
@@ -273,6 +298,108 @@ export function ReferencePanel({ reference }: Props) {
           </div>
         )}
       </section>
+
+      {inpaint && (
+        <section className="reference-section inpaint-panel-section" aria-labelledby={`${id}-inpaint-heading`}>
+          <div className="reference-head">
+            <h3 id={`${id}-inpaint-heading`} className="reference-title">
+              インペイント（部分描き直し）
+            </h3>
+            <div className="reference-head-actions">
+              <span className="chip">{inpaintSession ? '一時保持中' : '無料枠対応'}</span>
+            </div>
+          </div>
+
+          <input
+            ref={inpaintInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="inpaint-file-input"
+            hidden
+            onChange={onInpaintFileChange}
+          />
+
+          {inpaint.error && (
+            <div className="gen-error" role="alert">
+              <p>{inpaint.error}</p>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="インペイントエラーを閉じる"
+                onClick={inpaint.dismissError}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {activeCount > 0 && (
+            <p className="hint inpaint-exclusion-note">
+              精密参照とインペイントは同時に使えません。インペイントを開くときに精密参照を一時 OFF へ切り替えられます。
+            </p>
+          )}
+
+          {inpaintSession ? (
+            <article className="inpaint-session-card" aria-label="一時保持中のインペイント">
+              <div className="reference-preview-card">
+                <img
+                  src={inpaintSession.sourceUrl}
+                  alt={`インペイント対象: ${inpaintSession.name}`}
+                  className="inpaint-session-thumb"
+                />
+                <div className="reference-preview-meta">
+                  <p className="reference-name" title={inpaintSession.name}>
+                    {inpaintSession.name}
+                  </p>
+                  <p className="hint inpaint-session-meta">
+                    {inpaintSession.width}×{inpaintSession.height} ·{' '}
+                    {inpaintHasMask ? 'マスク描画済み' : 'マスク未描画'} · 強さ{' '}
+                    {inpaintSession.strength.toFixed(2)}
+                  </p>
+                  <div className="reference-file-actions">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-small"
+                      onClick={() => (onResumeInpaint ? onResumeInpaint() : inpaint.resume())}
+                    >
+                      マスク編集を再開
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-small"
+                      disabled={inpaint.loading}
+                      onClick={() => inpaintInputRef.current?.click()}
+                    >
+                      {inpaint.loading ? '読み込み中…' : '別の画像で開始'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-small btn-danger"
+                      onClick={() => (onDiscardInpaint ? onDiscardInpaint() : inpaint.discard())}
+                    >
+                      破棄
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </article>
+          ) : (
+            <div className="reference-empty">
+              <p className="hint reference-intro">
+                画像の一部をマスクで塗って描き直します（PNG / JPEG / WebP、無料枠サイズへ自動調整）。
+              </p>
+              <button
+                type="button"
+                className="btn"
+                disabled={inpaint.loading}
+                onClick={() => inpaintInputRef.current?.click()}
+              >
+                {inpaint.loading ? '読み込み中…' : '画像を選択してインペイント'}
+              </button>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

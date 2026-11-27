@@ -152,6 +152,83 @@ describe('requestImages', () => {
     expect(body.parameters.director_reference_images).toEqual([refBase64]);
   });
 
+  it('インペイント時は FormData に image / mask パートを添付し request JSON 内はパート名に置き換える', async () => {
+    const fetchMock = vi.fn(async () => new Response(PNG, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const imgBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]);
+    const maskBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x02]);
+    const imageBase64 = toBase64(imgBytes);
+    const maskBase64 = toBase64(maskBytes);
+    const body = buildGenerateRequest({
+      prompt: '1girl, red button',
+      negative: 'lowres',
+      characters: [],
+      params: { ...toParams(DEFAULT_GENERATION, 860023) },
+      inpaint: {
+        imageBase64,
+        maskBase64,
+        width: 512,
+        height: 512,
+        strength: 0.42,
+        addOriginalImage: false,
+      },
+    });
+
+    await requestImages('pst-secret', body);
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const form = init.body as FormData;
+    const reqPart = form.get('request') as File;
+    const imagePart = form.get('image') as File;
+    const maskPart = form.get('mask') as File;
+    expect(imagePart).toBeInstanceOf(File);
+    expect(imagePart.type).toBe('image/png');
+    expect(imagePart.name).toBe('blob');
+    expect(new Uint8Array(await imagePart.arrayBuffer())).toEqual(imgBytes);
+    expect(maskPart).toBeInstanceOf(File);
+    expect(maskPart.type).toBe('image/png');
+    expect(maskPart.name).toBe('blob');
+    expect(new Uint8Array(await maskPart.arrayBuffer())).toEqual(maskBytes);
+
+    const parsedReq = JSON.parse(await reqPart.text());
+    expect(parsedReq.model).toBe('nai-diffusion-5-full-inpainting');
+    expect(parsedReq.action).toBe('infill');
+    expect(parsedReq.parameters.image).toBe('image');
+    expect(parsedReq.parameters.mask).toBe('mask');
+    expect(parsedReq.parameters.width).toBe(512);
+    expect(parsedReq.parameters.height).toBe(512);
+    expect(parsedReq.parameters.strength).toBe(0.7);
+    expect(parsedReq.parameters.noise).toBe(0);
+    expect(parsedReq.parameters.inpaintImg2ImgStrength).toBe(0.42);
+    expect(parsedReq.parameters.add_original_image).toBe(false);
+    expect(parsedReq.parameters.extra_noise_seed).toBe(860022);
+    // 元の body は破壊しない
+    expect(body.parameters.image).toBe(imageBase64);
+    expect(body.parameters.mask).toBe(maskBase64);
+  });
+
+  it('infill と director_reference_images が同時指定された不正リクエストは送信前に拒否する', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const badBody = buildGenerateRequest({
+      prompt: 'a',
+      negative: '',
+      characters: [],
+      params: { ...toParams(DEFAULT_GENERATION, 1) },
+      inpaint: {
+        imageBase64: toBase64(PNG),
+        maskBase64: toBase64(PNG),
+        width: 512,
+        height: 512,
+        strength: 1,
+        addOriginalImage: false,
+      },
+    });
+    badBody.parameters.director_reference_images = [toBase64(PNG)];
+    await expect(requestImages('pst-secret', badBody)).rejects.toThrow('同時に使用できません');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('改行や非 ASCII を含むトークンは fetch 前に拒否し、通信エラーに誤分類しない', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

@@ -1,0 +1,401 @@
+/* ---- inpaint: マスクエディターモーダル & 参照パネル内セクション ---- */
+.inpaint-panel-section {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.inpaint-exclusion-note,
+.inpaint-session-meta {
+  margin: 0;
+}
+
+.inpaint-session-card {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.inpaint-session-thumb {
+  width: 68px;
+  height: 68px;
+  flex: none;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.inpaint-dialog {
+  width: min(1280px, 100vw - 1rem);
+  max-width: none;
+  max-height: calc(100dvh - 1rem);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-pop);
+}
+
+.inpaint-dialog::backdrop {
+  background: var(--backdrop-strong, rgb(0 0 0 / 0.75));
+}
+
+.inpaint-shell {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 1rem - 2px);
+  min-height: 0;
+}
+
+.inpaint-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.inpaint-header-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  min-width: 0;
+}
+
+.inpaint-title {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.inpaint-meta {
+  color: var(--muted);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 36ch;
+}
+
+.inpaint-resize-badge {
+  font-variant-numeric: tabular-nums;
+}
+
+.inpaint-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.inpaint-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.inpaint-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.inpaint-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.7rem;
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex: none;
+}
+
+.inpaint-tool-group {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.inpaint-tool-btn {
+  min-height: 34px;
+  padding: 0.25rem 0.6rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.inpaint-tool-btn:hover {
+  color: var(--text);
+}
+
+.inpaint-tool-btn[aria-checked='true'] {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+.inpaint-slider-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--text-caption);
+}
+
+.inpaint-toolbar-label {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.inpaint-slider-group input[type='range'] {
+  width: 96px;
+}
+
+.inpaint-toolbar-output {
+  min-width: 3.4em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.inpaint-color-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.inpaint-color-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.inpaint-color-btn[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: var(--shadow);
+}
+
+.inpaint-color-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+
+.inpaint-history-group,
+.inpaint-zoom-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.inpaint-history-group .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.inpaint-zoom-reset {
+  min-width: 3.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.inpaint-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 220px;
+  width: 100%;
+  overflow: hidden;
+  background: var(--surface-2);
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+}
+
+.inpaint-stage.is-pan {
+  cursor: grab;
+}
+
+.inpaint-stage.is-pan:active {
+  cursor: grabbing;
+}
+
+.inpaint-canvas-wrap {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  transform-origin: center;
+  will-change: transform;
+  box-shadow: var(--shadow);
+}
+
+.inpaint-base-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+.inpaint-mask-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+.inpaint-brush-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* ステージ内のローカル重なり（ベース画像・マスク Canvas より前面） */
+  z-index: 2;
+  border-radius: 50%;
+  border: 2px solid var(--scrim-text);
+  outline: 1px solid var(--scrim-bg);
+  pointer-events: none;
+}
+
+.inpaint-brush-cursor.is-eraser {
+  border-style: dashed;
+}
+
+.inpaint-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.inpaint-field-hint,
+.inpaint-blocker {
+  margin: 0;
+}
+
+.inpaint-check-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.inpaint-prompt-details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  padding: 0.45rem 0.6rem;
+  font-size: var(--text-sm);
+}
+
+.inpaint-prompt-details summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.inpaint-prompt-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0;
+  font-size: var(--text-caption);
+}
+
+.inpaint-prompt-list dt {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.inpaint-prompt-list dd {
+  margin: 0.1rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.inpaint-edit-tags-btn {
+  align-self: flex-start;
+}
+
+.inpaint-exec-footer {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.inpaint-exec-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.inpaint-exec-actions .btn-primary {
+  flex: 1;
+}
+
+/* ステージ＋サイドパネル（320px）を横並びにできない幅では下段をスクロールに収め、Canvas を確保する */
+@media (max-width: 899px) {
+  .inpaint-side {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 44%;
+  }
+
+  .inpaint-toolbar {
+    gap: 0.35rem 0.5rem;
+    padding: 0.4rem 0.55rem;
+  }
+
+  .inpaint-slider-group input[type='range'] {
+    width: 78px;
+  }
+}
+
+/* ビューアと同様に 900px 以上ではステージ＋設定サイドバー（320px）を横並びにする */
+@media (min-width: 900px) {
+  .inpaint-body {
+    flex-direction: row;
+  }
+
+  .inpaint-side {
+    flex: 0 0 320px;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+}
