@@ -164,12 +164,37 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.3rem 0.45rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  background: color-mix(in srgb, var(--overlay-bg) 92%, transparent);
+  color: var(--overlay-text);
+  color-scheme: light;
   backdrop-filter: blur(10px);
   box-shadow: var(--shadow-pop);
   max-width: 100%;
+}
+
+.inpaint-overlay-pill .btn:not(.btn-primary):not(.btn-danger),
+.inpaint-settings-popover .btn:not(.btn-primary):not(.btn-danger) {
+  background: var(--overlay-bg);
+  border-color: var(--overlay-border);
+  color: var(--overlay-text);
+}
+
+.inpaint-overlay-pill .btn:not(.btn-primary):not(.btn-danger):hover:not(:disabled),
+.inpaint-settings-popover .btn:not(.btn-primary):not(.btn-danger):hover:not(:disabled) {
+  background: var(--overlay-bg-hover);
+}
+
+.inpaint-overlay-pill .btn-danger {
+  background: var(--danger-fill);
+  border-color: var(--danger-fill);
+  color: var(--danger-fill-text);
+}
+
+.inpaint-overlay-pill .btn-danger:hover:not(:disabled) {
+  background: var(--danger-fill-hover);
+  border-color: var(--danger-fill-hover);
 }
 
 .inpaint-overlay-info {
@@ -186,7 +211,7 @@
   align-items: center;
   gap: 0.35rem;
   min-width: 0;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--overlay-text) 72%, transparent);
   font-size: var(--text-caption);
   font-variant-numeric: tabular-nums;
 }
@@ -196,7 +221,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 18ch;
-  color: var(--text);
+  color: var(--overlay-text);
   font-weight: 600;
 }
 
@@ -208,6 +233,9 @@
 .inpaint-resize-badge {
   flex: none;
   font-variant-numeric: tabular-nums;
+  background: var(--overlay-bg-hover);
+  color: var(--overlay-text);
+  border: 1px solid var(--overlay-border);
 }
 
 .inpaint-overlay-icon-btn {
@@ -217,6 +245,12 @@
   min-height: 34px;
   padding: 0;
   flex: none;
+  color: var(--overlay-text);
+}
+
+.inpaint-overlay-icon-btn:hover:not(:disabled) {
+  background: var(--overlay-bg-hover);
+  color: var(--overlay-text);
 }
 
 .inpaint-overlay-icon-btn .icon {
@@ -266,9 +300,9 @@
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius-md);
-  background: var(--surface-2);
+  background: var(--overlay-bg-hover);
 }
 
 .inpaint-tool-btn {
@@ -280,7 +314,7 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--muted);
+  color: var(--overlay-text);
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -291,7 +325,8 @@
 }
 
 .inpaint-tool-btn:hover {
-  color: var(--text);
+  background: var(--overlay-bg);
+  color: var(--overlay-text);
 }
 
 .inpaint-tool-btn[aria-checked='true'] {
@@ -319,10 +354,15 @@
   height: 16px;
 }
 
-.inpaint-settings-btn.is-open {
+.inpaint-overlay-pill .inpaint-settings-btn.is-open {
   border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.inpaint-overlay-pill .inpaint-settings-btn.is-open:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .inpaint-settings-strength {
@@ -339,7 +379,7 @@
 }
 
 .inpaint-toolbar-label {
-  color: var(--muted);
+  color: color-mix(in srgb, var(--overlay-text) 72%, transparent);
   white-space: nowrap;
 }
 
@@ -353,7 +393,7 @@
   min-width: 3.2em;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  color: var(--text);
+  color: var(--overlay-text);
 }
 
 .inpaint-zoom-step {
@@ -377,11 +417,18 @@
   flex-direction: column;
   gap: 0.6rem;
   padding: 0.7rem 0.8rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  background: color-mix(in srgb, var(--overlay-bg) 96%, transparent);
+  color: var(--overlay-text);
+  color-scheme: light;
   backdrop-filter: blur(12px);
   box-shadow: var(--shadow-pop);
+}
+
+.inpaint-settings-popover label,
+.inpaint-settings-popover output {
+  color: var(--overlay-text);
 }
 
 .inpaint-settings-head {
@@ -395,11 +442,12 @@
   margin: 0;
   font-size: var(--text-sm);
   font-weight: 700;
+  color: var(--overlay-text);
 }
 
 .inpaint-settings-divider {
   height: 1px;
-  background: var(--border);
+  background: var(--overlay-border);
 }
 
 .inpaint-settings-color-row {
@@ -422,28 +470,29 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: var(--overlay-bg-hover);
   cursor: pointer;
   touch-action: manipulation;
 }
 
 .inpaint-color-btn[aria-checked='true'] {
   border-color: var(--accent);
-  background: var(--accent-soft);
-  box-shadow: var(--shadow);
+  background: var(--overlay-bg);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .inpaint-color-swatch {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--overlay-border);
 }
 
 .inpaint-field-hint {
   margin: 0;
+  color: color-mix(in srgb, var(--overlay-text) 72%, transparent);
 }
 
 .inpaint-check-line {
@@ -451,6 +500,7 @@
   align-items: center;
   gap: 0.5rem;
   font-size: var(--text-sm);
+  color: var(--overlay-text);
   cursor: pointer;
 }
 
