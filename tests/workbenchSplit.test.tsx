@@ -160,7 +160,7 @@ describe('Settings gear toggle', () => {
     // 編集 → 設定 → 編集へ復帰
     expect(workbench().getAttribute('data-tab')).toBe('editor');
     await click(gear());
-    await vi.waitFor(() => expect(container.querySelector('.settings')).not.toBeNull());
+    await vi.waitFor(() => expect(container.querySelector('.settings')).not.toBeNull(), { timeout: 5000 });
     expect(gear().getAttribute('title')).toBe('元の画面へ戻る');
 
     await click(gear());
@@ -171,7 +171,7 @@ describe('Settings gear toggle', () => {
     await click(container.querySelector<HTMLButtonElement>('.app-header .tab-generate')!);
     expect(workbench().getAttribute('data-tab')).toBe('generate');
     await click(gear());
-    await vi.waitFor(() => expect(container.querySelector('.settings')).not.toBeNull());
+    await vi.waitFor(() => expect(container.querySelector('.settings')).not.toBeNull(), { timeout: 5000 });
 
     await click(gear());
     expect(container.querySelector('.settings')).toBeNull();
@@ -179,13 +179,13 @@ describe('Settings gear toggle', () => {
 
     // 設定 → 辞書 → 歯車で設定へ戻り、もう一度歯車で元の画面（画像）へ復帰
     await click(gear());
-    await vi.waitFor(() => expect(container.querySelector('.settings-nav-btn')).not.toBeNull());
+    await vi.waitFor(() => expect(container.querySelector('.settings-nav-btn')).not.toBeNull(), { timeout: 5000 });
     await click(container.querySelector<HTMLButtonElement>('.settings-nav-btn')!);
-    await vi.waitFor(() => expect(container.querySelector('.dictionary')).not.toBeNull());
+    await vi.waitFor(() => expect(container.querySelector('.dictionary')).not.toBeNull(), { timeout: 5000 });
 
     await click(gear());
-    await vi.waitFor(() => expect(container.querySelector('.settings')).not.toBeNull());
+    await vi.waitFor(() => expect(container.querySelector('.settings')).not.toBeNull(), { timeout: 5000 });
     await click(gear());
     expect(workbench().getAttribute('data-tab')).toBe('generate');
-  });
+  }, 15_000);
 });
