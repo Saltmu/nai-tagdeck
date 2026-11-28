@@ -323,6 +323,8 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
     await click(buttonByText('インペイント設定', dialog1));
     const popover1 = dialog1.querySelector<HTMLElement>('.inpaint-settings-popover')!;
     expect(popover1).not.toBeNull();
+    const addOriginalCheckbox = popover1.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(addOriginalCheckbox.checked).toBe(true);
     const strengthSlider = popover1.querySelector<HTMLInputElement>('input[type="range"]')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(strengthSlider, '0.55');
@@ -362,14 +364,31 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
       strength: 0.7,
       noise: 0,
       inpaintImg2ImgStrength: 0.55,
-      add_original_image: false,
+      add_original_image: true,
     });
     expect(typeof req.parameters.image).toBe('string');
     expect(typeof req.parameters.mask).toBe('string');
     expect(req.parameters).not.toHaveProperty('director_reference_images');
 
+    // 設定ポップオーバーで「元画像を加える」を OFF にすると add_original_image: false が送られる
+    await click(indicator.querySelector<HTMLButtonElement>('.gen-inpaint-summary')!);
+    await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).not.toBeNull());
+    const dialog3 = container.querySelector<HTMLDialogElement>('dialog.inpaint-dialog')!;
+    await click(buttonByText('インペイント設定', dialog3));
+    const addOriginalToggle = dialog3.querySelector<HTMLInputElement>('.inpaint-settings-popover input[type="checkbox"]')!;
+    expect(addOriginalToggle.checked).toBe(true);
+    await click(addOriginalToggle);
+    expect(addOriginalToggle.checked).toBe(false);
+    await click(buttonByText('確定', dialog3));
+    await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).toBeNull());
+
+    await click(buttonByText('生成する'));
+    await vi.waitFor(() => expect(requestImages).toHaveBeenCalledTimes(2));
+    const reqOff = vi.mocked(requestImages).mock.calls[1]![1];
+    expect(reqOff.parameters.add_original_image).toBe(false);
+
     expect(container.querySelector('.dock')?.classList.contains('is-open')).toBe(false);
-    expect(container.querySelectorAll('.thumb-frame')).toHaveLength(1);
+    expect(container.querySelectorAll('.thumb-frame')).toHaveLength(2);
     await click(container.querySelector<HTMLButtonElement>('.thumb-btn')!);
     await vi.waitFor(() => expect(container.querySelector('dialog.viewer')).not.toBeNull());
     expect(container.querySelector('dialog.viewer')?.textContent).toContain('512×512');
@@ -394,8 +413,8 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
     expect(container.querySelector('.gen-inpaint-indicator')).toBeNull();
 
     await click(buttonByText('生成する'));
-    await vi.waitFor(() => expect(requestImages).toHaveBeenCalledTimes(2));
-    const normalReq = vi.mocked(requestImages).mock.calls[1]![1];
+    await vi.waitFor(() => expect(requestImages).toHaveBeenCalledTimes(3));
+    const normalReq = vi.mocked(requestImages).mock.calls[2]![1];
     expect(normalReq.action).toBe('generate');
     expect(normalReq.parameters).not.toHaveProperty('mask');
 
