@@ -18,8 +18,8 @@ import {
 /** #172 で実測した NovelAI インペイントマスクのブロック解像度（8×8 画素単位で 2 値化）。 */
 export const INPAINT_MASK_BLOCK_SIZE = 8;
 
-/** #172 で実測した公式 Web UI のインペイント既定値（`add_original_image: false`）。 */
-export const DEFAULT_INPAINT_ADD_ORIGINAL_IMAGE = false;
+/** インペイント時の `add_original_image` 既定値。マスク外の画質劣化（VAE 再構成）を防ぐため既定 ON とする。 */
+export const DEFAULT_INPAINT_ADD_ORIGINAL_IMAGE = true;
 
 export const INPAINT_BRUSH_MIN = 4;
 export const INPAINT_BRUSH_MAX = 160;

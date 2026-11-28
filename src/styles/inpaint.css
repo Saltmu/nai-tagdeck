@@ -535,6 +535,11 @@
   color: color-mix(in srgb, var(--overlay-text) 72%, transparent);
 }
 
+.inpaint-check-field {
+  display: grid;
+  gap: 0.2rem;
+}
+
 .inpaint-check-line {
   display: flex;
   align-items: center;

@@ -750,15 +750,21 @@ export function InpaintDialog({
                 </p>
               </div>
 
-              <label className="check-line inpaint-check-line" htmlFor={`${id}-add-original`}>
-                <input
-                  id={`${id}-add-original`}
-                  type="checkbox"
-                  checked={session.addOriginalImage}
-                  onChange={(e) => onAddOriginalImageChange(e.target.checked)}
-                />
-                <span>元画像を加える（add_original_image）</span>
-              </label>
+              <div className="inpaint-check-field">
+                <label className="check-line inpaint-check-line" htmlFor={`${id}-add-original`}>
+                  <input
+                    id={`${id}-add-original`}
+                    type="checkbox"
+                    aria-describedby={`${id}-add-original-hint`}
+                    checked={session.addOriginalImage}
+                    onChange={(e) => onAddOriginalImageChange(e.target.checked)}
+                  />
+                  <span>元画像を加える（add_original_image）</span>
+                </label>
+                <p id={`${id}-add-original-hint`} className="hint inpaint-field-hint">
+                  ON でマスク外の画質劣化を防ぎます（境界にわずかな継ぎ目が出る場合は OFF）。
+                </p>
+              </div>
 
               <div className="inpaint-settings-divider" />
 

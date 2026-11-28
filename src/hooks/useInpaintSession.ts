@@ -37,7 +37,7 @@ export interface InpaintSession {
   maskHistory: MaskHistoryState;
   /** インペイント強度（0.01〜1.0）。 */
   strength: number;
-  /** `add_original_image` の送信値（既定 false）。 */
+  /** `add_original_image` の送信値（既定 true）。 */
   addOriginalImage: boolean;
   /** ブラシ設定（画像座標系半径 px・マスク表示色・不透明度）。 */
   brushRadius: number;
