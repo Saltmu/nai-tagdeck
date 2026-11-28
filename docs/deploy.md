@@ -18,6 +18,9 @@ GitHub の **Settings → Environments** で `production` を作成し、以下�
 | Variable | `DEPLOY_DIR` | `/home/user/www/nai-tagdeck` のような、FTPS で見える既存の公開ディレクトリの絶対パス |
 | Secret | `DEPLOY_PASSWORD` | FTPS ユーザーのパスワード |
 
+> [!TIP]
+> 以前の SFTP 設定から移行する場合は、`DEPLOY_PORT` に `22` が残っていると FTPS 接続が失敗するため、変数を削除するかサーバーの FTPS ポート（通常 `21`）へ変更してください。不要になった `DEPLOY_SSH_KEY`、`DEPLOY_HOST_FINGERPRINT`、`DEPLOY_KNOWN_HOSTS` は削除できます。
+
 ### 実行手順
 
 1. **Actions → Deploy nai-tagdeck → Run workflow** で `main` を選び、まず **Preview files without uploading** をオンにしたまま実行します。
