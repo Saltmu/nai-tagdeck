@@ -81,13 +81,30 @@ const TOOLS: ReadonlyArray<{ value: InpaintTool; label: string; renderIcon: () =
   { value: 'pan', label: '移動・ズーム', renderIcon: () => <MoveIcon /> },
 ];
 
-function clampView(view: ViewState, stageW: number, stageH: number): ViewState {
+function strokeIntersectsImage(stroke: MaskStroke, imageW: number, imageH: number): boolean {
+  // ラスタライザと同じ線分・8×8 ブロック判定を使うことで、高速ドラッグで画像外から画像外へ
+  // 横切るストロークも漏れなく保持し、1 ブロックにも触れない無影響ストロークだけを除外する。
+  return !isMaskEmpty([{ ...stroke, tool: 'brush' }], imageW, imageH);
+}
+
+function clampView(
+  view: ViewState,
+  stageW: number,
+  stageH: number,
+  imageW: number,
+  imageH: number,
+): ViewState {
   const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale));
-  if (stageW <= 0 || stageH <= 0 || scale <= 1) {
+  if (stageW <= 0 || stageH <= 0) {
     return { scale, x: 0, y: 0 };
   }
-  const maxX = ((scale - 1) * stageW) / 2;
-  const maxY = ((scale - 1) * stageH) / 2;
+  const fitScale = imageW > 0 && imageH > 0 ? Math.min(stageW / imageW, stageH / imageH) : 0;
+  const displayW = fitScale > 0 ? imageW * fitScale * scale : stageW * scale;
+  const displayH = fitScale > 0 ? imageH * fitScale * scale : stageH * scale;
+  // 等倍時も含め、画像の四隅・端を画面中央（上下 UI と被らない位置）まで移動できるようにする。
+  // 中心がステージから displayW/2, displayH/2 以上離れないため画像が画面外へ完全には消えない。
+  const maxX = displayW / 2;
+  const maxY = displayH / 2;
   return {
     scale,
     x: Math.min(maxX, Math.max(-maxX, view.x)),
@@ -138,9 +155,77 @@ export function InpaintDialog({
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [brushPreviewVisible, setBrushPreviewVisible] = useState(false);
 
   const toolRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const colorRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const brushSliderPointerIdRef = useRef<number | null>(null);
+  const brushPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const brushSliderCleanupRef = useRef<(() => void) | null>(null);
+
+  const clearBrushPreviewTimer = useCallback(() => {
+    if (brushPreviewTimerRef.current !== null) {
+      clearTimeout(brushPreviewTimerRef.current);
+      brushPreviewTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleHideBrushPreview = useCallback(
+    (delayMs = 450) => {
+      clearBrushPreviewTimer();
+      brushPreviewTimerRef.current = setTimeout(() => {
+        brushPreviewTimerRef.current = null;
+        if (brushSliderPointerIdRef.current === null) setBrushPreviewVisible(false);
+      }, delayMs);
+    },
+    [clearBrushPreviewTimer],
+  );
+
+  const finishBrushSliderDrag = useCallback(
+    (delayMs = 450, pointerId?: number) => {
+      if (
+        pointerId !== undefined &&
+        brushSliderPointerIdRef.current !== null &&
+        brushSliderPointerIdRef.current !== pointerId
+      ) {
+        return;
+      }
+      brushSliderCleanupRef.current?.();
+      brushSliderCleanupRef.current = null;
+      brushSliderPointerIdRef.current = null;
+      scheduleHideBrushPreview(delayMs);
+    },
+    [scheduleHideBrushPreview],
+  );
+
+  const startBrushSliderDrag = useCallback(
+    (e: ReactPointerEvent<HTMLInputElement>) => {
+      brushSliderCleanupRef.current?.();
+      const activePointerId = e.pointerId;
+      brushSliderPointerIdRef.current = activePointerId;
+      clearBrushPreviewTimer();
+      setBrushPreviewVisible(true);
+      const onWindowPointerEnd = (ev: globalThis.PointerEvent) => {
+        finishBrushSliderDrag(450, ev.pointerId);
+      };
+      window.addEventListener('pointerup', onWindowPointerEnd, true);
+      window.addEventListener('pointercancel', onWindowPointerEnd, true);
+      brushSliderCleanupRef.current = () => {
+        window.removeEventListener('pointerup', onWindowPointerEnd, true);
+        window.removeEventListener('pointercancel', onWindowPointerEnd, true);
+      };
+    },
+    [clearBrushPreviewTimer, finishBrushSliderDrag],
+  );
+
+  useEffect(
+    () => () => {
+      brushSliderCleanupRef.current?.();
+      brushSliderCleanupRef.current = null;
+      clearBrushPreviewTimer();
+    },
+    [clearBrushPreviewTimer],
+  );
 
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -221,8 +306,9 @@ export function InpaintDialog({
     const measure = () => {
       const w = el.clientWidth;
       const h = el.clientHeight;
+      const s = sessionRef.current;
       setStageSize((prev) => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
-      setView((prev) => clampView(prev, w, h));
+      setView((prev) => clampView(prev, w, h, s.width, s.height));
     };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
@@ -235,6 +321,7 @@ export function InpaintDialog({
     const el = stageRef.current;
     const w = el?.clientWidth ?? stageSizeRef.current.width;
     const h = el?.clientHeight ?? stageSizeRef.current.height;
+    const s = sessionRef.current;
     setView((prev) => {
       const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, nextScale));
       const factor = scale / prev.scale;
@@ -246,6 +333,8 @@ export function InpaintDialog({
         },
         w,
         h,
+        s.width,
+        s.height,
       );
     });
   }, []);
@@ -353,7 +442,8 @@ export function InpaintDialog({
         const dy = next.y - prev.y;
         const w = stageRef.current?.clientWidth ?? stageSizeRef.current.width;
         const h = stageRef.current?.clientHeight ?? stageSizeRef.current.height;
-        setView((v) => clampView({ ...v, x: v.x + dx, y: v.y + dy }, w, h));
+        const s = sessionRef.current;
+        setView((v) => clampView({ ...v, x: v.x + dx, y: v.y + dy }, w, h, s.width, s.height));
       }
     } else if (pointersRef.current.size === 2) {
       const otherEntry = [...pointersRef.current.entries()].find(([pid]) => pid !== e.pointerId);
@@ -370,6 +460,7 @@ export function InpaintDialog({
         const center = stageCenterOffset(nextMidX, nextMidY);
         const w = stageRef.current?.clientWidth ?? stageSizeRef.current.width;
         const h = stageRef.current?.clientHeight ?? stageSizeRef.current.height;
+        const s = sessionRef.current;
         setView((v) => {
           const scale =
             prevDist > 0 ? Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.scale * (nextDist / prevDist))) : v.scale;
@@ -382,6 +473,8 @@ export function InpaintDialog({
             },
             w,
             h,
+            s.width,
+            s.height,
           );
         });
       }
@@ -396,7 +489,11 @@ export function InpaintDialog({
       const finished = draftStrokeRef.current;
       draftStrokeRef.current = null;
       setIsDrawing(false);
-      if (e.type === 'pointerup' && !pinchCanceledRef.current) {
+      if (
+        e.type === 'pointerup' &&
+        !pinchCanceledRef.current &&
+        strokeIntersectsImage(finished, sessionRef.current.width, sessionRef.current.height)
+      ) {
         onPushStroke(finished);
       } else {
         drawMaskPreview(null);
@@ -476,6 +573,12 @@ export function InpaintDialog({
           transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
         };
   const cursorDiameter = fitScale > 0 ? Math.max(6, session.brushRadius * 2 * fitScale * view.scale) : 0;
+  const previewDiameter = cursorDiameter > 0 ? cursorDiameter : Math.max(6, session.brushRadius * 2);
+  // 高倍率＋大ブラシで円が画面高さを超える場合も、サイズ数値ラベルはステージ中央付近に収めて読めるようにする
+  const previewLabelOffsetY =
+    stageSize.height > 0
+      ? Math.min(previewDiameter / 2 + 18, Math.max(0, stageSize.height * 0.25))
+      : previewDiameter / 2 + 18;
 
   return (
     <dialog
@@ -529,6 +632,27 @@ export function InpaintDialog({
                 transform: `translate(${cursorPos.x - cursorDiameter / 2}px, ${cursorPos.y - cursorDiameter / 2}px)`,
               }}
             />
+          )}
+          {brushPreviewVisible && (
+            <div className="inpaint-brush-preview" aria-hidden="true">
+              <span
+                className={`inpaint-brush-preview-circle${tool === 'eraser' ? ' is-eraser' : ''}`}
+                style={{
+                  width: `${previewDiameter}px`,
+                  height: `${previewDiameter}px`,
+                  backgroundColor:
+                    tool === 'eraser'
+                      ? undefined
+                      : `color-mix(in srgb, ${maskColorHex(session.maskColor)} ${Math.round(session.maskOpacity * 100)}%, transparent)`,
+                }}
+              />
+              <span
+                className="inpaint-brush-preview-label"
+                style={{ transform: `translate(-50%, calc(-50% + ${previewLabelOffsetY}px))` }}
+              >
+                {session.brushRadius * 2}px
+              </span>
+            </div>
           )}
         </div>
 
@@ -782,7 +906,15 @@ export function InpaintDialog({
                   max={INPAINT_BRUSH_MAX}
                   step={INPAINT_BRUSH_STEP}
                   value={session.brushRadius}
-                  onChange={(e) => onBrushRadiusChange(Number(e.target.value))}
+                  onPointerDown={startBrushSliderDrag}
+                  onPointerUp={(e) => finishBrushSliderDrag(450, e.pointerId)}
+                  onPointerCancel={(e) => finishBrushSliderDrag(450, e.pointerId)}
+                  onBlur={() => finishBrushSliderDrag(200)}
+                  onChange={(e) => {
+                    onBrushRadiusChange(Number(e.target.value));
+                    setBrushPreviewVisible(true);
+                    if (brushSliderPointerIdRef.current === null) scheduleHideBrushPreview();
+                  }}
                 />
                 <output htmlFor={`${id}-brush-size`} className="inpaint-toolbar-output">
                   {session.brushRadius * 2}px

@@ -118,6 +118,46 @@
   border-style: dashed;
 }
 
+/* ブラシサイズ変更中に画面中央へ表示する実寸プレビュー（キャンバス前面・ツールバー背面） */
+.inpaint-brush-preview {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.inpaint-brush-preview-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  border-radius: 50%;
+  border: 2px solid var(--scrim-text);
+  outline: 1px solid var(--scrim-bg);
+  box-shadow: var(--shadow-pop);
+  transform: translate(-50%, -50%);
+}
+
+.inpaint-brush-preview-circle.is-eraser {
+  border-style: dashed;
+  background: transparent;
+}
+
+.inpaint-brush-preview-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-pill);
+  background: var(--scrim-bg);
+  color: var(--scrim-text);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* 画像上に浮かせる操作オーバーレイ（余白は画像へのポインター操作を通す） */
 .inpaint-overlay-top {
   position: absolute;

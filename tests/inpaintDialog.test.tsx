@@ -498,4 +498,100 @@ describe('インペイント導線・マスク確定・通常生成ボタン連�
     await act(async () => root.unmount());
     expect(revokedUrls).toContain(heldThumbUrl);
   });
+
+  it('ブラシサイズ変更時に画面中央へプレビューを表示し、等倍でも画像を画面外へはみ出して移動・リセットできる', async () => {
+    await renderApp();
+
+    // 参照画像タブから 512×512 画像でインペイントを開く
+    await click(dockTab('参照画像'));
+    const fileInput = container.querySelector<HTMLInputElement>('.reference-panel input.inpaint-file-input')!;
+    const file = new File([PNG_512], 'pan-test.png', { type: 'image/png' });
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+    await act(async () => {
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await vi.waitFor(() => expect(container.querySelector('dialog.inpaint-dialog')).not.toBeNull());
+
+    const dialog = container.querySelector<HTMLDialogElement>('dialog.inpaint-dialog')!;
+    const stage = dialog.querySelector<HTMLElement>('.inpaint-stage')!;
+    const wrap = dialog.querySelector<HTMLElement>('.inpaint-canvas-wrap')!;
+
+    // ステージ寸法を 400×400 とみなして等倍（100%）でも移動できることを確認する
+    Object.defineProperty(stage, 'clientWidth', { configurable: true, value: 400 });
+    Object.defineProperty(stage, 'clientHeight', { configurable: true, value: 400 });
+
+    // 1) ブラシサイズスライダー操作中は中央プレビューが表示され、離すと自動で消える
+    expect(dialog.querySelector('.inpaint-brush-preview')).toBeNull();
+    const brushSlider = dialog.querySelector<HTMLInputElement>('input[id$="-brush-size"]')!;
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        brushSlider.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 1, clientX: 50, clientY: 50, pointerType: 'touch' }));
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(brushSlider, '48');
+        brushSlider.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      const preview = dialog.querySelector<HTMLElement>('.inpaint-brush-preview')!;
+      expect(preview).not.toBeNull();
+      expect(preview.querySelector('.inpaint-brush-preview-label')?.textContent).toBe('96px');
+
+      await act(async () => {
+        // 別の指（別 pointerId）が離れてもプレビューは閉じない
+        window.dispatchEvent(makePointerEvent('pointerup', { pointerId: 2, clientX: 100, clientY: 100, pointerType: 'touch' }));
+        vi.advanceTimersByTime(500);
+      });
+      expect(dialog.querySelector('.inpaint-brush-preview')).not.toBeNull();
+
+      await act(async () => {
+        // 元のポインターがスライダー外で離れたときは自動で閉じる
+        window.dispatchEvent(makePointerEvent('pointerup', { pointerId: 1, clientX: 300, clientY: 10, pointerType: 'mouse' }));
+        vi.advanceTimersByTime(500);
+      });
+      expect(dialog.querySelector('.inpaint-brush-preview')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // 2) 移動・ズームツールに切り替えて等倍のまま大きくドラッグすると画像が移動する（上限 200px まで）
+    await click(buttonByText('移動・ズーム', dialog));
+    await act(async () => {
+      stage.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 1, clientX: 200, clientY: 200, pointerType: 'touch' }));
+      stage.dispatchEvent(makePointerEvent('pointermove', { pointerId: 1, clientX: 350, clientY: 450, pointerType: 'touch' }));
+      stage.dispatchEvent(makePointerEvent('pointerup', { pointerId: 1, clientX: 350, clientY: 450, pointerType: 'touch' }));
+    });
+    expect(wrap.style.transform).toBe('translate(150px, 200px) scale(1)');
+
+    // 3) 100% リセットボタンで中央に戻る
+    await click(buttonByText('拡大率を 100% に戻す', dialog));
+    expect(wrap.style.transform).toBe('translate(0px, 0px) scale(1)');
+
+    // 4) 画像外の余白をタップしてもマスク履歴（Undo）には記録されない
+    await click(buttonByText('ブラシ', dialog));
+    const canvas = dialog.querySelector<HTMLCanvasElement>('.inpaint-mask-canvas')!;
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      x: 100,
+      y: 100,
+      left: 100,
+      top: 100,
+      right: 356,
+      bottom: 356,
+      width: 256,
+      height: 256,
+      toJSON: () => ({}),
+    });
+    await act(async () => {
+      stage.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 1, clientX: 5, clientY: 5 }));
+      stage.dispatchEvent(makePointerEvent('pointerup', { pointerId: 1, clientX: 5, clientY: 5 }));
+    });
+    expect(buttonByText('元に戻す', dialog).disabled).toBe(true);
+    expect(buttonByText('確定', dialog).disabled).toBe(true);
+
+    // 5) 画像の左外から右外へ一気に横切るドラッグは線分が画像と交差するため保持される
+    await act(async () => {
+      stage.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 1, clientX: 10, clientY: 200 }));
+      stage.dispatchEvent(makePointerEvent('pointermove', { pointerId: 1, clientX: 450, clientY: 200 }));
+      stage.dispatchEvent(makePointerEvent('pointerup', { pointerId: 1, clientX: 450, clientY: 200 }));
+    });
+    expect(buttonByText('元に戻す', dialog).disabled).toBe(false);
+    expect(buttonByText('確定', dialog).disabled).toBe(false);
+  });
 });
