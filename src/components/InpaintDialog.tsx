@@ -750,7 +750,7 @@ export function InpaintDialog({
                 </p>
               </div>
 
-              <div className="field">
+              <div className="inpaint-check-field">
                 <label className="check-line inpaint-check-line" htmlFor={`${id}-add-original`}>
                   <input
                     id={`${id}-add-original`}
