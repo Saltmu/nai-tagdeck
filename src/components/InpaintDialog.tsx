@@ -755,12 +755,13 @@ export function InpaintDialog({
                   <input
                     id={`${id}-add-original`}
                     type="checkbox"
+                    aria-describedby={`${id}-add-original-hint`}
                     checked={session.addOriginalImage}
                     onChange={(e) => onAddOriginalImageChange(e.target.checked)}
                   />
                   <span>元画像を加える（add_original_image）</span>
                 </label>
-                <p className="hint inpaint-field-hint">
+                <p id={`${id}-add-original-hint`} className="hint inpaint-field-hint">
                   ON でマスク外の画質劣化を防ぎます（境界にわずかな継ぎ目が出る場合は OFF）。
                 </p>
               </div>
