@@ -1,6 +1,6 @@
 # nai-tagdeck 開発ガイド
 
-NovelAI Diffusion V5 向けのタグ編集・画像生成アプリ。React / TypeScript / Vite で構成し、ビルド成果物を静的配信する。使い方、ローカルでの起動、公開手順は [README.md](README.md) を参照する。
+NovelAI Diffusion V5 向けのタグ編集・画像生成アプリ。React / TypeScript / Vite で構成し、ビルド成果物を静的配信する。概要とローカルでの起動は [README.md](README.md)、操作詳細は [docs/guide.md](docs/guide.md)、公開手順は [docs/deploy.md](docs/deploy.md) を参照する。
 
 コード変更を伴う実装・修正依頼では、[issue-implementation スキル](.agents/skills/issue-implementation/SKILL.md) に従う。
 
